@@ -8,7 +8,7 @@ A proof-of-concept for compliant tokenization of a real-world financial asset (a
 
 - [x] Interfaces and shared role constants
 - [x] Sample terms document (`docs/RealEstateNote-Terms.md`)
-- [ ] `IdentityRegistry` (agent path, EIP-712 attestation path, packed record)
+- [x] `IdentityRegistry` (agent path, EIP-712 attestation path, packed record)
 - [ ] Compliance modules (`MaxHoldersModule`, `CountryRestrictionModule`, `LockupModule`)
 - [ ] `ModularCompliance` engine
 - [ ] `DocumentRegistry`
