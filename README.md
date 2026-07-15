@@ -9,7 +9,7 @@ A proof-of-concept for compliant tokenization of a real-world financial asset (a
 - [x] Interfaces and shared role constants
 - [x] Sample terms document (`docs/RealEstateNote-Terms.md`)
 - [x] `IdentityRegistry` (agent path, EIP-712 attestation path, packed record)
-- [ ] Compliance modules (`MaxHoldersModule`, `CountryRestrictionModule`, `LockupModule`)
+- [x] Compliance modules (`MaxHoldersModule`, `CountryRestrictionModule`, `LockupModule`)
 - [ ] `ModularCompliance` engine
 - [ ] `DocumentRegistry`
 - [ ] `SecurityToken` (transfer gate, freeze, forced recovery)
@@ -58,7 +58,7 @@ This project implements a **coherent subset, written from scratch**, of two stan
 | **ONCHAINID collapsed into a flat registry.** ERC-3643 gives each investor an on-chain identity contract holding signed claims, resolved through `IdentityRegistryStorage`, `TrustedIssuersRegistry` and `ClaimTopicsRegistry`. Here one registry stores the attested attributes directly. | The four-contract hierarchy exists to let one identity be reused across many tokens and issuers. With a single token and a single issuer, it is ceremony without benefit. The trust model it encodes is preserved through the signed attestation path (below), which is the part that actually matters. |
 | **`TrustedIssuersRegistry` reduced to a single claim signer.** | The registry answers "which issuers may attest which claim topics". With one KYC provider and one claim topic, that collapses to one address. The cryptographic verification, which is the substance, is kept. |
 | **No claim topics or claim schemes.** Attributes (`country`, `accredited`, `kycExpiry`) are typed struct fields, not generic claim blobs. | Generic claims buy extensibility this POC has no use for, at the cost of making every rule parse bytes. Typed fields keep the record in one storage slot and the rules readable. |
-| **ERC-1400 partitions omitted entirely.** No tranches, no partial fungibility. | Partitions model tokens with heterogeneous rights (different vesting, different classes). A single-series note has none. Only the document anchoring (ERC-1643) is borrowed. |
+| **ERC-1400 partitions omitted entirely.** No tranches, no partial fungibility. | Partitions model tokens with heterogeneous rights (different vesting, different classes). A single-series note has none. Only the document anchoring (ERC-1643) is borrowed. This exclusion has a downstream consequence on the lockup rule, described below: it is the clearest example in this project of a scope decision determining a security property. |
 | **No upgradeability, no proxies, no factory.** | A real deployment needs all three. They are orthogonal to the identity and compliance architecture being demonstrated, and would add a proxy layer to read through with no insight gained. |
 
 ### The two registration paths
@@ -72,6 +72,22 @@ The identity registry accepts records through two doors, which exist to make an 
 The second path is ERC-3643's trust model in miniature, and it is the reason the standard bothers with ONCHAINID at all: **verification should not rest on trusting whoever writes to the registry.** The signed payload binds the investor, the attributes, the expiry, and a per-investor nonce, under a domain separator carrying the chain ID and the registry address.
 
 Each of those bindings closes a specific hole. The domain separator stops a signature from being replayed on another chain or against another registry deployment. The expiry stops it from being replayed after the KYC lapses. The nonce closes the gap the expiry leaves open: without it, an attestation replayed *within* its validity window could silently re-register an investor the agent had just removed. That last one is the subtle one, and it is why the nonce is not optional.
+
+### Why the lockup runs from initial acquisition, not from each acquisition
+
+This is worth spelling out because it is a case where excluding a feature forced a different rule, and the two cannot be reasoned about separately.
+
+The anchored terms document specifies a 12-month lockup. The obvious reading is per-acquisition: every time you receive tokens, those tokens are locked for a year. Implemented literally on a fungible balance, that means **every incoming transfer restarts the clock on the entire position**, and that is a vulnerability, not a rule:
+
+> Anyone can send a victim 1 wei of the token and re-lock their whole position for another year. It costs the attacker one dust transfer and can be repeated forever. A lockup a hostile third party can trigger against you for free is a denial of service wearing a compliance costume.
+
+The strict reading is only implementable if each **parcel** of tokens carries its own clock, so that receiving dust locks the dust and nothing else. Per-parcel accounting is precisely what ERC-1400 partitions (tranches) provide, and partitions are out of scope here by design. **Without tranches, the per-acquisition model cannot be implemented safely**, so the rule is:
+
+- The clock starts on the transition from zero to a positive balance (initial acquisition), whether by mint or by transfer. Primary issuance is the archetypal acquisition, so mint starts the clock, through the same code path that observes the zero to positive transition on a transfer.
+- Subsequent receipts never reset it. This single guard (`lockStart != 0`, do not overwrite) is the anti-griefing property, and it is tested explicitly, including the 1-wei re-lock attempt.
+- Exiting to a zero balance clears the clock, so an investor who sells out and later buys back is locked afresh rather than keeping an expired clock forever.
+
+This is what T-REX does in practice. The anchored terms document says "from initial acquisition" so that the legal document and the contract describe the same instrument: a mismatch between the anchored terms and the enforced behavior would undermine the point of anchoring them at all.
 
 ## On-chain and off-chain boundary
 
