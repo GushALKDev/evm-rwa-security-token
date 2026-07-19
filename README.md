@@ -20,6 +20,38 @@ A proof-of-concept for compliant tokenization of a real-world financial asset (a
 - [ ] Architecture diagram
 - [ ] Threat model: compliance bypass, reentrancy, recovery abuse (access control done)
 
+## Project progress
+
+Built one contract per unit in dependency order, each with its own unit and fuzz tests, reviewed and committed before the next. The identity and compliance layers exist before the token because the token's transfer gate calls into both. Full detail and live status are in the [ROADMAP](docs/ROADMAP.md).
+
+| Phase | Name | Status |
+|---|---|:---:|
+| 0 | Foundations (interfaces, roles, terms doc) | Done |
+| 1 | Identity layer (`IdentityRegistry`) | Done |
+| 2 | Compliance layer (engine + three modules) | Done |
+| 3 | Document anchoring (`DocumentRegistry`) | Next |
+| 4 | The security token (transfer gate, freeze, recovery) | Planned |
+| 5 | Deployment and hash anchoring | Planned |
+| 6 | Scenario and invariant testing | Planned |
+| 7 | Documentation and threat model | Ongoing |
+| 8 | Stretch: dividend distribution | Optional |
+
+Current state: **138 tests passing, 100% line/statement/branch/function coverage on every `src/` contract.**
+
+## Documentation
+
+The README is the narrative entry point. The technical guides in [`docs/`](docs/) go deeper without repeating it:
+
+| Guide | Covers |
+|---|---|
+| [1. Fundamentals](docs/01-fundamentals.md) | The asset, the permission-by-default inversion, the four moving parts, the glossary |
+| [2. Mathematics & Cryptography](docs/02-mathematics.md) | The EIP-712 digest, replay closure, storage packing, holder-count and lockup arithmetic |
+| [3. Architecture](docs/03-architecture.md) | Component wiring, the superset transfer gate, hook fan-out, deployment binding graph |
+| [4. Trade-offs](docs/04-tradeoffs.md) | Every scope and design decision as a decision-and-alternative register |
+| [5. Implementation](docs/05-implementation.md) | Conventions, OZ primitives, patterns, testing strategy, invariants |
+| [6. Improvements](docs/06-improvements.md) | What a production build adds back, and the priority order |
+| [ROADMAP](docs/ROADMAP.md) | Phased build plan and progress tracker |
+
 ## The asset
 
 A **Series A real-estate-backed note**: a debt instrument secured by a residential property in Valencia, Spain, held through an SPV, issued by a fictional entity to a whitelist of accredited investors. Face value 1,000 EURC per token, 36 month maturity. The governing terms live in [`docs/RealEstateNote-Terms.md`](docs/RealEstateNote-Terms.md) and are anchored on-chain by content hash.
