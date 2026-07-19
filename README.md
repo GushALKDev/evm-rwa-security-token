@@ -215,4 +215,4 @@ Formatting (enforced in CI): `forge fmt`.
 
 ## License
 
-MIT. Unaudited, educational, not for production use.
+MIT, see [LICENSE](LICENSE). Unaudited, educational, not for production use.

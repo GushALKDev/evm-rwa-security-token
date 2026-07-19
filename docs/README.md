@@ -12,6 +12,7 @@
 | **[Project README](../README.md)** | Overview, scoping decisions, role matrix, threat model, build instructions | ✅ Complete |
 | **[ROADMAP](./ROADMAP.md)** | Eight-phase implementation plan and progress tracker | ✅ Complete |
 | **[Terms document](./RealEstateNote-Terms.md)** | The legal instrument the token represents, anchored on-chain by content hash | ✅ Complete |
+| **[LICENSE](../LICENSE)** | MIT License | ✅ Complete |
 
 > The project README is the **narrative source of truth**. The guides below go deeper on specific topics and deliberately reference the README rather than repeating its scoping and threat-model arguments.
 
@@ -143,7 +144,7 @@ See [ROADMAP.md](./ROADMAP.md) for detailed progress across 8 phases and 31 trac
 
 ## ⚖️ License
 
-MIT. Unaudited, educational, not for production use or for representing real financial instruments.
+MIT, see [LICENSE](../LICENSE). Unaudited, educational, not for production use or for representing real financial instruments.
 
 ---
 
