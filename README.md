@@ -10,7 +10,7 @@ A proof-of-concept for compliant tokenization of a real-world financial asset (a
 - [x] Sample terms document (`docs/RealEstateNote-Terms.md`)
 - [x] `IdentityRegistry` (agent path, EIP-712 attestation path, packed record)
 - [x] Compliance modules (`MaxHoldersModule`, `CountryRestrictionModule`, `LockupModule`)
-- [ ] `ModularCompliance` engine
+- [x] `ModularCompliance` engine (composes modules, fans lifecycle hooks, superset-gate seam)
 - [ ] `DocumentRegistry`
 - [ ] `SecurityToken` (transfer gate, freeze, forced recovery)
 - [ ] Deployment script with document anchoring
