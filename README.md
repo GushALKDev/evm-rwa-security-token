@@ -40,10 +40,11 @@ Current state: **138 tests passing, 100% line/statement/branch/function coverage
 
 ## Documentation
 
-The README is the narrative entry point. The technical guides in [`docs/`](docs/) go deeper without repeating it:
+The README is the narrative entry point. The technical guides in [`docs/`](docs/README.md) go deeper without repeating it:
 
 | Guide | Covers |
 |---|---|
+| [Documentation index](docs/README.md) | Reading orders by audience, structure, external references |
 | [1. Fundamentals](docs/01-fundamentals.md) | The asset, the permission-by-default inversion, the four moving parts, the glossary |
 | [2. Mathematics & Cryptography](docs/02-mathematics.md) | The EIP-712 digest, replay closure, storage packing, holder-count and lockup arithmetic |
 | [3. Architecture](docs/03-architecture.md) | Component wiring, the superset transfer gate, hook fan-out, deployment binding graph |
