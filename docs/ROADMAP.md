@@ -23,13 +23,13 @@ The build order is a dependency order, not a preference. Each unit is one contra
 | 0         | Foundations                   | 3      | 3         | 100%     |
 | 1         | Identity Layer                | 2      | 2         | 100%     |
 | 2         | Compliance Layer              | 6      | 6         | 100%     |
-| 3         | Document Anchoring            | 2      | 0         | 0%       |
+| 3         | Document Anchoring            | 2      | 2         | 100%     |
 | 4         | The Security Token            | 7      | 0         | 0%       |
 | 5         | Deployment & Anchoring        | 3      | 0         | 0%       |
 | 6         | Scenario & Invariant Testing  | 4      | 0         | 0%       |
 | 7         | Documentation & Threat Model  | 4      | 1         | 25%      |
 | 8         | Stretch: Dividends            | 4      | 0         | 0%       |
-| **TOTAL** |                               | **31** | **18**    | **58%**  |
+| **TOTAL** |                               | **31** | **20**    | **65%**  |
 
 > The percentage tracks units of implementation, not lines of code. The identity and compliance layers are the architecturally substantive part of an ERC-3643 subset, which is why the project is further along than a contract count alone would suggest.
 
@@ -104,8 +104,12 @@ The build order is a dependency order, not a preference. Each unit is one contra
 >
 > **Dependencies:** Phase 0
 
-- [ ] **3.1** `DocumentRegistry.sol` (ERC-1643-style: `setDocument`/`removeDocument`, `{hash, uri, timestamp}` per name, ISSUER-gated)
-- [ ] **3.2** Unit + fuzz tests (100% coverage; overwrite semantics, removal, access control)
+- [x] **3.1** `DocumentRegistry.sol` (ERC-1643-style: `setDocument`/`removeDocument`, `{hash, uri, timestamp}` per name, ISSUER-gated)
+    - [x] 3.1.1 `EnumerableSet.Bytes32Set` name index (O(1) add/remove/membership, enumerable for `getAllDocuments`)
+    - [x] 3.1.2 `setDocument` upserts: a new name joins the index, a re-anchor overwrites the record in place
+    - [x] 3.1.3 `name` is a `bytes32` label (`bytes32("TERMS")`), human readable off-chain rather than an opaque hash
+    - [x] 3.1.4 Amendment history lives in the `DocumentUpdated` event log, not in per-version storage
+- [x] **3.2** Unit + fuzz tests (100% coverage; overwrite semantics, removal, access control)
 
 **Deliverables:**
 
@@ -218,6 +222,7 @@ The build order is a dependency order, not a preference. Each unit is one contra
 
 | Date       | Changes                 |
 | :--------- | :---------------------- |
+| 2026-07-24 | Phase 3 complete: `DocumentRegistry` (ERC-1643 subset, `EnumerableSet.Bytes32Set` name index, `setDocument` upsert, `bytes32` readable names, ISSUER-gated). 20 tests, 158 total, 100% coverage on all `src/` contracts |
 | 2026-07-19 | Phase 2 complete: `ModularCompliance` engine (EnumerableSet of modules, `canTransfer` view, lifecycle hook fan-out, `bindToken` once, `onlyToken`/`DEFAULT_ADMIN_ROLE` split). 27 engine tests, 138 total, 100% coverage on all `src/` contracts. Docs and ROADMAP added |
 | 2026-07-16 | Phase 2 (2.1-2.4): compliance modules - `AbstractComplianceModule`, `MaxHoldersModule`, `CountryRestrictionModule`, `LockupModule` |
 | 2026-07-16 | Phase 1: `IdentityRegistry` - agent path + EIP-712 attestation path, per-investor nonce, packed record |

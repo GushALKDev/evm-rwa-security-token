@@ -52,6 +52,9 @@ interface IDocumentRegistry {
                                  ERRORS
     //////////////////////////////////////////////////////////////*/
 
+    /// @notice Thrown when the issuer address is zero at construction.
+    error ZeroAddress();
+
     /// @notice Thrown when anchoring a document with an empty name.
     error EmptyDocumentName();
 
@@ -72,7 +75,8 @@ interface IDocumentRegistry {
      * @notice Anchors a document, or re-anchors it to a new version.
      * @dev Restricted to the issuer (default admin). Re-anchoring is how a document is amended:
      *      the event log preserves the history of which version was in force when.
-     * @param name The document name (for example keccak256("TERMS")).
+     * @param name The document name, a short label packed into bytes32 (for example bytes32("TERMS")),
+     *             so it stays human readable when decoded off-chain rather than an opaque hash.
      * @param uri Where the document is published.
      * @param contentHash keccak256 of the document content, not of the URI.
      */
