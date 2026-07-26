@@ -24,12 +24,12 @@ The build order is a dependency order, not a preference. Each unit is one contra
 | 1         | Identity Layer                | 2      | 2         | 100%     |
 | 2         | Compliance Layer              | 6      | 6         | 100%     |
 | 3         | Document Anchoring            | 2      | 2         | 100%     |
-| 4         | The Security Token            | 7      | 0         | 0%       |
-| 5         | Deployment & Anchoring        | 3      | 0         | 0%       |
+| 4         | The Security Token            | 7      | 7         | 100%     |
+| 5         | Deployment & Anchoring        | 3      | 3         | 100%     |
 | 6         | Scenario & Invariant Testing  | 4      | 0         | 0%       |
 | 7         | Documentation & Threat Model  | 4      | 1         | 25%      |
 | 8         | Stretch: Dividends            | 4      | 0         | 0%       |
-| **TOTAL** |                               | **31** | **20**    | **65%**  |
+| **TOTAL** |                               | **35** | **24**    | **69%**  |
 
 > The percentage tracks units of implementation, not lines of code. The identity and compliance layers are the architecturally substantive part of an ERC-3643 subset, which is why the project is further along than a contract count alone would suggest.
 
@@ -126,13 +126,13 @@ The build order is a dependency order, not a preference. Each unit is one contra
 >
 > **Dependencies:** Phases 1, 2, 3
 
-- [ ] **4.1** `SecurityToken.sol` skeleton (OZ ERC20 + AccessControl + Pausable + ReentrancyGuard)
-- [ ] **4.2** Transfer gate: one internal status-code function shared by `_update` (reverts) and `canTransfer` (bool), so they cannot drift
-- [ ] **4.3** Three explicit `_update` branches (mint, burn, transfer), each calling the matching engine hook
-- [ ] **4.4** Freeze controls: full freeze (`setAddressFrozen`) and partial freeze (`freezePartialTokens`/`unfreezePartialTokens`)
-- [ ] **4.5** `forcedRecovery` (CUSTODIAN): move full balance to a verified wallet, carry over both freeze states, retire the lost wallet, preserve supply
-- [ ] **4.6** `mint`/`burn` (ISSUER); burn eats frozen balance if needed (issuer retiring a position outranks a freeze)
-- [ ] **4.7** Unit + fuzz tests (100% coverage; every revert branch, freeze interactions, recovery freeze-carry)
+- [x] **4.1** `SecurityToken.sol` skeleton (OZ ERC20 + AccessControl + Pausable + ReentrancyGuard)
+- [x] **4.2** Transfer gate: one internal status-code function shared by `_update` (reverts) and `canTransfer` (bool), so they cannot drift
+- [x] **4.3** Three explicit `_update` branches (mint, burn, transfer), each calling the matching engine hook
+- [x] **4.4** Freeze controls: full freeze (`setAddressFrozen`) and partial freeze (`freezePartialTokens`/`unfreezePartialTokens`)
+- [x] **4.5** `forcedRecovery` (CUSTODIAN): move full balance to a verified wallet, carry over both freeze states, retire the lost wallet, preserve supply
+- [x] **4.6** `mint`/`burn` (ISSUER); burn eats frozen balance if needed (issuer retiring a position outranks a freeze)
+- [x] **4.7** Unit + fuzz tests (100% coverage; every revert branch, freeze interactions, recovery freeze-carry)
 
 **Deliverables:**
 
@@ -149,9 +149,9 @@ The build order is a dependency order, not a preference. Each unit is one contra
 >
 > **Dependencies:** Phase 4
 
-- [ ] **5.1** `Deploy.s.sol`: engine → modules → registry → token, then `addModule`, `bindToken`, grant the token `AGENT_ROLE` on the registry
-- [ ] **5.2** Anchor `docs/RealEstateNote-Terms.md` via `vm.readFile` + `keccak256`, and `assert` the on-chain hash matches
-- [ ] **5.3** Deployment sanity checks (roles granted, engine bound, document anchored)
+- [x] **5.1** `Deploy.s.sol`: engine → registry → token → modules, then `addModule`, `bindToken`, grant the token `AGENT_ROLE` on the registry
+- [x] **5.2** Anchor `docs/RealEstateNote-Terms.md` via `vm.readFile` + `keccak256`, and `assert` the on-chain hash matches
+- [x] **5.3** Deployment sanity checks (roles granted, engine bound, document anchored)
 
 **Deliverables:**
 

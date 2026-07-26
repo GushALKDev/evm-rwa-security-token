@@ -11,9 +11,9 @@ A proof-of-concept for compliant tokenization of a real-world financial asset (a
 - [x] `IdentityRegistry` (agent path, EIP-712 attestation path, packed record)
 - [x] Compliance modules (`MaxHoldersModule`, `CountryRestrictionModule`, `LockupModule`)
 - [x] `ModularCompliance` engine (composes modules, fans lifecycle hooks, superset-gate seam)
-- [ ] `DocumentRegistry`
-- [ ] `SecurityToken` (transfer gate, freeze, forced recovery)
-- [ ] Deployment script with document anchoring
+- [x] `DocumentRegistry`
+- [x] `SecurityToken` (transfer gate, freeze, forced recovery)
+- [x] Deployment script with document anchoring
 - [ ] Scenario tests
 - [ ] Handler-based invariant suite
 - [ ] Coverage report
@@ -29,14 +29,14 @@ Built one contract per unit in dependency order, each with its own unit and fuzz
 | 0 | Foundations (interfaces, roles, terms doc) | Done |
 | 1 | Identity layer (`IdentityRegistry`) | Done |
 | 2 | Compliance layer (engine + three modules) | Done |
-| 3 | Document anchoring (`DocumentRegistry`) | Next |
-| 4 | The security token (transfer gate, freeze, recovery) | Planned |
-| 5 | Deployment and hash anchoring | Planned |
-| 6 | Scenario and invariant testing | Planned |
+| 3 | Document anchoring (`DocumentRegistry`) | Done |
+| 4 | The security token (transfer gate, freeze, recovery) | Done |
+| 5 | Deployment and hash anchoring | Done |
+| 6 | Scenario and invariant testing | Next |
 | 7 | Documentation and threat model | Ongoing |
 | 8 | Stretch: dividend distribution | Optional |
 
-Current state: **138 tests passing, 100% line/statement/branch/function coverage on every `src/` contract.**
+Current state: **233 tests passing, 100% line/statement/branch/function coverage on every `src/` contract.**
 
 ## Documentation
 
