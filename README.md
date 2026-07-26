@@ -36,7 +36,7 @@ Built one contract per unit in dependency order, each with its own unit and fuzz
 | 7 | Documentation and threat model | Ongoing |
 | 8 | Stretch: dividend distribution | Optional |
 
-Current state: **233 tests passing, 100% line/statement/branch/function coverage on every `src/` contract.**
+Current state: **235 tests passing, 100% line/statement/branch/function coverage on every `src/` contract.**
 
 ## Documentation
 
@@ -184,7 +184,9 @@ The keys used most often are the ones most likely to leak. `AGENT_ROLE` is exerc
 
 Neither key alone reaches the other's powers, which is the point of the split. But the containment is asymmetric, and the honest version is worth stating: **a compromised CUSTODIAN key is the more dangerous of the two.**
 
-`forcedRecovery` can only target a destination that is already verified, but that constraint is weaker than it looks. The attacker does not need to verify a wallet of their own: any verified wallet they already control works, and a custodian who is also an onboarded investor has one by definition. So a lone compromised custodian key can drain positions to a legitimate-looking destination. What it cannot do is hide: every recovery emits `RecoverySuccess` naming both wallets, the destination is a KYC-identified investor rather than an anonymous address, and total supply is unchanged, so the theft is legible on-chain and attributable to a real identity off-chain.
+`forcedRecovery` can only target a destination that is already verified **and carries the same `investorId` as the lost wallet**, so the two wallets must belong to the same investor. That constraint is what stops a custodian from moving a balance to an arbitrary verified address, including one they happen to control as an onboarded investor. It does not make the key harmless: a compromised custodian can still shuffle a victim's position between the victim's own wallets, and the constraint only holds as far as the registry is honest, so a **custodian key plus an agent key** together can link an attacker-controlled wallet to the victim's `investorId` and then recover into it. What a lone key cannot do is hide: every recovery emits `RecoverySuccess` naming both wallets, the destination is a KYC-identified investor rather than an anonymous address, and total supply is unchanged, so the theft is legible on-chain and attributable to a real identity off-chain.
+
+Recovery is also exempt from the pause and from the transfer gate, so no compliance module constrains it. That is deliberate (a halted market or an unexpired lockup must not strand a compromised position), but it means the rule set offers no secondary containment here: the `investorId` check and the audit trail are the containment.
 
 That is the actual mitigation, and it is worth being precise about its nature: recovery is **deterred and auditable, not prevented**. This is why `CUSTODIAN_ROLE` is the role a production deployment should hold to the highest key-management standard (multisig, hardware custody, an approval process tied to the legal determination that a wallet is genuinely lost) rather than the one it treats as rarely-used and therefore low-risk. Frequency of use is not the same as blast radius.
 

@@ -117,7 +117,9 @@ Full treatment: [README threat model §2](../README.md#2-issuer-level-authority-
 
 ### 4.2 A compromised custodian key is deterred, not prevented
 
-`forcedRecovery` can only target an already-verified destination, but any verified wallet the attacker controls qualifies. So a lone compromised custodian key can drain positions to a legitimate-looking address. What it **cannot** do is hide: every recovery emits `RecoverySuccess` naming both wallets, the destination is a KYC-identified investor, and total supply is unchanged.
+`forcedRecovery` can only target a destination that is already verified **and registered under the same `investorId` as the lost wallet**, so a custodian cannot move a balance to an unrelated third party. What a compromised key can still do is move a victim's position between that victim's own wallets, and, if the attacker can get a wallet of their own linked to the victim's `investorId` by the agent, out of the victim's control entirely. What it **cannot** do is hide: every recovery emits `RecoverySuccess` naming both wallets, the destination is a KYC-identified investor, and total supply is unchanged.
+
+Recovery also bypasses the pause and the transfer gate, so no compliance rule limits it: a lockup still running or a frozen destination will not stop a custodian. That is deliberate, since the alternative is a compromised position stranded on a wallet the investor no longer controls, but it does mean the modular rule set is not a second line of defence against this key.
 
 - **The mitigation is auditability, not prevention.** This is why `CUSTODIAN_ROLE` deserves the highest key-management standard, not the lowest because it is rarely used. Blast radius, not frequency, sets the standard. Full treatment: [README threat model §1](../README.md#1-operational-key-compromise-defended).
 

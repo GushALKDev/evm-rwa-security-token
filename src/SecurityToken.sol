@@ -202,12 +202,12 @@ contract SecurityToken is ISecurityToken, ERC20, AccessControl, Pausable, Reentr
         delete _frozen[lostWallet];
         _identityRegistry.removeIdentity(lostWallet);
 
-        // Move the full balance. _transfer routes through _update, whose gate would normally apply,
-        // but the lost wallet is now unfrozen and holds exactly `amount`, and newWallet was checked
-        // verified above, so the move settles cleanly and total supply is unchanged.
-        //
-        // The flag exempts this one move from the pause, and is cleared immediately after: recovery
-        // must stay available while trading is halted, but nothing beyond this transfer may pass.
+        // Move the full balance. The flag exempts this one move from both the pause and the
+        // transfer gate, and is cleared immediately after, so nothing beyond this transfer passes.
+        // The checks the gate would have run are either satisfied above (newWallet verified and
+        // belonging to the same investor) or deliberately not applicable: a modular rule must not
+        // be able to strand the position, and a freeze on either side is handled explicitly, the
+        // sender's cleared just above and the destination's re-applied just below.
         _recovering = true;
         _transfer(lostWallet, newWallet, amount);
         _recovering = false;
@@ -244,11 +244,16 @@ contract SecurityToken is ISecurityToken, ERC20, AccessControl, Pausable, Reentr
      *      runs its gate, moves balances via `super._update`, then fires the matching engine hook
      *      AFTER the move so stateful modules read settled balances.
      *
-     *      The pause check is written out rather than applied as a `whenNotPaused` modifier because
-     *      forced recovery is exempt: a pause is a response to an incident, and recovery is the tool
-     *      for resolving one, so halting trading must not also strand a compromised wallet. The
-     *      exemption is narrow by construction — `_recovering` is set only inside `forcedRecovery`,
-     *      which is CUSTODIAN-only and clears the flag before returning.
+     *      Forced recovery is exempt from both the pause and the transfer gate, which is why the
+     *      pause check is written out rather than applied as a `whenNotPaused` modifier and why
+     *      recovery gets its own branch. The reasoning is the same for both: a pause and a
+     *      compliance rule are responses to ordinary trading, and recovery is the tool for
+     *      resolving an incident, so neither may strand a compromised position on a wallet the
+     *      investor no longer controls.
+     *
+     *      The exemption is narrow by construction. `_recovering` is set only inside
+     *      `forcedRecovery`, which is CUSTODIAN-only, checks the destination itself, and clears
+     *      the flag before returning.
      */
     function _update(address from, address to, uint256 amount) internal override {
         if (paused() && !_recovering) revert EnforcedPause();
@@ -265,6 +270,21 @@ contract SecurityToken is ISecurityToken, ERC20, AccessControl, Pausable, Reentr
             // gate here only needs the balance move itself. No recipient to verify.
             super._update(from, to, amount);
             _compliance.destroyed(from, amount);
+        } else if (_recovering) {
+            // Recovery: the gate is skipped entirely, not merely relaxed. Every check it performs
+            // is either already guaranteed by forcedRecovery or is the wrong question to ask here.
+            // The destination is verified and belongs to the same investor (checked there), the
+            // sender's freeze state was cleared before the move, and the balance is exactly the
+            // full amount. What remains are the modular rules, and those must not apply: a lockup
+            // still running or a holder cap already met would strand a compromised position on a
+            // wallet the investor no longer controls, which is the situation recovery exists to
+            // resolve. A frozen destination is likewise no reason to block, since forcedRecovery
+            // re-applies the freeze on the far side.
+            //
+            // The hook still fires: modules must observe the movement to keep their state correct,
+            // even though their verdict on it is not consulted.
+            super._update(from, to, amount);
+            _compliance.transferred(from, to, amount);
         } else {
             // Transfer: the full gate.
             TransferStatus status = _checkTransfer(from, to, amount);

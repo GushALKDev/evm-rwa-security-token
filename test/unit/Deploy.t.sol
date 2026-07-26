@@ -95,13 +95,12 @@ contract DeployTest is Test, Deploy {
     /// @dev Separating CUSTODIAN from AGENT is the point of having two roles: a compliance desk
     ///      must not be able to seize a balance. Assert the separation is not collapsed.
     function test_wiring_agentCannotRecover() public {
-        // Same investor and past the lockup, so the only thing left to reject the call is the
-        // missing role. Otherwise this could pass for an unrelated reason.
+        // Same investor, so the recovery would otherwise succeed and the only thing left to
+        // reject the call is the missing role. Otherwise this could pass for an unrelated reason.
         bytes32 sharedId = keccak256("investor-alice");
         _verifyInvestorAs(alice, sharedId);
         _verifyInvestorAs(bob, sharedId);
         d.token.mint(alice, 100e18);
-        vm.warp(block.timestamp + LOCKUP_PERIOD + 1);
 
         vm.expectPartialRevert(bytes4(keccak256("AccessControlUnauthorizedAccount(address,bytes32)")));
         vm.prank(agent);
@@ -180,16 +179,14 @@ contract DeployTest is Test, Deploy {
     ///      which only succeeds because the script granted it AGENT.
     ///
     ///      Both wallets share an investorId, since recovery refuses to move a balance between
-    ///      different investors. The warp past the lockup is required too: forcedRecovery moves
-    ///      the balance with _transfer, which runs the full compliance gate, so with this
-    ///      deployment's 365-day lockup a freshly minted position cannot be recovered yet.
+    ///      different investors. No warp is needed despite this deployment's 365-day lockup:
+    ///      recovery bypasses the transfer gate, so a freshly minted position is recoverable.
     function test_live_forcedRecoveryEvictsLostWallet() public {
         bytes32 sharedId = keccak256("investor-alice");
         _verifyInvestorAs(alice, sharedId);
         _verifyInvestorAs(bob, sharedId);
 
         d.token.mint(alice, 100e18);
-        vm.warp(block.timestamp + LOCKUP_PERIOD + 1);
 
         vm.prank(custodian);
         d.token.forcedRecovery(alice, bob);

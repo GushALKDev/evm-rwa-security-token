@@ -603,6 +603,36 @@ contract SecurityTokenTest is Test {
         token.forcedRecovery(alice, aliceSecondary);
     }
 
+    /// @dev A compliance rule must not strand a compromised position. Recovery is the tool for
+    ///      resolving an incident, so a module that would reject the move (a lockup still running,
+    ///      a holder cap already met) cannot be allowed to block the custodian.
+    function test_forcedRecovery_succeedsWhenComplianceRejects() public {
+        _mint(alice, AMOUNT);
+        module.setAllow(false);
+
+        vm.prank(custodian);
+        token.forcedRecovery(alice, aliceSecondary);
+
+        assertEq(token.balanceOf(aliceSecondary), AMOUNT);
+        assertEq(token.balanceOf(alice), 0);
+        assertEq(token.totalSupply(), AMOUNT);
+    }
+
+    /// @dev The destination being frozen must not block recovery either. The freeze is preserved
+    ///      by the carry-over below, so the position stays held: it just stops being stranded on a
+    ///      wallet the investor no longer controls.
+    function test_forcedRecovery_succeedsIntoFrozenWallet() public {
+        _mint(alice, AMOUNT);
+        vm.prank(agent);
+        token.setAddressFrozen(aliceSecondary, true);
+
+        vm.prank(custodian);
+        token.forcedRecovery(alice, aliceSecondary);
+
+        assertEq(token.balanceOf(aliceSecondary), AMOUNT);
+        assertTrue(token.isFrozen(aliceSecondary));
+    }
+
     /// @dev Negative: a verified wallet is not enough, it must belong to the same investor.
     ///      Without this, a custodian could move a balance to an unrelated third party.
     function test_forcedRecovery_revertsAcrossInvestors() public {

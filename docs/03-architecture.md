@@ -149,7 +149,7 @@ The gate has a single internal status-code function, shared by:
 - **`_update`** (the ERC-20 transfer path): reverts with the custom error matching the failing status.
 - **`canTransfer`** (the public view): returns a bool.
 
-They share one implementation precisely so the on-chain enforcement and the off-chain pre-check **cannot drift**. A front end calling `canTransfer` gets exactly the answer `_update` would enforce, because it is the same code. `_update` has three explicit branches (mint `from == 0`, burn `to == 0`, transfer) so each calls the correct engine hook. This lands with Phase 4; the surface is fixed in `ISecurityToken`, and the [README](../README.md#why-a-permissioned-token-is-not-an-erc-20) covers the semantics.
+They share one implementation precisely so the on-chain enforcement and the off-chain pre-check **cannot drift**. A front end calling `canTransfer` gets exactly the answer `_update` would enforce, because it is the same code. `_update` branches explicitly by shape (mint `from == 0`, burn `to == 0`, forced recovery, transfer) so each calls the correct engine hook. The recovery branch skips the gate entirely rather than relaxing it: a pause or a modular rule must not strand a compromised position on a wallet the investor no longer controls, and the checks that do matter there are performed inside `forcedRecovery` itself. The lifecycle hook still fires, so stateful modules keep tracking the movement even though their verdict on it is not consulted. This lands with Phase 4; the surface is fixed in `ISecurityToken`, and the [README](../README.md#why-a-permissioned-token-is-not-an-erc-20) covers the semantics.
 
 ---
 
