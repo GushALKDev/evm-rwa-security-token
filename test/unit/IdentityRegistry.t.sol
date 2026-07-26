@@ -50,16 +50,30 @@ contract IdentityRegistryTest is Test {
         view
         returns (bytes memory)
     {
-        return _signWithNonce(key, who, country_, accredited, expiry, registry.nonces(who));
+        return _signWithNonce(key, who, country_, accredited, expiry, bytes32(0), registry.nonces(who));
     }
 
-    function _signWithNonce(uint256 key, address who, uint16 country_, bool accredited, uint64 expiry, uint256 nonce)
+    /// @dev As _sign, but binding an explicit investor id instead of letting the registry derive one.
+    function _signWithId(uint256 key, address who, uint16 country_, bool accredited, uint64 expiry, bytes32 id)
         internal
         view
         returns (bytes memory)
     {
-        bytes32 structHash =
-            keccak256(abi.encode(registry.ATTESTATION_TYPEHASH(), who, country_, accredited, expiry, nonce));
+        return _signWithNonce(key, who, country_, accredited, expiry, id, registry.nonces(who));
+    }
+
+    function _signWithNonce(
+        uint256 key,
+        address who,
+        uint16 country_,
+        bool accredited,
+        uint64 expiry,
+        bytes32 id,
+        uint256 nonce
+    ) internal view returns (bytes memory) {
+        bytes32 structHash = keccak256(
+            abi.encode(registry.ATTESTATION_TYPEHASH(), who, country_, accredited, expiry, id, nonce)
+        );
         bytes32 digest = MessageHashUtils.toTypedDataHash(registry.domainSeparator(), structHash);
         (uint8 v, bytes32 r, bytes32 s) = vm.sign(key, digest);
         return abi.encodePacked(r, s, v);
@@ -89,8 +103,10 @@ contract IdentityRegistryTest is Test {
     //////////////////////////////////////////////////////////////*/
 
     function test_registerIdentity_storesRecordAndEmits() public {
-        vm.expectEmit(true, false, false, true, address(registry));
-        emit IIdentityRegistry.IdentityRegistered(investor, ES, true, futureExpiry, false);
+        vm.expectEmit(true, true, false, true, address(registry));
+        emit IIdentityRegistry.IdentityRegistered(
+            investor, ES, true, futureExpiry, keccak256(abi.encode(investor)), false
+        );
 
         vm.prank(agent);
         registry.registerIdentity(investor, ES, true, futureExpiry);
@@ -114,6 +130,70 @@ contract IdentityRegistryTest is Test {
         assertEq(rec.country, 250);
         assertFalse(rec.accredited);
         assertEq(rec.kycExpiry, futureExpiry + 1 days);
+    }
+
+    /*//////////////////////////////////////////////////////////////
+                              INVESTOR ID
+    //////////////////////////////////////////////////////////////*/
+
+    /// @dev A wallet registered without an explicit id is its own investor. Deriving rather than
+    ///      storing zero keeps every verified record carrying a non-zero id.
+    function test_investorId_defaultsToDerivedFromWallet() public {
+        vm.prank(agent);
+        registry.registerIdentity(investor, ES, true, futureExpiry);
+
+        assertEq(registry.investorId(investor), keccak256(abi.encode(investor)));
+    }
+
+    function test_investorId_isZeroForUnregisteredWallet() public view {
+        assertEq(registry.investorId(stranger), bytes32(0));
+    }
+
+    /// @dev Two wallets registered under the same explicit id are two wallets of one investor.
+    function test_investorId_linksTwoWalletsUnderSharedId() public {
+        bytes32 sharedId = keccak256("investor-alpha");
+
+        vm.startPrank(agent);
+        registry.registerIdentity(investor, ES, true, futureExpiry, sharedId);
+        registry.registerIdentity(stranger, ES, true, futureExpiry, sharedId);
+        vm.stopPrank();
+
+        assertEq(registry.investorId(investor), sharedId);
+        assertEq(registry.investorId(stranger), sharedId);
+    }
+
+    /// @dev Separately registered wallets are distinct investors, never accidental matches.
+    function test_investorId_differsForSeparatelyRegisteredWallets() public {
+        vm.startPrank(agent);
+        registry.registerIdentity(investor, ES, true, futureExpiry);
+        registry.registerIdentity(stranger, ES, true, futureExpiry);
+        vm.stopPrank();
+
+        assertTrue(registry.investorId(investor) != registry.investorId(stranger));
+    }
+
+    /// @dev Passing zero explicitly takes the derived default, matching the four-parameter door.
+    function test_investorId_explicitZeroDerivesDefault() public {
+        vm.prank(agent);
+        registry.registerIdentity(investor, ES, true, futureExpiry, bytes32(0));
+
+        assertEq(registry.investorId(investor), keccak256(abi.encode(investor)));
+    }
+
+    /// @dev The id is part of the signed payload: a submitter cannot swap it to attach a wallet
+    ///      to an investor the claim signer never attested to.
+    function test_investorId_attestationBindsIdToSignature() public {
+        bytes32 sharedId = keccak256("investor-alpha");
+        bytes memory sig = _signWithId(signerKey, investor, ES, true, futureExpiry, sharedId);
+
+        // Same signature, different id: the digest no longer matches, so the recovery fails.
+        vm.expectRevert();
+        vm.prank(relayer);
+        registry.registerIdentityWithAttestation(investor, ES, true, futureExpiry, keccak256("investor-beta"), sig);
+
+        vm.prank(relayer);
+        registry.registerIdentityWithAttestation(investor, ES, true, futureExpiry, sharedId, sig);
+        assertEq(registry.investorId(investor), sharedId);
     }
 
     /// @dev Negative: a non-agent cannot write the registry.
@@ -162,12 +242,14 @@ contract IdentityRegistryTest is Test {
     function test_registerWithAttestation_acceptsValidSignatureFromAnySubmitter() public {
         bytes memory sig = _sign(signerKey, investor, ES, true, futureExpiry);
 
-        vm.expectEmit(true, false, false, true, address(registry));
-        emit IIdentityRegistry.IdentityRegistered(investor, ES, true, futureExpiry, true);
+        vm.expectEmit(true, true, false, true, address(registry));
+        emit IIdentityRegistry.IdentityRegistered(
+            investor, ES, true, futureExpiry, keccak256(abi.encode(investor)), true
+        );
 
         // Submitted by a relayer with no role: authorization comes from the signature.
         vm.prank(relayer);
-        registry.registerIdentityWithAttestation(investor, ES, true, futureExpiry, sig);
+        registry.registerIdentityWithAttestation(investor, ES, true, futureExpiry, bytes32(0), sig);
 
         assertTrue(registry.isVerified(investor));
         assertEq(registry.nonces(investor), 1);
@@ -181,7 +263,7 @@ contract IdentityRegistryTest is Test {
             abi.encodeWithSelector(IIdentityRegistry.InvalidAttestationSigner.selector, vm.addr(rogueKey), signer)
         );
         vm.prank(relayer);
-        registry.registerIdentityWithAttestation(investor, ES, true, futureExpiry, sig);
+        registry.registerIdentityWithAttestation(investor, ES, true, futureExpiry, bytes32(0), sig);
 
         assertFalse(registry.isVerified(investor));
     }
@@ -191,13 +273,13 @@ contract IdentityRegistryTest is Test {
         bytes memory sig = _sign(signerKey, investor, ES, true, futureExpiry);
 
         vm.prank(relayer);
-        registry.registerIdentityWithAttestation(investor, ES, true, futureExpiry, sig);
+        registry.registerIdentityWithAttestation(investor, ES, true, futureExpiry, bytes32(0), sig);
 
         // The consumed nonce changes the digest, so the same bytes now recover a different
         // address and fail the signer check. Assert the selector, not just "it reverted".
         vm.prank(relayer);
         vm.expectPartialRevert(IIdentityRegistry.InvalidAttestationSigner.selector);
-        registry.registerIdentityWithAttestation(investor, ES, true, futureExpiry, sig);
+        registry.registerIdentityWithAttestation(investor, ES, true, futureExpiry, bytes32(0), sig);
     }
 
     /**
@@ -208,7 +290,7 @@ contract IdentityRegistryTest is Test {
         bytes memory sig = _sign(signerKey, investor, ES, true, futureExpiry);
 
         vm.prank(relayer);
-        registry.registerIdentityWithAttestation(investor, ES, true, futureExpiry, sig);
+        registry.registerIdentityWithAttestation(investor, ES, true, futureExpiry, bytes32(0), sig);
         assertTrue(registry.isVerified(investor));
 
         vm.prank(agent);
@@ -218,7 +300,7 @@ contract IdentityRegistryTest is Test {
         // Same signature, still inside its expiry window, now against nonce 1.
         vm.prank(relayer);
         vm.expectPartialRevert(IIdentityRegistry.InvalidAttestationSigner.selector);
-        registry.registerIdentityWithAttestation(investor, ES, true, futureExpiry, sig);
+        registry.registerIdentityWithAttestation(investor, ES, true, futureExpiry, bytes32(0), sig);
 
         assertFalse(registry.isVerified(investor));
     }
@@ -229,7 +311,7 @@ contract IdentityRegistryTest is Test {
 
         vm.prank(relayer);
         vm.expectPartialRevert(IIdentityRegistry.InvalidAttestationSigner.selector);
-        registry.registerIdentityWithAttestation(investor, 250, true, futureExpiry, sig);
+        registry.registerIdentityWithAttestation(investor, 250, true, futureExpiry, bytes32(0), sig);
     }
 
     function test_registerWithAttestation_revertsOnTamperedAccreditation() public {
@@ -237,7 +319,7 @@ contract IdentityRegistryTest is Test {
 
         vm.prank(relayer);
         vm.expectPartialRevert(IIdentityRegistry.InvalidAttestationSigner.selector);
-        registry.registerIdentityWithAttestation(investor, ES, true, futureExpiry, sig);
+        registry.registerIdentityWithAttestation(investor, ES, true, futureExpiry, bytes32(0), sig);
     }
 
     /// @dev Negative: an attestation for one investor cannot register another.
@@ -246,7 +328,7 @@ contract IdentityRegistryTest is Test {
 
         vm.prank(relayer);
         vm.expectPartialRevert(IIdentityRegistry.InvalidAttestationSigner.selector);
-        registry.registerIdentityWithAttestation(stranger, ES, true, futureExpiry, sig);
+        registry.registerIdentityWithAttestation(stranger, ES, true, futureExpiry, bytes32(0), sig);
     }
 
     /// @dev Negative: a signed attestation that is already stale is rejected like the agent path.
@@ -258,14 +340,14 @@ contract IdentityRegistryTest is Test {
 
         vm.expectRevert(abi.encodeWithSelector(IIdentityRegistry.AttestationExpired.selector, stale, block.timestamp));
         vm.prank(relayer);
-        registry.registerIdentityWithAttestation(investor, ES, true, stale, sig);
+        registry.registerIdentityWithAttestation(investor, ES, true, stale, bytes32(0), sig);
     }
 
     /// @dev Negative: malformed signature bytes revert rather than recovering address(0).
     function test_registerWithAttestation_revertsOnMalformedSignature() public {
         vm.prank(relayer);
         vm.expectPartialRevert(ECDSA.ECDSAInvalidSignatureLength.selector);
-        registry.registerIdentityWithAttestation(investor, ES, true, futureExpiry, hex"dead");
+        registry.registerIdentityWithAttestation(investor, ES, true, futureExpiry, bytes32(0), hex"dead");
     }
 
     /// @dev Negative: the signed path is unusable before a claim signer is configured.
@@ -275,7 +357,7 @@ contract IdentityRegistryTest is Test {
 
         vm.expectRevert(IIdentityRegistry.ClaimSignerNotSet.selector);
         vm.prank(relayer);
-        fresh.registerIdentityWithAttestation(investor, ES, true, futureExpiry, sig);
+        fresh.registerIdentityWithAttestation(investor, ES, true, futureExpiry, bytes32(0), sig);
     }
 
     /**
@@ -293,7 +375,7 @@ contract IdentityRegistryTest is Test {
 
         vm.prank(relayer);
         vm.expectPartialRevert(IIdentityRegistry.InvalidAttestationSigner.selector);
-        other.registerIdentityWithAttestation(investor, ES, true, futureExpiry, sig);
+        other.registerIdentityWithAttestation(investor, ES, true, futureExpiry, bytes32(0), sig);
     }
 
     /// @dev The other half of the domain separator: no replay across chains.
@@ -307,7 +389,7 @@ contract IdentityRegistryTest is Test {
 
         vm.prank(relayer);
         vm.expectPartialRevert(IIdentityRegistry.InvalidAttestationSigner.selector);
-        registry.registerIdentityWithAttestation(investor, ES, true, futureExpiry, sig);
+        registry.registerIdentityWithAttestation(investor, ES, true, futureExpiry, bytes32(0), sig);
     }
 
     /// @dev Consecutive attestations work, each against the advanced nonce.
@@ -315,7 +397,7 @@ contract IdentityRegistryTest is Test {
         for (uint256 i; i < 3; ++i) {
             bytes memory sig = _sign(signerKey, investor, ES, true, futureExpiry);
             vm.prank(relayer);
-            registry.registerIdentityWithAttestation(investor, ES, true, futureExpiry, sig);
+            registry.registerIdentityWithAttestation(investor, ES, true, futureExpiry, bytes32(0), sig);
             assertEq(registry.nonces(investor), i + 1);
         }
     }
@@ -324,14 +406,14 @@ contract IdentityRegistryTest is Test {
     function test_nonces_areIndependentPerInvestor() public {
         bytes memory sigA = _sign(signerKey, investor, ES, true, futureExpiry);
         vm.prank(relayer);
-        registry.registerIdentityWithAttestation(investor, ES, true, futureExpiry, sigA);
+        registry.registerIdentityWithAttestation(investor, ES, true, futureExpiry, bytes32(0), sigA);
 
         assertEq(registry.nonces(investor), 1);
         assertEq(registry.nonces(stranger), 0);
 
         bytes memory sigB = _sign(signerKey, stranger, ES, true, futureExpiry);
         vm.prank(relayer);
-        registry.registerIdentityWithAttestation(stranger, ES, true, futureExpiry, sigB);
+        registry.registerIdentityWithAttestation(stranger, ES, true, futureExpiry, bytes32(0), sigB);
         assertTrue(registry.isVerified(stranger));
     }
 
@@ -446,7 +528,7 @@ contract IdentityRegistryTest is Test {
 
         vm.expectRevert(abi.encodeWithSelector(IIdentityRegistry.InvalidAttestationSigner.selector, signer, newSigner));
         vm.prank(relayer);
-        registry.registerIdentityWithAttestation(investor, ES, true, futureExpiry, sig);
+        registry.registerIdentityWithAttestation(investor, ES, true, futureExpiry, bytes32(0), sig);
     }
 
     /*//////////////////////////////////////////////////////////////
@@ -490,7 +572,7 @@ contract IdentityRegistryTest is Test {
 
         vm.prank(relayer);
         vm.expectPartialRevert(IIdentityRegistry.InvalidAttestationSigner.selector);
-        registry.registerIdentityWithAttestation(investor, ES, true, futureExpiry, sig);
+        registry.registerIdentityWithAttestation(investor, ES, true, futureExpiry, bytes32(0), sig);
 
         assertFalse(registry.isVerified(investor));
     }
@@ -501,7 +583,7 @@ contract IdentityRegistryTest is Test {
         bytes memory sig = _sign(signerKey, investor, ES, true, futureExpiry);
 
         vm.prank(submitter);
-        registry.registerIdentityWithAttestation(investor, ES, true, futureExpiry, sig);
+        registry.registerIdentityWithAttestation(investor, ES, true, futureExpiry, bytes32(0), sig);
 
         assertTrue(registry.isVerified(investor));
     }

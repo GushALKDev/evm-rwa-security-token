@@ -101,6 +101,9 @@ interface ISecurityToken is IERC20 {
     /// @notice Thrown when recovering into the same wallet.
     error RecoveryToSameWallet(address wallet);
 
+    /// @notice Thrown when the two wallets in a recovery belong to different investors.
+    error RecoveryAcrossInvestors(bytes32 lostInvestorId, bytes32 newInvestorId);
+
     /*//////////////////////////////////////////////////////////////
                              ISSUANCE
     //////////////////////////////////////////////////////////////*/
@@ -156,6 +159,8 @@ interface ISecurityToken is IERC20 {
     /**
      * @notice Halts all transfers.
      * @dev Restricted to AGENT. Mint and burn are also halted: pause is a market-wide stop.
+     *      `forcedRecovery` is the one exception, since a pause is typically the response to the
+     *      very incident recovery exists to resolve.
      */
     function pause() external;
 
@@ -179,6 +184,9 @@ interface ISecurityToken is IERC20 {
      *      the full freeze flag), so recovery cannot be used to launder a freeze. The lost
      *      wallet ends at zero balance, zero frozen, and is removed from the identity registry
      *      so it can never receive tokens again. Total supply is unchanged.
+     *
+     *      Works while the token is paused. A key compromise is a common reason to halt trading,
+     *      and stranding the affected position until the pause lifts would defeat the purpose.
      * @param lostWallet The compromised or inaccessible wallet.
      * @param newWallet The replacement wallet, which must already be verified.
      */

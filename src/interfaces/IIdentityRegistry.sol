@@ -24,8 +24,10 @@ interface IIdentityRegistry {
 
     /**
      * @notice The attested attributes of a verified investor.
-     * @dev Packed into a single storage slot: every transfer reads this record, so the layout is
-     *      chosen to make verification one SLOAD.
+     * @dev The verification attributes are packed into slot 0, so the isVerified check every
+     *      transfer performs stays one SLOAD. investorId takes a second slot of its own: it is
+     *      read only by recovery, so it does not belong on the hot path, and keeping it a full
+     *      bytes32 avoids truncating a hash into whatever bytes were left over.
      * @param verified Whether a record exists and has been attested. Distinct from the expiry
      *        check: a record can exist yet be stale.
      * @param accredited Whether the investor qualifies as an accredited/professional investor.
@@ -33,12 +35,16 @@ interface IIdentityRegistry {
      *        packed and comparisons cheap).
      * @param kycExpiry Unix timestamp after which the KYC attestation is stale and the investor
      *        is treated as unverified.
+     * @param investorId Identifier of the natural or legal person behind the wallet. Two wallets
+     *        sharing an investorId are two wallets of the same investor. Stands in for the
+     *        ERC-3643 ONCHAINID contract address, which serves the same purpose there.
      */
     struct Identity {
-        bool verified; //     1 byte ──┐
-        bool accredited; //   1 byte   │  Slot 0 (12 bytes used of 32,
-        uint16 country; //    2 bytes  │  the rest is padding)
-        uint64 kycExpiry; //  8 bytes ─┘
+        bool verified; //       1 byte ──┐
+        bool accredited; //     1 byte   │  Slot 0 (12 bytes used of 32,
+        uint16 country; //      2 bytes  │  the rest is padding)
+        uint64 kycExpiry; //    8 bytes ─┘
+        bytes32 investorId; // 32 bytes     Slot 1
     }
 
     /*//////////////////////////////////////////////////////////////
@@ -51,9 +57,17 @@ interface IIdentityRegistry {
      * @param country ISO 3166-1 numeric country code.
      * @param accredited Accredited investor flag.
      * @param kycExpiry Expiry timestamp of the KYC attestation.
+     * @param investorId Identifier of the investor behind the wallet.
      * @param signed True if registered via a signed attestation, false if written by an agent.
      */
-    event IdentityRegistered(address indexed investor, uint16 country, bool accredited, uint64 kycExpiry, bool signed);
+    event IdentityRegistered(
+        address indexed investor,
+        uint16 country,
+        bool accredited,
+        uint64 kycExpiry,
+        bytes32 indexed investorId,
+        bool signed
+    );
 
     /**
      * @notice Emitted when an investor record is deleted.
@@ -103,6 +117,21 @@ interface IIdentityRegistry {
     function registerIdentity(address investor, uint16 country, bool accredited, uint64 kycExpiry) external;
 
     /**
+     * @notice Registers or overwrites an investor record under an explicit investor identifier.
+     * @dev Restricted to AGENT. Use this door to register a second wallet for an investor who
+     *      already holds one: pass the investorId of the existing record and the two wallets
+     *      become linked. The four-parameter overload derives `keccak256(investor)` instead,
+     *      which makes a wallet its own investor and links it to nothing.
+     * @param investor The investor wallet.
+     * @param country ISO 3166-1 numeric country code.
+     * @param accredited Accredited investor flag.
+     * @param kycExpiry Expiry timestamp of the KYC attestation, must be in the future.
+     * @param investorId Identifier of the investor behind the wallet. Zero derives the default.
+     */
+    function registerIdentity(address investor, uint16 country, bool accredited, uint64 kycExpiry, bytes32 investorId)
+        external;
+
+    /**
      * @notice Registers or overwrites an investor record from an EIP-712 signed attestation.
      * @dev Permissionless to submit: authorization comes from the signature, not the caller. The
      *      signed payload binds the investor, attributes, expiry and the investor's current
@@ -113,6 +142,9 @@ interface IIdentityRegistry {
      * @param country ISO 3166-1 numeric country code.
      * @param accredited Accredited investor flag.
      * @param kycExpiry Expiry timestamp of the KYC attestation, must be in the future.
+     * @param investorId Identifier of the investor behind the wallet. Zero derives the default,
+     *        `keccak256(investor)`. Part of the signed payload: linking a wallet to an existing
+     *        investor is an attested claim, not something a submitter may choose.
      * @param signature The claim signer's EIP-712 signature over the attestation.
      */
     function registerIdentityWithAttestation(
@@ -120,6 +152,7 @@ interface IIdentityRegistry {
         uint16 country,
         bool accredited,
         uint64 kycExpiry,
+        bytes32 investorId,
         bytes calldata signature
     ) external;
 
@@ -164,6 +197,15 @@ interface IIdentityRegistry {
      * @return ISO 3166-1 numeric country code, zero if no record exists.
      */
     function country(address investor) external view returns (uint16);
+
+    /**
+     * @notice Returns the identifier of the investor behind a wallet.
+     * @dev Zero when no record exists, which is why callers comparing two wallets must reject a
+     *      zero result rather than treat it as a match.
+     * @param investor The investor wallet.
+     * @return The investor identifier, zero if no record exists.
+     */
+    function investorId(address investor) external view returns (bytes32);
 
     /**
      * @notice Returns the current attestation nonce for an investor.

@@ -38,14 +38,14 @@ contract IdentityRegistry is IIdentityRegistry, AccessControl, EIP712 {
      *      had just removed. The expiry alone would not close that.
      */
     bytes32 public constant ATTESTATION_TYPEHASH = keccak256(
-        "IdentityAttestation(address investor,uint16 country,bool accredited,uint64 kycExpiry,uint256 nonce)"
+        "IdentityAttestation(address investor,uint16 country,bool accredited,uint64 kycExpiry,bytes32 investorId,uint256 nonce)"
     );
 
     /*//////////////////////////////////////////////////////////////
                                  STORAGE
     //////////////////////////////////////////////////////////////*/
 
-    /// @dev Investor records. One slot per investor, read on every transfer.
+    /// @dev Investor records. Slot 0 holds the verification attributes read on every transfer.
     mapping(address investor => Identity record) private _identities;
 
     /// @dev Per-investor attestation nonce, incremented on every successful signed registration.
@@ -81,7 +81,15 @@ contract IdentityRegistry is IIdentityRegistry, AccessControl, EIP712 {
         external
         onlyRole(Roles.AGENT_ROLE)
     {
-        _register(investor, country_, accredited, kycExpiry, false);
+        _register(investor, country_, accredited, kycExpiry, bytes32(0), false);
+    }
+
+    /// @inheritdoc IIdentityRegistry
+    function registerIdentity(address investor, uint16 country_, bool accredited, uint64 kycExpiry, bytes32 investorId_)
+        external
+        onlyRole(Roles.AGENT_ROLE)
+    {
+        _register(investor, country_, accredited, kycExpiry, investorId_, false);
     }
 
     /// @inheritdoc IIdentityRegistry
@@ -90,6 +98,7 @@ contract IdentityRegistry is IIdentityRegistry, AccessControl, EIP712 {
         uint16 country_,
         bool accredited,
         uint64 kycExpiry,
+        bytes32 investorId_,
         bytes calldata signature
     ) external {
         address signer = _claimSigner;
@@ -100,13 +109,15 @@ contract IdentityRegistry is IIdentityRegistry, AccessControl, EIP712 {
         uint256 usedNonce = _nonces[investor]++;
 
         bytes32 digest = _hashTypedDataV4(
-            keccak256(abi.encode(ATTESTATION_TYPEHASH, investor, country_, accredited, kycExpiry, usedNonce))
+            keccak256(
+                abi.encode(ATTESTATION_TYPEHASH, investor, country_, accredited, kycExpiry, investorId_, usedNonce)
+            )
         );
 
         address recovered = digest.recover(signature);
         if (recovered != signer) revert InvalidAttestationSigner(recovered, signer);
 
-        _register(investor, country_, accredited, kycExpiry, true);
+        _register(investor, country_, accredited, kycExpiry, investorId_, true);
     }
 
     /// @inheritdoc IIdentityRegistry
@@ -151,6 +162,11 @@ contract IdentityRegistry is IIdentityRegistry, AccessControl, EIP712 {
     }
 
     /// @inheritdoc IIdentityRegistry
+    function investorId(address investor) external view returns (bytes32) {
+        return _identities[investor].investorId;
+    }
+
+    /// @inheritdoc IIdentityRegistry
     function nonces(address investor) external view returns (uint256) {
         return _nonces[investor];
     }
@@ -181,17 +197,31 @@ contract IdentityRegistry is IIdentityRegistry, AccessControl, EIP712 {
      * @param countryCode ISO 3166-1 numeric country code.
      * @param accredited Accredited investor flag.
      * @param kycExpiry Expiry timestamp of the KYC attestation.
+     * @param investorId_ Investor identifier, or zero to derive the default.
      * @param signed Whether this came from the signed path, for the event trail.
      */
-    function _register(address investor, uint16 countryCode, bool accredited, uint64 kycExpiry, bool signed) private {
+    function _register(
+        address investor,
+        uint16 countryCode,
+        bool accredited,
+        uint64 kycExpiry,
+        bytes32 investorId_,
+        bool signed
+    ) private {
         if (investor == address(0)) revert ZeroAddress();
 
         // Registering an already-stale record would write a row that isVerified rejects anyway.
         if (kycExpiry <= block.timestamp) revert AttestationExpired(kycExpiry, block.timestamp);
 
-        _identities[investor] =
-            Identity({verified: true, accredited: accredited, country: countryCode, kycExpiry: kycExpiry});
+        // Default a wallet to being its own investor. Deriving from the address rather than
+        // storing zero keeps the invariant that a verified record always carries a non-zero id,
+        // so a comparison of two ids can never match on "both unset".
+        bytes32 resolvedId = investorId_ == bytes32(0) ? keccak256(abi.encode(investor)) : investorId_;
 
-        emit IdentityRegistered(investor, countryCode, accredited, kycExpiry, signed);
+        _identities[investor] = Identity({
+            verified: true, accredited: accredited, country: countryCode, kycExpiry: kycExpiry, investorId: resolvedId
+        });
+
+        emit IdentityRegistered(investor, countryCode, accredited, kycExpiry, resolvedId, signed);
     }
 }
