@@ -40,6 +40,7 @@ contract SecurityToken is ISecurityToken, ERC20, AccessControl, Pausable, Reentr
     enum TransferStatus {
         Ok,
         RecipientNotVerified,
+        SenderNotVerified,
         SenderFrozen,
         RecipientFrozen,
         InsufficientUnfrozen,
@@ -300,14 +301,19 @@ contract SecurityToken is ISecurityToken, ERC20, AccessControl, Pausable, Reentr
      *      cheapest and most fundamental first: a frozen or unverified party is a harder stop than
      *      a modular rule. `canTransfer` and `_update` both call this, so they cannot disagree.
      *
-     *      For a mint (from == 0) the sender-side checks are skipped: there is no sender to freeze
-     *      and no balance to draw down.
+     *      For a mint (from == 0) the sender-side checks are skipped: there is no sender to verify
+     *      or freeze, and no balance to draw down.
      */
     function _checkTransfer(address from, address to, uint256 amount) internal view returns (TransferStatus) {
         if (!_identityRegistry.isVerified(to)) return TransferStatus.RecipientNotVerified;
         if (_frozen[to]) return TransferStatus.RecipientFrozen;
 
         if (from != address(0)) {
+            // Withdrawing an identity suspends the position rather than only capping it: a sender
+            // who has lost KYC must not be able to move a balance out. The tokens survive, since
+            // losing an attestation does not extinguish title, but they stop moving until
+            // compliance re-verifies, the issuer burns, or the custodian recovers.
+            if (!_identityRegistry.isVerified(from)) return TransferStatus.SenderNotVerified;
             if (_frozen[from]) return TransferStatus.SenderFrozen;
             // Only the unfrozen portion of a balance may move on a normal transfer.
             if (amount > balanceOf(from) - _frozenTokens[from]) return TransferStatus.InsufficientUnfrozen;
@@ -325,6 +331,7 @@ contract SecurityToken is ISecurityToken, ERC20, AccessControl, Pausable, Reentr
      */
     function _statusRevert(TransferStatus status, address from, address to, uint256 amount) private view {
         if (status == TransferStatus.RecipientNotVerified) revert RecipientNotVerified(to);
+        if (status == TransferStatus.SenderNotVerified) revert SenderNotVerified(from);
         if (status == TransferStatus.RecipientFrozen) revert RecipientAddressFrozen(to);
         if (status == TransferStatus.SenderFrozen) revert SenderAddressFrozen(from);
         if (status == TransferStatus.InsufficientUnfrozen) {

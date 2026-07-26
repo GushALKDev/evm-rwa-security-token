@@ -74,6 +74,14 @@ interface ISecurityToken is IERC20 {
     /// @notice Thrown when the recipient has not passed KYC, or their attestation has expired.
     error RecipientNotVerified(address to);
 
+    /**
+     * @notice Thrown when the sender has not passed KYC, or their attestation has expired.
+     * @dev An investor whose identity is withdrawn keeps their balance but cannot move it. The
+     *      position is suspended, not extinguished: only the issuer (burn) or the custodian
+     *      (forced recovery) can remove it, and re-verifying releases it.
+     */
+    error SenderNotVerified(address from);
+
     /// @notice Thrown when the sender's wallet is fully frozen.
     error SenderAddressFrozen(address from);
 

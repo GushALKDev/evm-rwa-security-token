@@ -314,6 +314,43 @@ contract SecurityTokenTest is Test {
         token.transfer(stranger, AMOUNT);
     }
 
+    /// @dev Withdrawing KYC must immobilise the position, not merely stop it growing. Otherwise
+    ///      removeIdentity, the tool compliance reaches for when an investor may no longer hold
+    ///      the instrument, would leave the sanctioned party free to move their whole balance out.
+    function test_transfer_revertsForUnverifiedSender() public {
+        _mint(alice, AMOUNT);
+        vm.prank(agent);
+        registry.removeIdentity(alice);
+
+        vm.expectRevert(abi.encodeWithSelector(ISecurityToken.SenderNotVerified.selector, alice));
+        vm.prank(alice);
+        token.transfer(bob, AMOUNT);
+    }
+
+    /// @dev The balance itself survives: losing KYC suspends the position, it does not extinguish
+    ///      title. Only the issuer (burn) or the custodian (recovery) may remove it.
+    function test_transfer_unverifiedSenderKeepsBalance() public {
+        _mint(alice, AMOUNT);
+        vm.prank(agent);
+        registry.removeIdentity(alice);
+
+        assertEq(token.balanceOf(alice), AMOUNT);
+        assertEq(token.totalSupply(), AMOUNT);
+    }
+
+    /// @dev And is released by re-verifying, so the suspension is reversible by compliance.
+    function test_transfer_resumesAfterReverification() public {
+        _mint(alice, AMOUNT);
+        vm.prank(agent);
+        registry.removeIdentity(alice);
+        _verify(alice);
+
+        vm.prank(alice);
+        token.transfer(bob, AMOUNT);
+
+        assertEq(token.balanceOf(bob), AMOUNT);
+    }
+
     function test_transfer_revertsWhenRecipientFrozen() public {
         _mint(alice, AMOUNT);
         vm.prank(agent);

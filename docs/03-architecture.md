@@ -134,13 +134,16 @@ canTransfer(from, to, amount)          [ order = cheapest / most-likely-to-rejec
    │
    ├─ 1. not paused?                    ── SLOAD
    ├─ 2. recipient verified?            ── SLOAD (registry)
-   ├─ 3. sender not fully frozen?       ── SLOAD
-   ├─ 4. recipient not fully frozen?    ── SLOAD
-   ├─ 5. unfrozen balance ≥ amount?     ── SLOAD
-   └─ 6. ModularCompliance.canTransfer  ── external call, iterates modules  ← most expensive, last
+   ├─ 3. recipient not fully frozen?    ── SLOAD
+   ├─ 4. sender verified?               ── SLOAD (registry)   [skipped on mint]
+   ├─ 5. sender not fully frozen?       ── SLOAD              [skipped on mint]
+   ├─ 6. unfrozen balance ≥ amount?     ── SLOAD              [skipped on mint]
+   └─ 7. ModularCompliance.canTransfer  ── external call, iterates modules  ← most expensive, last
 ```
 
 The ordering is deliberate: pause, identity, freeze and balance are single `SLOAD`s on the token itself; the module iteration is an external call across the engine to every module, so it runs last and only if everything cheaper passed.
+
+**Both ends are checked for identity, not just the recipient.** Withdrawing an investor's identity therefore suspends their position rather than only capping it: they keep the balance but cannot move it. This matters because `removeIdentity` is what compliance reaches for when an investor may no longer hold the instrument at all, and a rule that only blocked incoming transfers would leave the sanctioned party free to sell out. The tokens survive the suspension, since losing an attestation does not extinguish title; only the issuer (`burn`) or the custodian (`forcedRecovery`) can remove them, and re-verifying releases the position.
 
 ### One implementation, two callers
 
