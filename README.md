@@ -14,9 +14,9 @@ A proof-of-concept for compliant tokenization of a real-world financial asset (a
 - [x] `DocumentRegistry`
 - [x] `SecurityToken` (transfer gate, freeze, forced recovery)
 - [x] Deployment script with document anchoring
-- [ ] Scenario tests
+- [x] Scenario tests
 - [ ] Handler-based invariant suite
-- [ ] Coverage report
+- [x] Coverage report
 - [ ] Architecture diagram
 - [ ] Threat model: compliance bypass, reentrancy, recovery abuse (access control done)
 
@@ -32,11 +32,11 @@ Built one contract per unit in dependency order, each with its own unit and fuzz
 | 3 | Document anchoring (`DocumentRegistry`) | Done |
 | 4 | The security token (transfer gate, freeze, recovery) | Done |
 | 5 | Deployment and hash anchoring | Done |
-| 6 | Scenario and invariant testing | Next |
+| 6 | Scenario and invariant testing | In progress |
 | 7 | Documentation and threat model | Ongoing |
 | 8 | Stretch: dividend distribution | Optional |
 
-Current state: **235 tests passing, 100% line/statement/branch/function coverage on every `src/` contract.**
+Current state: **248 tests passing, 100% line/statement/branch/function coverage on every `src/` contract.** Every test is catalogued in the [testing section](docs/tests/README.md).
 
 ## Documentation
 
@@ -51,6 +51,7 @@ The README is the narrative entry point. The technical guides in [`docs/`](docs/
 | [4. Trade-offs](docs/04-tradeoffs.md) | Every scope and design decision as a decision-and-alternative register |
 | [5. Implementation](docs/05-implementation.md) | Conventions, OZ primitives, patterns, testing strategy, invariants |
 | [6. Improvements](docs/06-improvements.md) | What a production build adds back, and the priority order |
+| [7. Testing](docs/tests/README.md) | Every test catalogued and linked to its code, the invariant coverage map, and the gaps |
 | [ROADMAP](docs/ROADMAP.md) | Phased build plan and progress tracker |
 
 ## The asset

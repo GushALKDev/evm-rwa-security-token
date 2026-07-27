@@ -39,7 +39,7 @@ src/
 └── SecurityToken.sol                  the gated ERC-20                 [designed]
 ```
 
-As of the current state: **138 tests passing, 100% line/statement/branch/function coverage on every `src/` contract.**
+As of the current state: **248 tests passing, 100% line/statement/branch/function coverage on every `src/` contract.**
 
 ---
 
@@ -142,7 +142,7 @@ The project runs a strict review-gated per-unit loop: implement one contract, te
 - **Fuzz where the input space is large.** Holder-count transitions, lockup timing, and freeze arithmetic are fuzzed, not just point-tested.
 - **Mocks are minimal.** `MockToken` and `MockModule` exist only to drive the unit under test; they are test helpers, not part of the coverage target for `src/`.
 
-Current suite: 138 tests, all green.
+Current suite: 248 tests, all green. The [testing section](./tests/README.md) catalogues every test and links each claim to the code that proves it.
 
 ```
 forge test            # run the suite

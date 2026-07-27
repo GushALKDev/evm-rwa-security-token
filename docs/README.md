@@ -73,6 +73,14 @@
     - Dividend distribution (the planned stretch unit)
     - Operational and tooling improvements, with a priority table
 
+### Verification
+
+7. **[Testing Documentation](./tests/README.md)** — a section, not a single guide
+    - [Strategy](./tests/01-strategy.md): layers, principles, mocks, how to run the suite
+    - One document per suite, cataloguing every test with a link to its code
+    - Invariant coverage map: each property and what currently asserts it
+    - [Gaps & Roadmap](./tests/11-gaps-and-roadmap.md): what is not covered, and which phase closes it
+
 ---
 
 ## 🗂️ Documentation Structure
@@ -88,7 +96,8 @@ docs/
 ├── 03-architecture.md           # System design and wiring
 ├── 04-tradeoffs.md              # Decisions and accepted risks
 ├── 05-implementation.md         # Conventions, patterns, testing
-└── 06-improvements.md           # What production would add back
+├── 06-improvements.md           # What production would add back
+└── tests/                       # Testing section: strategy, per-suite catalogue, gaps
 ```
 
 ---
@@ -110,6 +119,7 @@ docs/
 3. [Project README: threat model](../README.md#threat-model) - access-control model and accepted risks
 4. [Trade-offs](./04-tradeoffs.md) - known limitations, stated deliberately
 5. [Implementation](./05-implementation.md) - invariants and testing strategy
+6. [Testing Documentation](./tests/README.md) - the invariant coverage map, then the per-suite catalogue
 
 ### For Reviewers Assessing Design Judgement
 
@@ -122,11 +132,11 @@ docs/
 
 ## 📊 Progress Tracking
 
-See [ROADMAP.md](./ROADMAP.md) for detailed progress across 8 phases and 31 trackable items.
+See [ROADMAP.md](./ROADMAP.md) for detailed progress across 8 phases and 35 trackable items.
 
-**Current status:** Phases 0 to 2 complete (foundations, identity layer, compliance layer). `DocumentRegistry` is next, then the `SecurityToken` itself.
+**Current status:** Phases 0 to 5 complete (foundations, identity, compliance, document anchoring, the token, and deployment). Scenario tests are done; the handler-based invariant suite is next.
 
-**Test suite:** 138 tests passing, 100% line/statement/branch/function coverage on every `src/` contract.
+**Test suite:** 248 tests passing, 100% line/statement/branch/function coverage on every `src/` contract. See the [testing section](./tests/README.md) for what each block covers.
 
 ---
 
