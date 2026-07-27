@@ -59,7 +59,7 @@ The accepted centralization (ISSUER = admin, self-grants roles) stays in a produ
    instant module change  ──►     visible, delayed governance action
 ```
 
-The trust assumption is unchanged: the issuer remains the authority. What changes is that acting on that authority becomes **observable and contestable before it takes effect**. This is the mitigation path already named in the [README threat model](../README.md#2-issuer-level-authority-accepted-not-defended) and [Guide 4 §4.1](./04-tradeoffs.md#41-issuer-level-authority-is-centralized). `CUSTODIAN_ROLE` in particular should sit behind hardware custody and an approval process tied to the legal determination that a wallet is genuinely lost.
+The trust assumption is unchanged: the issuer remains the authority. What changes is that acting on that authority becomes **observable and contestable before it takes effect**. This is the mitigation path already named in the [README threat model](../README.md#42-issuer-level-authority-accepted-not-defended) and [Guide 4 §4.1](./04-tradeoffs.md#41-issuer-level-authority-is-centralized). `CUSTODIAN_ROLE` in particular should sit behind hardware custody and an approval process tied to the legal determination that a wallet is genuinely lost.
 
 ---
 

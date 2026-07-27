@@ -219,7 +219,7 @@ The strictly-correct per-acquisition reading would lock each *parcel* separately
 
 ## 7. Freeze and burn arithmetic
 
-Two freeze concepts coexist on the (designed) `SecurityToken`, and their interaction with transfers and burns is small integer arithmetic worth stating precisely.
+Two freeze concepts coexist on the `SecurityToken`, and their interaction with transfers and burns is small integer arithmetic worth stating precisely.
 
 - **Full freeze:** a boolean per wallet. A fully frozen wallet can neither send nor receive.
 - **Partial freeze:** an amount `frozen[investor] ≤ balanceOf(investor)`. On a normal transfer, only the **unfrozen** portion may move:

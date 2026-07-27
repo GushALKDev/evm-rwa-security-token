@@ -1,4 +1,4 @@
-# EVM RWA Security Token (In progress)
+# EVM RWA Security Token
 
 A proof-of-concept for compliant tokenization of a real-world financial asset (a real-estate-backed note) as a permissioned security token, modeling the identity, compliance, and custody architecture used by regulated digital-asset platforms.
 
@@ -17,8 +17,8 @@ A proof-of-concept for compliant tokenization of a real-world financial asset (a
 - [x] Scenario tests
 - [x] Handler-based invariant suite
 - [x] Coverage report
-- [ ] Architecture diagram
-- [ ] Threat model: compliance bypass, reentrancy, recovery abuse (access control done)
+- [x] Architecture diagram
+- [x] Threat model: compliance bypass, reentrancy, recovery abuse, access control
 
 ## Project progress
 
@@ -33,7 +33,7 @@ Built one contract per unit in dependency order, each with its own unit and fuzz
 | 4 | The security token (transfer gate, freeze, recovery) | Done |
 | 5 | Deployment and hash anchoring | Done |
 | 6 | Scenario and invariant testing | Done |
-| 7 | Documentation and threat model | Next |
+| 7 | Documentation and threat model | Done |
 | 8 | Stretch: dividend distribution | Optional |
 
 Current state: **258 tests passing, 100% line/statement/branch/function coverage on every `src/` contract.** Every test is catalogued in the [testing section](docs/tests/README.md).
@@ -168,15 +168,179 @@ Two edges worth flagging:
 
 ## Architecture
 
-> To be written once the transfer gate is implemented, so that the diagram reflects the code rather than the intention.
+Five contracts. The token is the only one an investor touches; everything else it consults on their behalf.
+
+```
+     ISSUER            AGENT                CUSTODIAN
+   (mint, burn,   (freeze, pause,          (forcedRecovery)
+    config)        onboard, rules)
+        │                │                       │
+        └────────────────┴───────────┬───────────┘
+                                     ▼
+                        ┌──────────────────────────┐
+        holder ────────►│      SecurityToken       │
+       transfer()       │  ERC20 · AccessControl   │
+                        │  Pausable · ReentrancyG. │
+                        └───┬──────────────────┬───┘
+                            │                  │
+             isVerified()   │                  │  canTransfer()  (before)
+             investorId()   │                  │  transferred()  (after)
+             removeIdentity()                  │  created() / destroyed()
+                            ▼                  ▼
+              ┌──────────────────┐   ┌──────────────────────┐
+              │ IdentityRegistry │   │  ModularCompliance   │
+              │  AccessControl   │   │  EnumerableSet of    │
+              │  + EIP712        │   │  modules, bound once │
+              └──────────────────┘   └──┬────────┬───────┬──┘
+                                        ▼        ▼       ▼
+                                 ┌──────────┐ ┌───────┐ ┌────────┐
+                                 │MaxHolders│ │Country│ │ Lockup │
+                                 │  Module  │ │Restr. │ │ Module │
+                                 └──────────┘ └───────┘ └────────┘
+
+              ┌──────────────────┐
+   ISSUER ───►│ DocumentRegistry │   standalone: anchors the terms by
+              └──────────────────┘   content hash, nothing reads it on-chain
+```
+
+Two structural invariants define the shape:
+
+1. **The token references the engine, never a module.** Changing the rule set is a governance action on the engine (`addModule` / `removeModule`), not a token redeploy.
+2. **Each binding is set once and is not rebindable.** A module names its engine as an `immutable`; the engine's `bindToken` reverts if a token is already bound. This is what stops a second caller from driving the lifecycle hooks of a stateful module and desynchronizing its state from real balances.
+
+`DocumentRegistry` deliberately hangs off to the side: no contract reads it. Anchoring is a claim made to holders and auditors, not an input to the transfer decision.
+
+### The transfer gate
+
+Every mint, burn and transfer in OZ v5 funnels through `_update`, so the gate lives there and no ERC-20 entrypoint can go around it. It branches by shape, and each branch fires the engine hook matching what actually happened:
+
+```
+_update(from, to, amount)
+   │
+   ├─ paused && !_recovering ─────────────────► revert EnforcedPause
+   │
+   ├─ from == 0   MINT      →  _checkTransfer → move → compliance.created(to)
+   ├─ to   == 0   BURN      →  (no gate)      → move → compliance.destroyed(from)
+   ├─ _recovering RECOVERY  →  (gate skipped) → move → compliance.transferred(...)
+   └─ otherwise   TRANSFER  →  _checkTransfer → move → compliance.transferred(...)
+```
+
+`_checkTransfer` is one internal function returning a status code, ordered cheapest and most fundamental first so the common rejections short-circuit before the external call:
+
+```
+1. recipient verified?              registry SLOAD
+2. recipient not frozen?            token SLOAD
+3. sender verified?                 registry SLOAD   ┐
+4. sender not frozen?               token SLOAD      ├ skipped on mint
+5. unfrozen balance >= amount?      token SLOAD      ┘
+6. ModularCompliance.canTransfer    external call, iterates every module  ← last
+```
+
+Both the public `canTransfer` view and the reverting `_update` path call this same function — the view compares the code to `Ok`, `_update` translates it into the matching custom error. They cannot drift, because a front end's pre-check and the on-chain enforcement are literally the same code.
+
+The two non-obvious branches:
+
+- **Burn runs no gate.** The issuer-facing `burn` has already reconciled the frozen portion, and there is no recipient to verify. A freeze must not shelter tokens from the issuer retiring a position under a court order or redemption.
+- **Recovery skips the gate entirely** rather than relaxing it, because every check it would run is either already guaranteed inside `forcedRecovery` (destination verified, same `investorId`, sender's freeze cleared) or is the wrong question: an unexpired lockup or an exhausted holder cap must not strand a compromised position. The lifecycle hook still fires, so stateful modules keep tracking the move even though their verdict on it is not consulted.
+
+### The forced-recovery sequence
+
+The one flow that touches all three contracts, and the one with the largest blast radius:
+
+```
+CUSTODIAN ──► forcedRecovery(lostWallet, newWallet)          [nonReentrant]
+   │
+   ├─ 1. reject if same wallet
+   ├─ 2. registry.isVerified(newWallet)          destination must be onboarded
+   ├─ 3. investorId(lost) == investorId(new)     both wallets, one investor
+   ├─ 4. balance != 0
+   │
+   ├─ 5. snapshot freeze state (partial amount + full flag)
+   ├─ 6. clear lost wallet's freeze state
+   ├─ 7. registry.removeIdentity(lostWallet)     token holds AGENT_ROLE for this
+   │
+   ├─ 8. _recovering = true → _transfer → _recovering = false
+   │
+   ├─ 9. re-apply the snapshotted freeze on newWallet
+   └─ 10. emit RecoverySuccess(lost, new, amount, frozen, wasFullyFrozen)
+```
+
+Steps 5-9 are why recovery relocates a position without laundering a hold: a frozen lot arrives frozen at its new address. Step 3 is what keeps a compromised custodian key from recovering into an arbitrary verified wallet — see [Threat model](#threat-model) for how far that constraint actually goes.
+
+### Deployment order
+
+The bindings impose a strict construction order; each arrow is a dependency that must already exist.
+
+```
+  1. ModularCompliance(issuer)          engine first: modules take its address as immutable
+  2. IdentityRegistry(issuer, agent)
+  3. SecurityToken(issuer, registry, engine)     both are constructor args, no setters
+  4. MaxHolders(engine, token, ...)       ┐ MaxHolders and Lockup read balances,
+     Lockup(engine, token, ...)           │ so they need the token address;
+     CountryRestriction(engine, registry) ┘ Country reads the investor's country
+  5. wiring:  engine.addModule(each)      also asserts step 4 bound the right engine
+              engine.bindToken(token)     one-shot
+              registry.grantRole(AGENT_ROLE, token)   ← for removeIdentity in recovery
+              token.grantRole(AGENT_ROLE, agent)
+              token.grantRole(CUSTODIAN_ROLE, custodian)
+  6. DocumentRegistry(issuer) + setDocument(TERMS, uri, hash)
+```
+
+Note that this is *not* the order a naive reading suggests (engine, modules, registry, token): `MaxHolders` and `Lockup` hold the token as an `immutable`, so they cannot precede it, and the token takes the engine in its constructor with no setter. `Deploy.s.sol` performs this and `assert`s the anchored hash matches the file on disk, so a drifted terms document fails the deployment loudly.
+
+One limitation the script does not hide: the wiring calls are admin-gated, so the executing account must be the issuer. A real deployment needs a deploy-then-handover step (deploy under a hot key, transfer `DEFAULT_ADMIN_ROLE` to the multisig, renounce), which is governance plumbing deliberately out of scope here.
+
+Deeper treatment of each seam is in [Guide 3: Architecture](docs/03-architecture.md).
 
 ## Threat model
 
-> Compliance-bypass paths, reentrancy, and recovery abuse will be written against the finished implementation. The access-control model is settled and documented below.
+Written against the finished implementation. Four attack surfaces: getting a transfer past the gate, reentering through the external calls the gate makes, abusing recovery, and compromising a key. The first three are properties of the code; the fourth is partly a trust assumption the design accepts rather than defends.
+
+### 1. Compliance bypass (defended)
+
+The question is whether any balance can move without clearing the gate. The structural answer is that OZ v5 routes `transfer`, `transferFrom`, `_mint` and `_burn` through a single `_update`, so overriding it leaves no ERC-20 entrypoint uncovered — including any added by a future OZ version.
+
+| Bypass attempt | Why it fails |
+|---|---|
+| Call a module or the engine directly to fake a settled transfer | Lifecycle hooks are `onlyToken` on the engine and `onlyCompliance` on each module. Only the bound token can claim a move happened |
+| Register a module that never updates, then walk through its stale rule | `addModule` reverts (`ModuleNotBound`) unless the module already names this engine, so a module whose `onlyCompliance` gate would reject every call cannot be registered |
+| Re-point a module at a second engine to corrupt accumulated state | The binding is `immutable`; there is no rebind path |
+| Bind a second token to drive the hooks | `bindToken` reverts once a token is set |
+| Move the frozen portion of a balance | The gate checks `amount <= balanceOf(from) - frozenTokens[from]`, and `freezePartialTokens` refuses to push the frozen amount above the balance, so the subtraction cannot underflow |
+| Keep selling after compliance withdraws the identity | Both ends are identity-checked, not just the recipient, so `removeIdentity` suspends the position in both directions rather than only capping incoming transfers |
+| Sit out the lockup by receiving dust to reset someone else's clock | The clock starts only on the 0→positive transition and is never overwritten while non-zero (`lockStart != 0`), so a 1-wei send cannot re-lock a victim |
+| Inflate the holder count to exhaust the cap and DoS onboarding | Self-transfers are discarded in the hook. **This was a real bug**, found by the invariant suite: a full-balance self-transfer made `balanceOf(to) == amount` read as "joined from zero" while the sender was plainly not empty, so the signals failed to cancel and anyone could pump the count for free |
+
+The last row is the honest part of this section. The holder-count and lockup modules both infer transitions from post-transfer balances rather than reading pre-transfer state, and that inference is where the bugs live. `invariant_holderCountMatchesReality` now cross-checks the incremental count against enumerated real balances on every run.
+
+What is *not* defended: a rule the module set does not encode is not enforced. The gate is exactly as strict as the registered modules, and the ISSUER can remove them.
+
+### 2. Reentrancy (defended, mostly structurally)
+
+The token makes external calls to the registry and to the engine, and the engine calls out to every module — so the surface exists even though no ether and no arbitrary callee is involved.
+
+The ordering in `_update` is CEI: checks, then `super._update` settles balances, then the engine hook fires. A module reentering the token during that hook therefore observes **already-settled** balances and gets no inconsistent intermediate state to exploit; it would simply face the gate again as a fresh transfer.
+
+`forcedRecovery` carries `nonReentrant` on top of that, for a specific reason: it is the one function that mutates freeze state *around* a transfer (snapshot, clear, move, re-apply). A reentrant call landing between the clear and the re-apply is the one window where the freeze could be dropped, and the guard closes it. `_recovering` is set and cleared within that same guarded call, so the gate exemption cannot leak into any other transaction.
+
+The residual assumption: **modules are trusted code the issuer registers**, not arbitrary third-party contracts. A malicious module can revert every transfer (a denial of service the issuer can undo by removing it) and can consume unbounded gas in the hook fan-out, which iterates all modules without a cap. Vetting what gets registered is a governance responsibility, not a property the engine enforces.
+
+### 3. Recovery abuse (constrained and auditable, not prevented)
+
+`forcedRecovery` moves an investor's entire balance on a custodian's say-so, exempt from the pause and from every compliance rule. That is the largest single power in the system, so what constrains it matters.
+
+- **Destination must be verified** and **must carry the same `investorId` as the lost wallet**. Without the second check, a custodian could recover into any verified address, including one they control as an onboarded investor — and, via the freeze carry-over, freeze whatever that address already held.
+- **The freeze state travels with the position.** A partial freeze is additive at the destination; a full freeze applies to the whole destination wallet, which is intentional, since the `investorId` check already guarantees it belongs to the same investor. Recovery relocates a hold, it does not launder one.
+- **The lost wallet is evicted** from the registry in the same call, so it cannot hold the token again.
+- **Supply is unchanged** and every recovery emits `RecoverySuccess` naming both wallets and the carried freeze state.
+
+The limit, stated plainly: this is deterrence and auditability, not prevention. A compromised custodian key can still shuffle a victim's position between the victim's own wallets. And the `investorId` constraint only holds as far as the registry is honest — **a custodian key plus an agent key together** can link an attacker wallet to the victim's `investorId` and recover into it. What no lone key can do is act invisibly: the destination is a KYC-identified investor, and the event trail is on-chain.
+
+### 4. Key compromise and issuer authority
 
 Access control here spans two threat models that are easy to conflate and should not be. One is a risk the design defends against. The other is a trust assumption the design accepts.
 
-### 1. Operational key compromise (defended)
+#### 4.1 Operational key compromise (defended)
 
 The keys used most often are the ones most likely to leak. `AGENT_ROLE` is exercised daily to onboard investors and manage freezes; `CUSTODIAN_ROLE` is exercised rarely but holds the power to move balances. Separating them is real defense-in-depth over the exposed surface:
 
@@ -185,13 +349,9 @@ The keys used most often are the ones most likely to leak. `AGENT_ROLE` is exerc
 
 Neither key alone reaches the other's powers, which is the point of the split. But the containment is asymmetric, and the honest version is worth stating: **a compromised CUSTODIAN key is the more dangerous of the two.**
 
-`forcedRecovery` can only target a destination that is already verified **and carries the same `investorId` as the lost wallet**, so the two wallets must belong to the same investor. That constraint is what stops a custodian from moving a balance to an arbitrary verified address, including one they happen to control as an onboarded investor. It does not make the key harmless: a compromised custodian can still shuffle a victim's position between the victim's own wallets, and the constraint only holds as far as the registry is honest, so a **custodian key plus an agent key** together can link an attacker-controlled wallet to the victim's `investorId` and then recover into it. What a lone key cannot do is hide: every recovery emits `RecoverySuccess` naming both wallets, the destination is a KYC-identified investor rather than an anonymous address, and total supply is unchanged, so the theft is legible on-chain and attributable to a real identity off-chain.
+Section 3 above sets out exactly how far the `investorId` constraint contains that key and where it stops. The operational conclusion is what belongs here: since recovery is **deterred and auditable rather than prevented**, and since the rule set offers no secondary containment (recovery is exempt from it by design), `CUSTODIAN_ROLE` is the role a production deployment should hold to the highest key-management standard — multisig, hardware custody, an approval process tied to the legal determination that a wallet is genuinely lost — rather than the one it treats as rarely-used and therefore low-risk. Frequency of use is not the same as blast radius.
 
-Recovery is also exempt from the pause and from the transfer gate, so no compliance module constrains it. That is deliberate (a halted market or an unexpired lockup must not strand a compromised position), but it means the rule set offers no secondary containment here: the `investorId` check and the audit trail are the containment.
-
-That is the actual mitigation, and it is worth being precise about its nature: recovery is **deterred and auditable, not prevented**. This is why `CUSTODIAN_ROLE` is the role a production deployment should hold to the highest key-management standard (multisig, hardware custody, an approval process tied to the legal determination that a wallet is genuinely lost) rather than the one it treats as rarely-used and therefore low-risk. Frequency of use is not the same as blast radius.
-
-### 2. Issuer-level authority (accepted, not defended)
+#### 4.2 Issuer-level authority (accepted, not defended)
 
 **ISSUER holds `DEFAULT_ADMIN_ROLE` and can grant itself `AGENT_ROLE` and `CUSTODIAN_ROLE` at will.** This is an accepted centralization assumption, not an oversight.
 
@@ -214,7 +374,13 @@ forge test
 
 Formatting (enforced in CI): `forge fmt`.
 
-> At the current stage `forge test` reports no tests found: the interfaces carry no behavior to test. Tests land with each implementation unit, alongside its coverage report. See [Implementation status](#implementation-status).
+`forge test` runs all 258 tests across nine suites (seven unit, one scenario, one invariant). The invariant suite is worth running deeper than its default before trusting a change to a stateful module:
+
+```bash
+FOUNDRY_INVARIANT_RUNS=300 FOUNDRY_INVARIANT_DEPTH=100 forge test --match-path 'test/invariant/*'
+```
+
+That configuration is what surfaced the holder-count self-transfer bug. See the [testing section](docs/tests/README.md) for the full catalogue.
 
 ## License
 

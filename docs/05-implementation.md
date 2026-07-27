@@ -35,11 +35,11 @@ src/
 │       ├── CountryRestrictionModule.sol                                [built]
 │       └── LockupModule.sol                                            [built]
 ├── interfaces/                        all five interfaces              [built]
-├── DocumentRegistry.sol               ERC-1643-style anchor            [designed]
-└── SecurityToken.sol                  the gated ERC-20                 [designed]
+├── DocumentRegistry.sol               ERC-1643-style anchor            [built]
+└── SecurityToken.sol                  the gated ERC-20                 [built]
 ```
 
-As of the current state: **248 tests passing, 100% line/statement/branch/function coverage on every `src/` contract.**
+As of the current state: **258 tests passing, 100% line/statement/branch/function coverage on every `src/` contract.**
 
 ---
 
@@ -74,9 +74,9 @@ Everything is written from OZ v5 primitives on purpose: the goal is to demonstra
 | `EIP712` | `IdentityRegistry` | Domain separator + typed-data hashing for attestations |
 | `ECDSA` | `IdentityRegistry` | `recover` on the attestation digest |
 | `EnumerableSet` | `ModularCompliance` | O(1) module set with enumeration |
-| `ERC20` | `SecurityToken` (designed) | The token surface, with `_update` overridden as the gate |
-| `Pausable` | `SecurityToken` (designed) | Market-wide stop |
-| `ReentrancyGuard` | `SecurityToken`, dividends (designed) | Guard the recovery / claim paths |
+| `ERC20` | `SecurityToken` | The token surface, with `_update` overridden as the gate |
+| `Pausable` | `SecurityToken` | Market-wide stop |
+| `ReentrancyGuard` | `SecurityToken` | Guard `forcedRecovery`, the one path mutating freeze state around a transfer |
 
 ---
 
@@ -142,7 +142,7 @@ The project runs a strict review-gated per-unit loop: implement one contract, te
 - **Fuzz where the input space is large.** Holder-count transitions, lockup timing, and freeze arithmetic are fuzzed, not just point-tested.
 - **Mocks are minimal.** `MockToken` and `MockModule` exist only to drive the unit under test; they are test helpers, not part of the coverage target for `src/`.
 
-Current suite: 248 tests, all green. The [testing section](./tests/README.md) catalogues every test and links each claim to the code that proves it.
+Current suite: 258 tests, all green. The [testing section](./tests/README.md) catalogues every test and links each claim to the code that proves it.
 
 ```
 forge test            # run the suite

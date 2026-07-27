@@ -24,7 +24,7 @@
 
 ## 1. System overview
 
-Five contracts (plus shared `Roles` and an abstract module base), in two states: **built** (identity + compliance) and **designed** (`DocumentRegistry`, `SecurityToken`, wired by `ISecurityToken`/`IDocumentRegistry`).
+Five contracts (plus shared `Roles` and an abstract module base), all built and tested. The [README](../README.md#architecture) carries the top-level diagrams (component graph, transfer gate, recovery sequence, deployment order); this guide goes seam by seam.
 
 ```
                               ┌───────────────────────────────┐
@@ -152,7 +152,7 @@ The gate has a single internal status-code function, shared by:
 - **`_update`** (the ERC-20 transfer path): reverts with the custom error matching the failing status.
 - **`canTransfer`** (the public view): returns a bool.
 
-They share one implementation precisely so the on-chain enforcement and the off-chain pre-check **cannot drift**. A front end calling `canTransfer` gets exactly the answer `_update` would enforce, because it is the same code. `_update` branches explicitly by shape (mint `from == 0`, burn `to == 0`, forced recovery, transfer) so each calls the correct engine hook. The recovery branch skips the gate entirely rather than relaxing it: a pause or a modular rule must not strand a compromised position on a wallet the investor no longer controls, and the checks that do matter there are performed inside `forcedRecovery` itself. The lifecycle hook still fires, so stateful modules keep tracking the movement even though their verdict on it is not consulted. This lands with Phase 4; the surface is fixed in `ISecurityToken`, and the [README](../README.md#why-a-permissioned-token-is-not-an-erc-20) covers the semantics.
+They share one implementation precisely so the on-chain enforcement and the off-chain pre-check **cannot drift**. A front end calling `canTransfer` gets exactly the answer `_update` would enforce, because it is the same code. `_update` branches explicitly by shape (mint `from == 0`, burn `to == 0`, forced recovery, transfer) so each calls the correct engine hook. The recovery branch skips the gate entirely rather than relaxing it: a pause or a modular rule must not strand a compromised position on a wallet the investor no longer controls, and the checks that do matter there are performed inside `forcedRecovery` itself. The lifecycle hook still fires, so stateful modules keep tracking the movement even though their verdict on it is not consulted. The [README](../README.md#why-a-permissioned-token-is-not-an-erc-20) covers the semantics.
 
 ---
 
@@ -187,7 +187,7 @@ A stateless module (like `CountryRestriction`) simply no-ops the hooks. `canTran
 
 ## 6. Document anchoring
 
-`DocumentRegistry` (designed, Phase 3) is the ERC-1643-style anchor: a mapping from a document name to `{hash, uri, timestamp}`, writable only by the ISSUER.
+`DocumentRegistry` is the ERC-1643-style anchor: a mapping from a document name to `{hash, uri, timestamp}`, writable only by the ISSUER.
 
 ```
   name ──► { keccak256(content) , uri , setAt }
@@ -196,7 +196,7 @@ A stateless module (like `CountryRestriction`) simply no-ops the hooks. `canTran
              are in force          fetch them
 ```
 
-The hash is of the **content**, not the URI. The URI can be re-hosted freely; the hash is what a holder recomputes after fetching, to prove the exact bytes. Hashing the URI would prove only that a link did not change, which is worth nothing. The deployment script anchors [`RealEstateNote-Terms.md`](./RealEstateNote-Terms.md) this way and asserts the on-chain hash matches the file on disk (Phase 5).
+The hash is of the **content**, not the URI. The URI can be re-hosted freely; the hash is what a holder recomputes after fetching, to prove the exact bytes. Hashing the URI would prove only that a link did not change, which is worth nothing. The deployment script anchors [`RealEstateNote-Terms.md`](./RealEstateNote-Terms.md) this way and asserts the on-chain hash matches the file on disk.
 
 ---
 
@@ -208,13 +208,15 @@ The bindings impose a strict construction order. Each arrow is a dependency that
   1. ModularCompliance(issuer)                 engine must exist first:
               │                                each module binds an engine
               ▼                                address at construction
-  2. MaxHolders / Country / Lockup (compliance = engine, token = token)
+  2. IdentityRegistry(issuer, agent)
               │
               ▼
-  3. IdentityRegistry(issuer, agent)
-              │
+  3. SecurityToken(issuer, registry, engine)   both are constructor args,
+              │                                there is no setter for either
               ▼
-  4. SecurityToken(issuer, registry, engine)
+  4. MaxHolders(engine, token, ...)            MaxHolders and Lockup hold the
+     Lockup(engine, token, ...)                token as an immutable, so they
+     CountryRestriction(engine, registry, ...) cannot precede it
               │
               ├─► engine.addModule(each)        modules already point at engine
               ├─► engine.bindToken(token)       one-time
@@ -222,7 +224,9 @@ The bindings impose a strict construction order. Each arrow is a dependency that
                                                      during forcedRecovery
 ```
 
-The last grant is the one non-obvious edge: `forcedRecovery` calls `removeIdentity` on the registry, which is `AGENT`-gated, so the **token contract itself** holds `AGENT_ROLE` on the registry. The role is held by code, not a person, and exercised only inside recovery. `Deploy.s.sol` performs this wiring and `assert`s the anchored document hash, so a mismatch between the file and the chain fails the deployment loudly (Phase 5). See [Guide 5](./05-implementation.md) for the script and the invariant suite that exercises the assembled system.
+The order is worth stating because the intuitive one is wrong. "Engine, modules, registry, token" is not satisfiable: two of the three modules take the token address as an `immutable`, and the token takes the registry and the engine as constructor arguments with no setter for either. The token must therefore be constructed after the registry and the engine, but before the modules that watch its balances.
+
+The last grant is the one non-obvious edge: `forcedRecovery` calls `removeIdentity` on the registry, which is `AGENT`-gated, so the **token contract itself** holds `AGENT_ROLE` on the registry. The role is held by code, not a person, and exercised only inside recovery. `Deploy.s.sol` performs this wiring and `assert`s the anchored document hash, so a mismatch between the file and the chain fails the deployment loudly. Its one limitation: the wiring calls are admin-gated, so the executing account must be the issuer, and a real deployment needs a deploy-then-handover step. See [Guide 5](./05-implementation.md) for the script and the invariant suite that exercises the assembled system.
 
 ---
 

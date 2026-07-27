@@ -113,7 +113,7 @@ ISSUER holds `DEFAULT_ADMIN_ROLE` and can self-grant `AGENT` and `CUSTODIAN`. Th
 - **Accepted:** the issuer is the authority, not an adversary.
 - **Mitigation path (not built):** put `DEFAULT_ADMIN_ROLE` behind a multisig + timelock, so self-granting a role becomes a visible, delayed governance action. Governance infrastructure, orthogonal to the architecture.
 
-Full treatment: [README threat model §2](../README.md#2-issuer-level-authority-accepted-not-defended).
+Full treatment: [README threat model §4.2](../README.md#42-issuer-level-authority-accepted-not-defended).
 
 ### 4.2 A compromised custodian key is deterred, not prevented
 
@@ -121,7 +121,7 @@ Full treatment: [README threat model §2](../README.md#2-issuer-level-authority-
 
 Recovery also bypasses the pause and the transfer gate, so no compliance rule limits it: a lockup still running or a frozen destination will not stop a custodian. That is deliberate, since the alternative is a compromised position stranded on a wallet the investor no longer controls, but it does mean the modular rule set is not a second line of defence against this key.
 
-- **The mitigation is auditability, not prevention.** This is why `CUSTODIAN_ROLE` deserves the highest key-management standard, not the lowest because it is rarely used. Blast radius, not frequency, sets the standard. Full treatment: [README threat model §1](../README.md#1-operational-key-compromise-defended).
+- **The mitigation is auditability, not prevention.** This is why `CUSTODIAN_ROLE` deserves the highest key-management standard, not the lowest because it is rarely used. Blast radius, not frequency, sets the standard. Full treatment: [README threat model §4.1](../README.md#41-operational-key-compromise-defended).
 
 ### 4.3 On-chain verification is a projection
 

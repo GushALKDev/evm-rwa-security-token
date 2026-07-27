@@ -106,8 +106,8 @@ The system is four cooperating contracts, built in dependency order. Only the la
 | **IdentityRegistry** | May this address hold the token, and is that still true? | Built |
 | **ModularCompliance** | Do the plugged-in rules permit this transfer? | Built |
 | **Compliance modules** | One rule each (holder cap, jurisdiction, lockup) | Built |
-| **DocumentRegistry** | Which exact terms document is in force? | Designed |
-| **SecurityToken** | Compose all of the above into a gated ERC-20 | Designed |
+| **DocumentRegistry** | Which exact terms document is in force? | Built |
+| **SecurityToken** | Compose all of the above into a gated ERC-20 | Built |
 
 The key structural choice: **the token references the engine, never the individual modules.** Changing the rule set is a governance action (add or remove a module) rather than a token redeploy. See [Guide 3](./03-architecture.md) for how this seam is wired.
 

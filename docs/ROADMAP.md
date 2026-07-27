@@ -27,9 +27,9 @@ The build order is a dependency order, not a preference. Each unit is one contra
 | 4         | The Security Token            | 7      | 7         | 100%     |
 | 5         | Deployment & Anchoring        | 3      | 3         | 100%     |
 | 6         | Scenario & Invariant Testing  | 4      | 4         | 100%     |
-| 7         | Documentation & Threat Model  | 4      | 1         | 25%      |
+| 7         | Documentation & Threat Model  | 4      | 4         | 100%     |
 | 8         | Stretch: Dividends            | 4      | 0         | 0%       |
-| **TOTAL** |                               | **35** | **28**    | **80%**  |
+| **TOTAL** |                               | **35** | **31**    | **89%**  |
 
 > The percentage tracks units of implementation, not lines of code. The identity and compliance layers are the architecturally substantive part of an ERC-3643 subset, which is why the project is further along than a contract count alone would suggest.
 
@@ -187,9 +187,9 @@ The build order is a dependency order, not a preference. Each unit is one contra
 > **Dependencies:** Ongoing
 
 - [x] **7.1** README (asset, scoping decisions, on/off-chain boundary, role matrix, access-control threat model)
-- [ ] **7.2** Architecture diagram reflecting the finished code
-- [ ] **7.3** Threat model against the finished implementation (compliance bypass, reentrancy, recovery abuse)
-- [ ] **7.4** These technical guides (`docs/01`-`06`) kept in step with the code
+- [x] **7.2** Architecture diagram reflecting the finished code
+- [x] **7.3** Threat model against the finished implementation (compliance bypass, reentrancy, recovery abuse)
+- [x] **7.4** These technical guides (`docs/01`-`06`) kept in step with the code
 
 **Deliverables:**
 
@@ -222,6 +222,7 @@ The build order is a dependency order, not a preference. Each unit is one contra
 
 | Date       | Changes                 |
 | :--------- | :---------------------- |
+| 2026-07-27 | Phase 7 complete: architecture diagrams against the finished code (component graph, transfer gate, recovery sequence, corrected deployment order), threat model covering compliance bypass, reentrancy and recovery abuse, and guides 01-05 brought back in step with the code. Only the optional Phase 8 stretch remains |
 | 2026-07-24 | Phase 3 complete: `DocumentRegistry` (ERC-1643 subset, `EnumerableSet.Bytes32Set` name index, `setDocument` upsert, `bytes32` readable names, ISSUER-gated). 20 tests, 158 total, 100% coverage on all `src/` contracts |
 | 2026-07-19 | Phase 2 complete: `ModularCompliance` engine (EnumerableSet of modules, `canTransfer` view, lifecycle hook fan-out, `bindToken` once, `onlyToken`/`DEFAULT_ADMIN_ROLE` split). 27 engine tests, 138 total, 100% coverage on all `src/` contracts. Docs and ROADMAP added |
 | 2026-07-16 | Phase 2 (2.1-2.4): compliance modules - `AbstractComplianceModule`, `MaxHoldersModule`, `CountryRestrictionModule`, `LockupModule` |
