@@ -141,6 +141,13 @@ contract MaxHoldersModule is AbstractComplianceModule, AccessControl {
 
     /// @inheritdoc IComplianceModule
     function moduleTransferred(address from, address to, uint256 amount) external onlyCompliance {
+        // A self-transfer leaves the balance exactly as it was, so no holder joined or left. It
+        // must be discarded before the inference below: with from == to, a full-balance send makes
+        // balanceOf(to) == amount read as "came from zero" while the sender is plainly not empty,
+        // so the two signals fail to cancel and the count would rise for a holder who never
+        // appeared. Anyone could then inflate the count at will and exhaust the cap.
+        if (from == to) return;
+
         // Hooks run after balances move: balanceOf(to) == amount means "to" came from zero.
         bool recipientJoined = _token.balanceOf(to) == amount && amount != 0;
         bool senderLeft = _token.balanceOf(from) == 0;

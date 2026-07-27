@@ -120,6 +120,34 @@ contract MaxHoldersModuleTest is Test {
         assertEq(module.holderCount(), 2);
     }
 
+    /**
+     * @dev A self-transfer moves nothing, so the count must not change. Found by the invariant
+     *      suite, which drove `holderCount` above the cap with no new holder in sight.
+     *
+     *      The hooks infer transitions from post-transfer balances: `balanceOf(to) == amount`
+     *      means the recipient came from zero. With `from == to` and a full-balance send that
+     *      equality is true while the sender is plainly not empty, so the "joined" and "left"
+     *      signals fail to cancel and the count rises for a holder who never appeared. Anyone
+     *      could repeat it to exhaust the cap and lock out real investors.
+     */
+    function test_transfer_selfTransferKeepsCountFlat() public {
+        _mint(alice, AMOUNT);
+
+        _transfer(alice, alice, AMOUNT);
+
+        assertEq(token.balanceOf(alice), AMOUNT);
+        assertEq(module.holderCount(), 1);
+    }
+
+    /// @dev The same for a partial self-transfer, which trips a different branch of the inference.
+    function test_transfer_partialSelfTransferKeepsCountFlat() public {
+        _mint(alice, AMOUNT);
+
+        _transfer(alice, alice, AMOUNT / 2);
+
+        assertEq(module.holderCount(), 1);
+    }
+
     function test_transfer_senderEmptyingDecrements() public {
         _mint(alice, AMOUNT);
         _mint(bob, AMOUNT);
