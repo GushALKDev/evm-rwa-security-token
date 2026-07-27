@@ -78,7 +78,7 @@ The hooks are state-mutating and cannot reject. They run *after* balances move, 
 | [`test_destroyed_revertsForNonToken`](../../test/unit/ModularCompliance.t.sol#L272) | Only the bound token may fire `destroyed` |
 | [`test_hooks_revertBeforeBind`](../../test/unit/ModularCompliance.t.sol#L279) | Before any token is bound, every hook reverts rather than accepting calls from anyone |
 
-The `onlyToken` gate is the reason module state can be trusted. A holder count or a lockup clock is only meaningful if the sole thing that can move it is a real balance change on the real token. Without the gate, anyone could call `transferred` with fabricated arguments and desynchronise the count from reality — which is precisely the property [`testFuzz_countMatchesReality`](../../test/unit/MaxHoldersModule.t.sol#L290) asserts on the other side.
+The `onlyToken` gate is the reason module state can be trusted. A holder count or a lockup clock is only meaningful if the sole thing that can move it is a real balance change on the real token. Without the gate, anyone could call `transferred` with fabricated arguments and desynchronise the count from reality — which is precisely the property [`testFuzz_countMatchesReality`](../../test/unit/MaxHoldersModule.t.sol#L318) asserts on the other side.
 
 `test_hooks_revertBeforeBind` closes the window where `_token` is still zero: without it, an unbound engine would compare the caller against `address(0)` and reject everyone, but the test pins that behaviour rather than leaving it to inference.
 

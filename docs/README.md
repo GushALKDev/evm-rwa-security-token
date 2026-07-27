@@ -79,7 +79,8 @@
     - [Strategy](./tests/01-strategy.md): layers, principles, mocks, how to run the suite
     - One document per suite, cataloguing every test with a link to its code
     - Invariant coverage map: each property and what currently asserts it
-    - [Gaps & Roadmap](./tests/11-gaps-and-roadmap.md): what is not covered, and which phase closes it
+    - [Invariant Suite](./tests/11-invariants.md): the bounded handler and the holder-count bug it found
+    - [Gaps & Roadmap](./tests/12-gaps-and-roadmap.md): what is not covered, and which phase closes it
 
 ---
 
@@ -134,9 +135,9 @@ docs/
 
 See [ROADMAP.md](./ROADMAP.md) for detailed progress across 8 phases and 35 trackable items.
 
-**Current status:** Phases 0 to 5 complete (foundations, identity, compliance, document anchoring, the token, and deployment). Scenario tests are done; the handler-based invariant suite is next.
+**Current status:** Phases 0 to 6 complete (foundations, identity, compliance, document anchoring, the token, deployment, and the scenario plus invariant suites).
 
-**Test suite:** 248 tests passing, 100% line/statement/branch/function coverage on every `src/` contract. See the [testing section](./tests/README.md) for what each block covers.
+**Test suite:** 258 tests passing, 100% line/statement/branch/function coverage on every `src/` contract. See the [testing section](./tests/README.md) for what each block covers.
 
 ---
 

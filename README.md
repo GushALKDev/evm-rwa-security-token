@@ -15,7 +15,7 @@ A proof-of-concept for compliant tokenization of a real-world financial asset (a
 - [x] `SecurityToken` (transfer gate, freeze, forced recovery)
 - [x] Deployment script with document anchoring
 - [x] Scenario tests
-- [ ] Handler-based invariant suite
+- [x] Handler-based invariant suite
 - [x] Coverage report
 - [ ] Architecture diagram
 - [ ] Threat model: compliance bypass, reentrancy, recovery abuse (access control done)
@@ -32,11 +32,11 @@ Built one contract per unit in dependency order, each with its own unit and fuzz
 | 3 | Document anchoring (`DocumentRegistry`) | Done |
 | 4 | The security token (transfer gate, freeze, recovery) | Done |
 | 5 | Deployment and hash anchoring | Done |
-| 6 | Scenario and invariant testing | In progress |
-| 7 | Documentation and threat model | Ongoing |
+| 6 | Scenario and invariant testing | Done |
+| 7 | Documentation and threat model | Next |
 | 8 | Stretch: dividend distribution | Optional |
 
-Current state: **248 tests passing, 100% line/statement/branch/function coverage on every `src/` contract.** Every test is catalogued in the [testing section](docs/tests/README.md).
+Current state: **258 tests passing, 100% line/statement/branch/function coverage on every `src/` contract.** Every test is catalogued in the [testing section](docs/tests/README.md).
 
 ## Documentation
 

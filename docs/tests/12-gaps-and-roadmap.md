@@ -8,27 +8,21 @@
 
 ## Pending deliverables
 
-### The handler-based invariant suite (roadmap 6.2 / 6.3)
-
-The largest gap. Every property in the [invariant coverage map](./README.md#invariant-coverage-map) is currently asserted **at points** — in a fuzz test over one operation, or at a step inside a scenario — but never across arbitrary interleavings of the whole API.
-
-That distinction matters most for the token. `SecurityToken` has ten state-mutating entry points (mint, burn, two freeze pairs, pause pair, transfer, recovery) whose interactions are exactly where an accounting error would hide. [`testFuzz_recoveryConservesSupply`](../../test/unit/SecurityToken.t.sol#L748) proves recovery conserves supply for arbitrary *configurations*; it says nothing about a recovery interleaved with a partial burn and a freeze.
-
-The gap is smaller for the rule modules, because [`testFuzz_countMatchesReality`](../../test/unit/MaxHoldersModule.t.sol#L290) already drives arbitrary holder sequences and compares the cached count against enumeration — effectively a stateful invariant scoped to one module.
-
-Planned shape:
-
-| Piece | Content |
-| :---- | :------ |
-| `test/invariant/Handler.sol` | Bounded actors over a fixed wallet pool, with amounts and recipients bound to reachable values, plus a `warp` action so time-dependent rules are exercised |
-| `test/invariant/Invariants.t.sol` | The six properties from Guide 5, plus "a wallet evicted by recovery never holds again" |
-| Call counters | Per-action success counters asserted non-zero. Without them a suite where every call reverts passes while testing nothing |
-
-The suite will run with `fail_on_revert = false` (already the setting in `foundry.toml`), because many actions must legitimately revert — which is precisely why the counters are part of the deliverable rather than an extra.
-
 ### Deployment handover (no phase assigned)
 
 `_deploy` requires the executing account to be the issuer, since the wiring calls are admin-gated. Passing a different `ISSUER` grants that address admin and then reverts on the first wiring call. A production deployment wants deploy-then-handover: the deployer wires everything, then transfers `DEFAULT_ADMIN_ROLE` to the real issuer. Currently documented in the script's NatSpec and untested, because the behaviour it would test does not exist yet.
+
+---
+
+## Closed
+
+### The handler-based invariant suite (roadmap 6.2 / 6.3) — closed
+
+Delivered: seven invariants driven by a bounded handler across arbitrary sequences. See [Invariant Suite](./11-invariants.md).
+
+It closed the gap by finding a real bug rather than merely confirming the existing tests: a self-transfer of a full balance inflated `holderCount`, which would have let anyone exhaust the holder cap and lock genuine investors out of the placement. Every other layer missed it, because nobody writes a unit test for sending tokens to themselves.
+
+What remains true is the distinction the map still draws: the properties now hold across interleavings of every state-mutating entry point, at 30,000 calls per invariant in the high-effort configuration.
 
 ---
 
@@ -75,7 +69,7 @@ Full treatment of each in [Guide 4: Trade-offs](../04-tradeoffs.md) and the [REA
 
 | Item | Kind | Closes in |
 | :--- | :--- | :-------- |
-| Handler-based invariant suite | Pending | Phase 6.2 / 6.3 |
+| Handler-based invariant suite | **Closed** | Phase 6.2 / 6.3 (found a live bug) |
 | Deployment handover | Pending | Unscheduled |
 | `Deploy.s.sol` coverage | Accepted | Never |
 | Upgrades, proxies, factory | Accepted | Never (see Guide 6) |

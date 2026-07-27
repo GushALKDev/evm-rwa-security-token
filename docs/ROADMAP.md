@@ -26,10 +26,10 @@ The build order is a dependency order, not a preference. Each unit is one contra
 | 3         | Document Anchoring            | 2      | 2         | 100%     |
 | 4         | The Security Token            | 7      | 7         | 100%     |
 | 5         | Deployment & Anchoring        | 3      | 3         | 100%     |
-| 6         | Scenario & Invariant Testing  | 4      | 0         | 0%       |
+| 6         | Scenario & Invariant Testing  | 4      | 4         | 100%     |
 | 7         | Documentation & Threat Model  | 4      | 1         | 25%      |
 | 8         | Stretch: Dividends            | 4      | 0         | 0%       |
-| **TOTAL** |                               | **35** | **24**    | **69%**  |
+| **TOTAL** |                               | **35** | **28**    | **80%**  |
 
 > The percentage tracks units of implementation, not lines of code. The identity and compliance layers are the architecturally substantive part of an ERC-3643 subset, which is why the project is further along than a contract count alone would suggest.
 
@@ -167,10 +167,10 @@ The build order is a dependency order, not a preference. Each unit is one contra
 >
 > **Dependencies:** Phase 4
 
-- [ ] **6.1** Scenario tests (onboard → mint → transfer under lockup → freeze → recover, end to end)
-- [ ] **6.2** Handler-based invariant suite (bounded actors driving mint/transfer/freeze/recover)
-- [ ] **6.3** Invariants: total supply conserved across recovery; sum of balances == totalSupply; frozen ≤ balance per holder; holder count matches live holders
-- [ ] **6.4** Coverage report across the full system
+- [x] **6.1** Scenario tests (onboard → mint → transfer under lockup → freeze → recover, end to end)
+- [x] **6.2** Handler-based invariant suite (bounded actors driving mint/transfer/freeze/recover)
+- [x] **6.3** Invariants: total supply conserved across recovery; sum of balances == totalSupply; frozen ≤ balance per holder; holder count matches live holders
+- [x] **6.4** Coverage report across the full system
 
 **Deliverables:**
 
