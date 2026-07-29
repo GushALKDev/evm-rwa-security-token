@@ -370,4 +370,9 @@ contract SecurityToken is ISecurityToken, ERC20, AccessControl, Pausable, Reentr
     function compliance() external view returns (address) {
         return address(_compliance);
     }
+
+    /// @inheritdoc ISecurityToken
+    function recovering() external view returns (bool) {
+        return _recovering;
+    }
 }

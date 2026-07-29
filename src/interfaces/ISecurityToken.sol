@@ -243,4 +243,16 @@ interface ISecurityToken is IERC20 {
      * @return The engine address.
      */
     function compliance() external view returns (address);
+
+    /**
+     * @notice Whether the token is mid forced recovery.
+     * @dev True only for the duration of the balance move inside `forcedRecovery`, so it is
+     *      readable by compliance modules from inside a lifecycle hook and false everywhere else.
+     *      A module needs this because a recovery and a sale are indistinguishable from the hook
+     *      arguments alone, yet they mean opposite things for anything a module accrues to a
+     *      holder: a sale leaves the seller's entitlements with the seller, while a recovery must
+     *      relocate the whole position to the new wallet.
+     * @return True while a forced recovery transfer is executing.
+     */
+    function recovering() external view returns (bool);
 }
