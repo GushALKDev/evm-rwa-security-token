@@ -19,6 +19,7 @@ A proof-of-concept for compliant tokenization of a real-world financial asset (a
 - [x] Coverage report
 - [x] Architecture diagram
 - [x] Threat model: compliance bypass, reentrancy, recovery abuse, access control
+- [x] `DividendDistributor` (accumulator pattern, O(1) income distribution, as a compliance module)
 
 ## Project progress
 
@@ -34,9 +35,9 @@ Built one contract per unit in dependency order, each with its own unit and fuzz
 | 5 | Deployment and hash anchoring | Done |
 | 6 | Scenario and invariant testing | Done |
 | 7 | Documentation and threat model | Done |
-| 8 | Stretch: dividend distribution | Optional |
+| 8 | Stretch: dividend distribution | Done |
 
-Current state: **258 tests passing, 100% line/statement/branch/function coverage on every `src/` contract.** Every test is catalogued in the [testing section](docs/tests/README.md).
+Current state: **303 tests passing, 100% line/statement/branch/function coverage on every `src/` contract.** Every test is catalogued in the [testing section](docs/tests/README.md).
 
 ## Documentation
 
@@ -52,6 +53,7 @@ The README is the narrative entry point. The technical guides in [`docs/`](docs/
 | [5. Implementation](docs/05-implementation.md) | Conventions, OZ primitives, patterns, testing strategy, invariants |
 | [6. Improvements](docs/06-improvements.md) | What a production build adds back, and the priority order |
 | [7. Testing](docs/tests/README.md) | Every test catalogued and linked to its code, the invariant coverage map, and the gaps |
+| [7.13 Dividends](docs/tests/13-dividend-distributor.md) | The accumulator identity, the rounding rule that keeps it solvent, and the two bugs the suite found |
 | [ROADMAP](docs/ROADMAP.md) | Phased build plan and progress tracker |
 
 ## The asset
@@ -155,9 +157,12 @@ Three roles, using OpenZeppelin `AccessControl`. ISSUER is the `DEFAULT_ADMIN_RO
 | `setClaimSigner` | IdentityRegistry | X | | |
 | `addModule`, `removeModule`, `bindToken` | ModularCompliance | X | | |
 | `setDocument`, `removeDocument` | DocumentRegistry | X | | |
+| `deposit` | DividendDistributor | X | X | |
 | `registerIdentityWithAttestation` | IdentityRegistry | \* | \* | \* |
+| `claim` | DividendDistributor | † | † | † |
 
 \* Permissionless: anyone may submit, authorization comes from the claim signer's signature.
+† Holder-facing: any account may claim, and only ever its own accrued entitlement.
 
 The split is meant to reflect how a regulated desk actually operates. **AGENT** is the compliance officer: an operational role, used daily, to onboard investors and freeze balances. **CUSTODIAN** is the recovery role, used rarely and under a legal process. They are separate so that day-to-day compliance operations carry no power to seize an investor's position. **ISSUER** controls supply and configuration but cannot freeze or recover directly.
 
@@ -165,10 +170,11 @@ Two edges worth flagging:
 
 - **The `SecurityToken` contract itself holds `AGENT_ROLE` on the `IdentityRegistry`.** `forcedRecovery` must retire the lost wallet from the registry, and `removeIdentity` is agent-gated. The role is held by the contract, not by a person, and it is exercised only inside recovery.
 - **ISSUER can grant itself AGENT and CUSTODIAN.** The separation above is an operational control, not a cryptographic one. See [Threat model](#threat-model) for why that is deliberate and what it does and does not protect.
+- **`deposit` is `AGENT_ROLE` on the distributor, and its constructor grants that role to the issuer.** Income originates from the issuer's collections on the underlying note, so the two coincide by default; the role exists so a paying agent can be delegated the deposit duty without also holding admin. The gate is not about trust in the amount — it is that an open `deposit` would let anyone perturb the accumulator every holder's entitlement is computed from.
 
 ## Architecture
 
-Five contracts. The token is the only one an investor touches; everything else it consults on their behalf.
+Six contracts. The token is the only one an investor touches; everything else it consults on their behalf.
 
 ```
      ISSUER            AGENT                CUSTODIAN
@@ -191,12 +197,19 @@ Five contracts. The token is the only one an investor touches; everything else i
               │ IdentityRegistry │   │  ModularCompliance   │
               │  AccessControl   │   │  EnumerableSet of    │
               │  + EIP712        │   │  modules, bound once │
-              └──────────────────┘   └──┬────────┬───────┬──┘
-                                        ▼        ▼       ▼
-                                 ┌──────────┐ ┌───────┐ ┌────────┐
-                                 │MaxHolders│ │Country│ │ Lockup │
-                                 │  Module  │ │Restr. │ │ Module │
-                                 └──────────┘ └───────┘ └────────┘
+              └──────────────────┘   └──┬────────┬───────┬───────┬──┘
+                                        ▼        ▼       ▼       │
+                                 ┌──────────┐ ┌───────┐ ┌────────┐│
+                                 │MaxHolders│ │Country│ │ Lockup ││
+                                 │  Module  │ │Restr. │ │ Module ││
+                                 └──────────┘ └───────┘ └────────┘│
+                                    rules: they can veto a transfer│
+                                                                   ▼
+                                                    ┌──────────────────────┐
+                                       ISSUER ─────►│  DividendDistributor │
+                                       deposit()    │  observer: never     │
+                                       holder ─────►│  vetoes, only counts │
+                                        claim()     └──────────────────────┘
 
               ┌──────────────────┐
    ISSUER ───►│ DocumentRegistry │   standalone: anchors the terms by
@@ -209,6 +222,10 @@ Two structural invariants define the shape:
 2. **Each binding is set once and is not rebindable.** A module names its engine as an `immutable`; the engine's `bindToken` reverts if a token is already bound. This is what stops a second caller from driving the lifecycle hooks of a stateful module and desynchronizing its state from real balances.
 
 `DocumentRegistry` deliberately hangs off to the side: no contract reads it. Anchoring is a claim made to holders and auditors, not an input to the transfer decision.
+
+**`DividendDistributor` is a module, but not a rule.** The module interface has two halves — `moduleCheck`, which decides whether a transfer is allowed, and the lifecycle hooks, which observe that one settled. The three rule modules use both. The distributor implements `moduleCheck` as an unconditional `true` and puts all of its logic in the hooks, using the fan-out as an on-chain event bus and giving up the power of veto. Withholding income from a sanctioned holder is a matter for the freeze controls, not the transfer gate.
+
+That choice is why income distribution required no change to `SecurityToken` beyond a single view, and why it can be attached to and detached from a live deployment with `addModule` / `removeModule`. It also has a limit worth stating: `moduleTransferred(from, to, amount)` is byte-identical for a sale and for a forced recovery, and those mean opposite things for anything that accrues value to a holder. The distributor therefore has to ask the token which it is (`recovering()`), making it the one module that depends on the token being a `SecurityToken` rather than any ERC-20. A system with several value-accruing modules would want the transfer kind passed through the hook itself.
 
 ### The transfer gate
 
@@ -317,13 +334,15 @@ What is *not* defended: a rule the module set does not encode is not enforced. T
 
 ### 2. Reentrancy (defended, mostly structurally)
 
-The token makes external calls to the registry and to the engine, and the engine calls out to every module — so the surface exists even though no ether and no arbitrary callee is involved.
+The token makes external calls to the registry and to the engine, and the engine calls out to every module — so the surface exists on the transfer path even though no ether and no arbitrary callee is involved there.
 
 The ordering in `_update` is CEI: checks, then `super._update` settles balances, then the engine hook fires. A module reentering the token during that hook therefore observes **already-settled** balances and gets no inconsistent intermediate state to exploit; it would simply face the gate again as a fresh transfer.
 
 `forcedRecovery` carries `nonReentrant` on top of that, for a specific reason: it is the one function that mutates freeze state *around* a transfer (snapshot, clear, move, re-apply). A reentrant call landing between the clear and the re-apply is the one window where the freeze could be dropped, and the guard closes it. `_recovering` is set and cleared within that same guarded call, so the gate exemption cannot leak into any other transaction.
 
 The residual assumption: **modules are trusted code the issuer registers**, not arbitrary third-party contracts. A malicious module can revert every transfer (a denial of service the issuer can undo by removing it) and can consume unbounded gas in the hook fan-out, which iterates all modules without a cap. Vetting what gets registered is a governance responsibility, not a property the engine enforces.
+
+`DividendDistributor` is the first contract here that moves value *out* to an arbitrary address, which makes it the first place where reentrancy is a live concern rather than a structural one. `claim` records the withdrawal before transferring (CEI) and carries `nonReentrant` on top, because the settlement currency is external code: a token with a transfer callback, or an outright malicious one, gets control after the payout is recorded. Both `deposit` and `claim` are guarded, and the [test suite](docs/tests/13-dividend-distributor.md#claiming) drives an attack with a currency that reenters `claim` from inside its own `transfer`. The distributor also never pushes: it pays only the caller's own entitlement, so one holder who cannot receive the currency cannot block anyone else.
 
 ### 3. Recovery abuse (constrained and auditable, not prevented)
 
@@ -333,6 +352,7 @@ The residual assumption: **modules are trusted code the issuer registers**, not 
 - **The freeze state travels with the position.** A partial freeze is additive at the destination; a full freeze applies to the whole destination wallet, which is intentional, since the `investorId` check already guarantees it belongs to the same investor. Recovery relocates a hold, it does not launder one.
 - **The lost wallet is evicted** from the registry in the same call, so it cannot hold the token again.
 - **Supply is unchanged** and every recovery emits `RecoverySuccess` naming both wallets and the carried freeze state.
+- **Unclaimed income travels with the position.** This did not come for free. Settled as an ordinary transfer, the accumulator leaves accrued dividends on the lost wallet — so the tokens are rescued while the money stays claimable by whoever holds the compromised keys. The distributor branches on `recovering()` and carries the entitlement across; the behaviour is [tested end to end](docs/tests/13-dividend-distributor.md#forced-recovery) against the real recovery path, not only against a mock.
 
 The limit, stated plainly: this is deterrence and auditability, not prevention. A compromised custodian key can still shuffle a victim's position between the victim's own wallets. And the `investorId` constraint only holds as far as the registry is honest — **a custodian key plus an agent key together** can link an attacker wallet to the victim's `investorId` and recover into it. What no lone key can do is act invisibly: the destination is a KYC-identified investor, and the event trail is on-chain.
 
@@ -374,13 +394,21 @@ forge test
 
 Formatting (enforced in CI): `forge fmt`.
 
-`forge test` runs all 258 tests across nine suites (seven unit, one scenario, one invariant). The invariant suite is worth running deeper than its default before trusting a change to a stateful module:
+`forge test` runs all 303 tests across eleven suites (eight unit, two scenario, one invariant). The invariant suite is worth running deeper than its default before trusting a change to a stateful module:
 
 ```bash
 FOUNDRY_INVARIANT_RUNS=300 FOUNDRY_INVARIANT_DEPTH=100 forge test --match-path 'test/invariant/*'
 ```
 
-That configuration is what surfaced the holder-count self-transfer bug. See the [testing section](docs/tests/README.md) for the full catalogue.
+That configuration is what surfaced the holder-count self-transfer bug.
+
+The dividend arithmetic is sensitive to rounding in a way the default fuzz budget does not probe, so its properties are run deeper too:
+
+```bash
+FOUNDRY_FUZZ_RUNS=20000 forge test --match-contract DividendDistributorTest
+```
+
+Both bugs that suite found were only reachable across *repeated* deposits: every single-deposit property passed while the contract was quietly becoming insolvent. See the [testing section](docs/tests/README.md) for the full catalogue.
 
 ## License
 

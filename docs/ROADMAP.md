@@ -28,8 +28,8 @@ The build order is a dependency order, not a preference. Each unit is one contra
 | 5         | Deployment & Anchoring        | 3      | 3         | 100%     |
 | 6         | Scenario & Invariant Testing  | 4      | 4         | 100%     |
 | 7         | Documentation & Threat Model  | 4      | 4         | 100%     |
-| 8         | Stretch: Dividends            | 4      | 0         | 0%       |
-| **TOTAL** |                               | **35** | **31**    | **89%**  |
+| 8         | Stretch: Dividends            | 4      | 4         | 100%     |
+| **TOTAL** |                               | **35** | **35**    | **100%** |
 
 > The percentage tracks units of implementation, not lines of code. The identity and compliance layers are the architecturally substantive part of an ERC-3643 subset, which is why the project is further along than a contract count alone would suggest.
 
@@ -205,16 +205,27 @@ The build order is a dependency order, not a preference. Each unit is one contra
 >
 > **Dependencies:** Phase 4
 
-- [ ] **8.1** `DividendDistributor.sol` (accumulator pattern: dividends-per-share, per-account correction)
-- [ ] **8.2** Correction applied in the token's transfer hook so a transfer cannot double-claim
-- [ ] **8.3** Pull-pattern claim with a reentrancy guard
-- [ ] **8.4** Unit + fuzz tests (rounding dust bounded, conservation of distributed funds)
+- [x] **8.1** `DividendDistributor.sol` (accumulator pattern: dividends-per-share, per-account correction)
+- [x] **8.2** Correction applied in the transfer hook so a transfer cannot double-claim
+- [x] **8.3** Pull-pattern claim with a reentrancy guard
+- [x] **8.4** Unit + fuzz tests (rounding dust bounded, conservation of distributed funds)
 
 **Deliverables:**
 
 - O(1) distribution regardless of holder count; no snapshot, no `ERC20Votes`.
+- Settlement in an ERC-20 stablecoin fixed at deployment, not native ETH: a real-estate note pays income in tokenized fiat.
+- Integrated as a **compliance module**, not as a new hook in the token. The distributor registers on the engine and earns its accounting from the lifecycle fan-out that already exists, so `SecurityToken` needed no dividend-specific hook. `moduleCheck` always permits: this module observes, it does not gate.
 
-**Reference:** [06-improvements.md](./06-improvements.md)
+**Two bugs found while building it**, both by tests rather than by review, and both documented in [Testing §13](./tests/13-dividend-distributor.md):
+
+1. **Compounding insolvency.** Carrying each deposit's rounding residue in currency units rounds the dust up every time and the error compounds, so by the third deposit the sum of claims exceeded the sum of deposits. Fixed by carrying the raw modulus in scaled units, which pins the shortfall at one wei per holder and always errs toward solvency.
+2. **Recovery left the money behind.** After `forcedRecovery` the unclaimed income stayed claimable by the compromised wallet, verified end to end. The hook cannot distinguish a recovery from a sale on its arguments alone, so `SecurityToken` gained a `recovering()` view (a getter over the existing flag, no logic change) and the distributor now carries both the correction and the withdrawal record to the new wallet.
+
+**Note on item 8.2:** the roadmap originally said "the token's transfer hook". The correction is applied in the *module's* hook, driven by the engine's fan-out. The token itself was not given a dividend hook, which is the stronger outcome: the capability can be added to and removed from a live system with `addModule` / `removeModule`.
+
+**Deliberately not done:** the distributor is not wired into `script/Deploy.s.sol`, since Phase 8 is a stretch and adding it would change the documented deployment. The scenario suite registers it after `_deploy` returns instead. See [Gaps](./tests/12-gaps-and-roadmap.md).
+
+**Reference:** [06-improvements.md](./06-improvements.md) · [Testing §13](./tests/13-dividend-distributor.md)
 
 ---
 
@@ -222,6 +233,7 @@ The build order is a dependency order, not a preference. Each unit is one contra
 
 | Date       | Changes                 |
 | :--------- | :---------------------- |
+| 2026-07-27 | Phase 8 complete, and with it every roadmap item: `DividendDistributor` as a compliance module (accumulator pattern, ERC-20 stablecoin settlement, pull claim with reentrancy guard), integrated without a dividend-specific hook in `SecurityToken`. The suite found two real bugs: a compounding rounding residue that would have made the contract insolvent, and unclaimed income left claimable by a wallet after it had been recovered. 45 new tests, 303 total, 100% coverage on all `src/` contracts |
 | 2026-07-27 | Phase 7 complete: architecture diagrams against the finished code (component graph, transfer gate, recovery sequence, corrected deployment order), threat model covering compliance bypass, reentrancy and recovery abuse, and guides 01-05 brought back in step with the code. Only the optional Phase 8 stretch remains |
 | 2026-07-24 | Phase 3 complete: `DocumentRegistry` (ERC-1643 subset, `EnumerableSet.Bytes32Set` name index, `setDocument` upsert, `bytes32` readable names, ISSUER-gated). 20 tests, 158 total, 100% coverage on all `src/` contracts |
 | 2026-07-19 | Phase 2 complete: `ModularCompliance` engine (EnumerableSet of modules, `canTransfer` view, lifecycle hook fan-out, `bindToken` once, `onlyToken`/`DEFAULT_ADMIN_ROLE` split). 27 engine tests, 138 total, 100% coverage on all `src/` contracts. Docs and ROADMAP added |

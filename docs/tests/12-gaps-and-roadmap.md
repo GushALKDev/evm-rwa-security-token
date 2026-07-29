@@ -12,6 +12,12 @@
 
 `_deploy` requires the executing account to be the issuer, since the wiring calls are admin-gated. Passing a different `ISSUER` grants that address admin and then reverts on the first wiring call. A production deployment wants deploy-then-handover: the deployer wires everything, then transfers `DEFAULT_ADMIN_ROLE` to the real issuer. Currently documented in the script's NatSpec and untested, because the behaviour it would test does not exist yet.
 
+### The dividend distributor is outside the handler suite (no phase assigned)
+
+The invariant handler drives the system `Deploy` produces, and the distributor is deliberately not part of that deployment (see below). Its solvency and conservation properties are therefore fuzzed at 20,000 runs and walked end to end in the [scenario suite](./13-dividend-distributor.md#integration), but never interleaved with pause, freeze, `removeIdentity` and forced recovery in an arbitrary order the way the token's properties are.
+
+This is the one gap in the dividend unit worth naming, because the suite it is missing from is precisely the one that found the holder-count bug. Closing it means adding `deposit` and `claim` actions to the handler and asserting `Σ claimable + Σ withdrawn <= Σ deposited` as a stateful invariant. The deposit action would need the same throttling discipline the absorbing actions already use, or the accumulator would be perturbed on nearly every call.
+
 ---
 
 ## Closed
@@ -31,6 +37,10 @@ What remains true is the distinction the map still draws: the properties now hol
 ### `script/Deploy.s.sol` is at ~61%
 
 The tests call `_deploy` directly to avoid opening a broadcast context, leaving `run()` and `_logDeployment` uncovered. Both exist only to wrap `_deploy` in `startBroadcast`/`stopBroadcast` and print an address book. Driving `console2.log` to raise a percentage would assert nothing about the deployment, so the number is left where it is and explained here instead.
+
+### The dividend distributor is not in `Deploy.s.sol`
+
+Phase 8 is a stretch unit, and wiring it into the deployment script would change the documented deployment and the address book the [Deployment tests](./09-deploy.md) assert against. The [scenario suite](./13-dividend-distributor.md#integration) registers it with `addModule` after `_deploy` returns, which exercises the same wiring and additionally demonstrates that the capability can be added to an already-live system. A deployment that intends to pay income would add it to the script and to `DeployTest`.
 
 ### No upgrade, proxy or factory tests
 
@@ -71,6 +81,8 @@ Full treatment of each in [Guide 4: Trade-offs](../04-tradeoffs.md) and the [REA
 | :--- | :--- | :-------- |
 | Handler-based invariant suite | **Closed** | Phase 6.2 / 6.3 (found a live bug) |
 | Deployment handover | Pending | Unscheduled |
+| Distributor in the handler suite | Pending | Unscheduled |
+| Distributor in `Deploy.s.sol` | Accepted | Only if the note pays income |
 | `Deploy.s.sol` coverage | Accepted | Never |
 | Upgrades, proxies, factory | Accepted | Never (see Guide 6) |
 | Multi-token identity | Accepted | Never (scope) |
