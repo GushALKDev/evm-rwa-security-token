@@ -76,7 +76,7 @@
 
 ### Verification
 
-7. **[Testing Documentation](./tests/README.md)** — a section, not a single guide
+7. **[Testing Documentation](./tests/README.md)**: a section, not a single guide
     - [Strategy](./tests/01-strategy.md): layers, principles, mocks, how to run the suite
     - One document per suite, cataloguing every test with a link to its code
     - Invariant coverage map: each property and what currently asserts it

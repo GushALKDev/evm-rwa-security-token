@@ -5,7 +5,7 @@
 
 ---
 
-> A cap on concurrent holders, which is what a private placement is legally bound by. The count cannot be computed on demand — an ERC-20 has no holder enumeration and iterating one would not fit in a transaction — so it is maintained incrementally in the lifecycle hooks. That makes it a state machine whose correctness is not self-evident, which is why it is fuzzed against reality rather than merely point-tested.
+> A cap on concurrent holders, which is what a private placement is legally bound by. The count cannot be computed on demand (an ERC-20 has no holder enumeration and iterating one would not fit in a transaction), so it is maintained incrementally in the lifecycle hooks. That makes it a state machine whose correctness is not self-evident, which is why it is fuzzed against reality rather than merely point-tested.
 
 ## Constructor
 
@@ -79,7 +79,7 @@ An ungated hook here is a direct attack on the cap: anyone could call `moduleDes
 | [`test_setMaxHolders_revertsBelowCurrentCount`](../../test/unit/MaxHoldersModule.t.sol#L294) | **The cap cannot be set below the live count**, which would put the system in a state its own rule says is illegal |
 | [`test_setMaxHolders_allowsEqualToCurrentCount`](../../test/unit/MaxHoldersModule.t.sol#L303) | Setting it exactly at the current count is allowed: the placement is simply full |
 
-Refusing a cap below the current count keeps the invariant `holderCount <= maxHolders` true at all times rather than only after transfers. Allowing it would create a state that no transfer caused and no transfer can repair — existing holders cannot be evicted by a rule module — so the system would sit permanently in violation of its own constraint.
+Refusing a cap below the current count keeps the invariant `holderCount <= maxHolders` true at all times rather than only after transfers. Allowing it would create a state that no transfer caused and no transfer can repair (existing holders cannot be evicted by a rule module), so the system would sit permanently in violation of its own constraint.
 
 ---
 
@@ -90,4 +90,4 @@ Refusing a cap below the current count keeps the invariant `holderCount <= maxHo
 | [`testFuzz_countMatchesReality`](../../test/unit/MaxHoldersModule.t.sol#L318) | After an arbitrary sequence of holder movements, the module's count equals the number of addresses actually holding a positive balance |
 | [`testFuzz_countNeverExceedsCap`](../../test/unit/MaxHoldersModule.t.sol#L339) | Across arbitrary admission attempts, the count never exceeds the cap |
 
-The first is the test that justifies the whole incremental design. The count is a cached derivative of state the module never enumerates, so the only meaningful assurance is to compare it against the enumeration the contract cannot afford — which a test *can* afford. It is the closest thing in this suite to a stateful invariant, and it is why the pending handler suite ([Gaps](./12-gaps-and-roadmap.md)) is a smaller gap here than for the token.
+The first is the test that justifies the whole incremental design. The count is a cached derivative of state the module never enumerates, so the only meaningful assurance is to compare it against the enumeration the contract cannot afford, which a test *can* afford. It is the closest thing in this suite to a stateful invariant, and it is why the pending handler suite ([Gaps](./12-gaps-and-roadmap.md)) is a smaller gap here than for the token.

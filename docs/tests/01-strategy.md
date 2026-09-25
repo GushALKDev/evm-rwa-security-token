@@ -23,7 +23,7 @@ Fuzz tests live inside the unit suite of the contract they cover rather than in 
 
 ## 2. Principles
 
-**Assert the specific selector, never a bare revert.** Every negative test names the custom error it expects, with its parameters. A bare `vm.expectRevert()` passes on *any* revert, including one from a completely different guard, so it silently stops testing what it claims to. Where a parameter is genuinely unpredictable — the address recovered from a tampered signature — `expectPartialRevert` matches the selector alone rather than dropping the assertion entirely.
+**Assert the specific selector, never a bare revert.** Every negative test names the custom error it expects, with its parameters. A bare `vm.expectRevert()` passes on *any* revert, including one from a completely different guard, so it silently stops testing what it claims to. Where a parameter is genuinely unpredictable (the address recovered from a tampered signature), `expectPartialRevert` matches the selector alone rather than dropping the assertion entirely.
 
 **Verify claims, do not assert them.** Storage packing is checked against `forge inspect storageLayout` rather than asserted in prose. The anchored document hash is recomputed from the file on disk in the test itself, so an edited terms document and a stale anchor cannot silently agree. Where this guide states a behaviour, a linked test proves it.
 
@@ -47,7 +47,7 @@ Shared scaffolding lives in [`test/helpers/`](../../test/helpers).
 | `WrongEngineModule` (same file) | A module bound to a different engine, used to exercise the `ModuleNotBound` guard in `addModule`. Its existence is the test: a module pointing elsewhere must be refused at registration. |
 | [`MockToken.sol`](../../test/helpers/MockToken.sol) | A minimal ERC20 with open `mint`/`burn`, used by the module suites to drive balances directly. The rule modules read `balanceOf` to decide holder transitions, so they can be tested without the full token and its gate. |
 
-The scenario and deployment suites use no mocks at all: both inherit [`Deploy`](../../script/Deploy.s.sol) and call `_deploy` directly, so they run against the same wiring a real deployment produces. This is deliberate — a test that mocks the thing being deployed cannot catch a wiring mistake.
+The scenario and deployment suites use no mocks at all: both inherit [`Deploy`](../../script/Deploy.s.sol) and call `_deploy` directly, so they run against the same wiring a real deployment produces. This is deliberate: a test that mocks the thing being deployed cannot catch a wiring mistake.
 
 **Why the suites inherit the deploy script.** Duplicating the construction order in a test fixture would mean the fixture and the script could drift, and the drift would be invisible: the tests would keep passing against a wiring nobody deploys. Inheriting means a change to the deployment order breaks the scenario tests immediately.
 

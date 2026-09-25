@@ -250,7 +250,7 @@ Forced recovery preserves the freeze arithmetic across wallets: it snapshots **b
 
 ## 8. Dividend accrual without enumeration
 
-`DividendDistributor` pays income pro-rata across every holder. It is the same shape of problem as the holder count in section 5 — a quantity defined over the whole holder set, maintained without ever iterating it — but the quantity here is money, so being one wei wrong in the wrong direction makes the contract insolvent rather than merely imprecise.
+`DividendDistributor` pays income pro-rata across every holder. It is the same shape of problem as the holder count in section 5 (a quantity defined over the whole holder set, maintained without ever iterating it), but the quantity here is money, so being one wei wrong in the wrong direction makes the contract insolvent rather than merely imprecise.
 
 ### 8.1 Three operations, only two of which move money
 
@@ -277,11 +277,11 @@ alice: token.transfer(bob, 100)
                  └─ DividendDistributor
 ```
 
-Two properties of this path do the real work. The hook fires **after** balances settle, so the module can read final state rather than reconstruct it. And it carries only `from`, `to`, `amount` — the movement, not the holder set. No other account is touched, and none needs to be.
+Two properties of this path do the real work. The hook fires **after** balances settle, so the module can read final state rather than reconstruct it. And it carries only `from`, `to`, `amount`: the movement, not the holder set. No other account is touched, and none needs to be.
 
 ### 8.3 The accumulator and the correction
 
-One global running total, `dividendsPerShare`, rises on each deposit by `amount / totalSupply`. It is denominated in **currency per token**, not in tokens — the single detail that makes the rest of the arithmetic read correctly. An account's lifetime entitlement is then
+One global running total, `dividendsPerShare`, rises on each deposit by `amount / totalSupply`. It is denominated in **currency per token**, not in tokens: the single detail that makes the rest of the arithmetic read correctly. An account's lifetime entitlement is then
 
 ```
 accumulated(a) = balanceOf(a) × dividendsPerShare − correction(a)
@@ -297,12 +297,12 @@ The rule on any balance change of `amount` at accumulator value `p` is that `acc
 | `moduleDestroyed(from, amount)` | Burn | `correction[from] -= amount × p` | Income already earned survives the shares that earned it |
 | `moduleTransferred(from, to, amount)` | Transfer | both of the above | The seller keeps what accrued; the buyer is not paid for it |
 
-Mint and burn are the **one-sided cases** of the transfer, which is why the transfer is exactly their sum. Because the two legs are equal and opposite, the sum of `accumulated` over all accounts is untouched by any move. Only `deposit` ever raises it — which is the whole solvency argument in one sentence.
+Mint and burn are the **one-sided cases** of the transfer, which is why the transfer is exactly their sum. Because the two legs are equal and opposite, the sum of `accumulated` over all accounts is untouched by any move. Only `deposit` ever raises it, which is the whole solvency argument in one sentence.
 
 Corrections are therefore signed (`int256`), and the sign has a plain reading:
 
-- **Positive** — "I arrived late; subtract what the formula credits me for a past I did not hold through."
-- **Negative** — "I left; add back what the formula no longer sees in my balance."
+- **Positive**: "I arrived late; subtract what the formula credits me for a past I did not hold through."
+- **Negative**: "I left; add back what the formula no longer sees in my balance."
 
 A negative correction is how a holder who sold, or whose tokens were burned, still claims income earned while holding, with a balance of zero.
 
@@ -314,7 +314,7 @@ A correction is fixed at the moment of the balance change and never touched agai
 Δaccumulated(a) = balanceOf(a) × Δ dividendsPerShare
 ```
 
-The correction cancels out of the difference because it did not change. What an account earns from a deposit depends only on its balance at that moment — which is precisely the intended rule.
+The correction cancels out of the difference because it did not change. What an account earns from a deposit depends only on its balance at that moment, which is precisely the intended rule.
 
 Worked, with a holder minted 100 tokens when the accumulator already stood at 5:
 
@@ -324,7 +324,7 @@ Worked, with a holder minted 100 tokens when the accumulator already stood at 5:
 | Deposit (→ 8) | 8 | `+500` | `100×8 − 500 = 300` |
 | Deposit (→ 12) | 12 | `+500` | `100×12 − 500 = 700` |
 
-300 is `100 × 3`, and 700 − 300 is `100 × 4`. The late arrival collects every subsequent deposit in full, at the same per-token rate as a holder from inception. Buying more works the same way — each lot folds its own entry point into the aggregate correction, with no per-lot history stored:
+300 is `100 × 3`, and 700 − 300 is `100 × 4`. The late arrival collects every subsequent deposit in full, at the same per-token rate as a holder from inception. Buying more works the same way: each lot folds its own entry point into the aggregate correction, with no per-lot history stored:
 
 | Event | `dividendsPerShare` | `correction` | `accumulated` |
 |:---|---:|---:|---:|
@@ -346,10 +346,10 @@ Nobody is paid automatically; each holder calls `claim`. This is the same constr
 
 `ModularCompliance.transferred` is blind: an ordinary sale and a `forcedRecovery` reach `moduleTransferred` with arguments of identical shape ([`SecurityToken.sol`](../src/SecurityToken.sol) fires the same hook from both the recovery and the transfer branch of `_update`). Their meaning for anything that accrues value is opposite:
 
-- **Sale** — the seller keeps the accrued income. It is theirs.
-- **Recovery** — `from` is a wallet whose keys an attacker holds. Splitting the entitlement leaves the unclaimed income claimable from the compromised wallet: the tokens are rescued and the money is handed over.
+- **Sale**: the seller keeps the accrued income. It is theirs.
+- **Recovery**: `from` is a wallet whose keys an attacker holds. Splitting the entitlement leaves the unclaimed income claimable from the compromised wallet: the tokens are rescued and the money is handed over.
 
-Since the distinction does not travel in the hook signature, the module asks the token — `recovering()`, a view over the flag `forcedRecovery` already sets — and carries the position whole instead of splitting it:
+Since the distinction does not travel in the hook signature, the module asks the token (`recovering()`, a view over the flag `forcedRecovery` already sets) and carries the position whole instead of splitting it:
 
 ```
 correction[new] += correction[lost];   withdrawn[new] += withdrawn[lost]
@@ -358,16 +358,16 @@ correction[lost] = 0;                  withdrawn[lost] = 0
 
 Carrying `withdrawn` matters as much as the correction. Move only the correction and the new wallet inherits the gross entitlement with a zero withdrawal record, re-claiming income the old wallet was already legitimately paid.
 
-This is the one place the distributor depends on the token being a `SecurityToken` rather than any ERC-20. The alternative — a distinct `moduleRecovered` hook on `IComplianceModule` — removes the coupling at the cost of widening the interface for every module.
+This is the one place the distributor depends on the token being a `SecurityToken` rather than any ERC-20. The alternative (a distinct `moduleRecovered` hook on `IComplianceModule`) removes the coupling at the cost of widening the interface for every module.
 
 ### 8.7 Scale and rounding direction
 
 `amount / totalSupply` truncates to zero for any realistic supply, so the accumulator is scaled by `2**128` and descaled on read. Two roundings remain, handled differently on purpose:
 
-- **The deposit's own truncation is carried, not lost.** The remainder is kept in `residue` in **scaled** units (`scaled % supply`) and folded into the next deposit. Carrying it in currency units instead rounds the dust *up* every deposit and compounds until claims exceed deposits — this was a real bug in this contract, found by testing across repeated deposits. The regression tests are `test_deposit_claimsNeverExceedFundsAcrossManyDeposits` and `testFuzz_solventAcrossRepeatedDeposits`.
+- **The deposit's own truncation is carried, not lost.** The remainder is kept in `residue` in **scaled** units (`scaled % supply`) and folded into the next deposit. Carrying it in currency units instead rounds the dust *up* every deposit and compounds until claims exceed deposits: this was a real bug in this contract, found by testing across repeated deposits. The regression tests are `test_deposit_claimsNeverExceedFundsAcrossManyDeposits` and `testFuzz_solventAcrossRepeatedDeposits`.
 - **Each holder's descaling truncates down**, at most one wei each. This is the direction that keeps the contract solvent: the sum of claims sits at or below what was deposited, never above, so the last claimant is never left short.
 
-`deposit` reverts on zero supply rather than accruing to nobody. A consequence worth noting: once the note is fully amortised and supply reaches zero, no further deposit is possible, but everything deposited earlier stays claimable by its holders — who by then hold no tokens at all, and are made whole by their negative corrections.
+`deposit` reverts on zero supply rather than accruing to nobody. A consequence worth noting: once the note is fully amortised and supply reaches zero, no further deposit is possible, but everything deposited earlier stays claimable by its holders, who by then hold no tokens at all, and are made whole by their negative corrections.
 
 ---
 

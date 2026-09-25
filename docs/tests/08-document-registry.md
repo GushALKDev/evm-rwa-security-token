@@ -31,7 +31,7 @@ Anchoring is issuer-gated rather than agent-gated, unlike most of the system. Pu
 | [`test_setDocument_revertsOnEmptyHash`](../../test/unit/DocumentRegistry.t.sol#L105) | A zero hash is refused, which would otherwise anchor "any document at all" |
 | [`test_setDocument_revertsForNonIssuer`](../../test/unit/DocumentRegistry.t.sol#L112) | Anchoring is issuer-gated |
 
-**Amendment is re-anchoring, and it is meant to be.** There is no separate `amendDocument`: the issuer calls `setDocument` again with the new hash and, if the location changed, the new URI. The event log is what preserves history — each `DocumentUpdated` records which version was in force from when, so the sequence of amendments is reconstructible off-chain without storing every version on-chain. This is why the suite asserts the index does not grow on re-anchor: a duplicated name would break enumeration and make "which documents exist" ambiguous.
+**Amendment is re-anchoring, and it is meant to be.** There is no separate `amendDocument`: the issuer calls `setDocument` again with the new hash and, if the location changed, the new URI. The event log is what preserves history: each `DocumentUpdated` records which version was in force from when, so the sequence of amendments is reconstructible off-chain without storing every version on-chain. This is why the suite asserts the index does not grow on re-anchor: a duplicated name would break enumeration and make "which documents exist" ambiguous.
 
 The three empty-value guards exist because each failure mode is silent. A zero hash anchors nothing while looking anchored; an empty URI leaves holders unable to fetch what they are meant to verify; a zero name cannot be looked up.
 
@@ -49,7 +49,7 @@ The three empty-value guards exist because each failure mode is silent. A zero h
 
 `setDocument` deliberately ignores whether the name was already present (both cases are valid), while `removeDocument` checks it and reverts. The asymmetry is intentional: re-anchoring an existing document is the normal amendment flow, whereas removing something that was never there means the caller is operating on a mistaken assumption and should hear about it.
 
-The reindex test covers the state-machine edge of the underlying `EnumerableSet` — remove-then-add exercises the swap-and-pop bookkeeping, where a naive implementation leaves a dangling index entry.
+The reindex test covers the state-machine edge of the underlying `EnumerableSet`: remove-then-add exercises the swap-and-pop bookkeeping, where a naive implementation leaves a dangling index entry.
 
 ---
 
@@ -80,4 +80,4 @@ The second is the upsert property stated over arbitrary sequences: no matter how
 
 Names are `bytes32` **labels**, not hashes: `bytes32("TERMS")`, not `keccak256("TERMS")`. A label under 32 bytes is reversible, so anything reading the chain can decode `getAllDocuments()` into human-readable names without a lookup table. A hashed name would be irreversible, forcing every consumer to already know the string it was looking for.
 
-The content hash is a real `keccak256` of the document body — the two serve different purposes and only one of them is meant to hide anything, which is neither. This convention is what [`test_anchor_nameIsReadableLabel`](../../test/unit/Deploy.t.sol#L220) pins at the deployment level.
+The content hash is a real `keccak256` of the document body: the two serve different purposes and only one of them is meant to hide anything, which is neither. This convention is what [`test_anchor_nameIsReadableLabel`](../../test/unit/Deploy.t.sol#L220) pins at the deployment level.

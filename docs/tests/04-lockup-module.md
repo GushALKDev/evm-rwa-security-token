@@ -5,7 +5,7 @@
 
 ---
 
-> A holding period, enforced from the moment a wallet acquires a position. The rule is a small state machine — a clock that starts when a wallet goes from zero and clears when it returns to zero — and almost every test here exists because of a specific way that machine can be made to misbehave. The defining one is the griefing guard: under a naive design, anyone can send a holder one wei and restart their lockup forever.
+> A holding period, enforced from the moment a wallet acquires a position. The rule is a small state machine (a clock that starts when a wallet goes from zero and clears when it returns to zero) and almost every test here exists because of a specific way that machine can be made to misbehave. The defining one is the griefing guard: under a naive design, anyone can send a holder one wei and restart their lockup forever.
 
 ## Constructor
 
@@ -51,7 +51,7 @@ Three point tests around a single boundary look redundant until you consider wha
 | [`test_griefing_oneWeiCannotRelockPosition`](../../test/unit/LockupModule.t.sol#L166) | **The reason the clock is not reset on receipt.** A holder near the end of their period receives one wei from a hostile party; their clock does not move, and they are released on schedule |
 | [`test_subsequentReceiptDoesNotResetClock`](../../test/unit/LockupModule.t.sol#L185) | The same property for an ordinary, non-hostile top-up: receiving more of an existing position never extends the lockup |
 
-Under a "reset the clock on every incoming transfer" design, the lockup becomes a weapon: any address can send a holder one wei immediately before their period expires and restart it, indefinitely and for negligible cost. The holder can never sell. Starting the clock only on the `0 → positive` transition removes the lever entirely — there is nothing an outsider can do to a wallet that already holds a balance.
+Under a "reset the clock on every incoming transfer" design, the lockup becomes a weapon: any address can send a holder one wei immediately before their period expires and restart it, indefinitely and for negligible cost. The holder can never sell. Starting the clock only on the `0 → positive` transition removes the lever entirely: there is nothing an outsider can do to a wallet that already holds a balance.
 
 The cost of this choice is stated plainly in [Guide 4](../04-tradeoffs.md): it is a *per-wallet* lockup, not a per-acquisition one, so a holder who tops up does not lock the new tokens separately. A strict per-lot lockup needs partitions, which are out of scope. The griefing immunity was judged worth more than the precision.
 
@@ -66,7 +66,7 @@ The cost of this choice is stated plainly in [Guide 4](../04-tradeoffs.md): it i
 | [`test_burnToZero_clearsClock`](../../test/unit/LockupModule.t.sol#L236) | A burn that empties a wallet clears the clock, like a transfer out |
 | [`test_partialBurn_doesNotClearClock`](../../test/unit/LockupModule.t.sol#L243) | A partial burn leaves it running |
 
-The pairing is the point. If a partial exit cleared the clock, a holder could sell one wei to reset their own lockup — the mirror image of the griefing vector, exploitable by the holder instead of against them. Clearing only on a true `positive → 0` transition closes both directions with one rule.
+The pairing is the point. If a partial exit cleared the clock, a holder could sell one wei to reset their own lockup: the mirror image of the griefing vector, exploitable by the holder instead of against them. Clearing only on a true `positive → 0` transition closes both directions with one rule.
 
 ---
 

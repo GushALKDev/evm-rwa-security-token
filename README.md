@@ -175,7 +175,7 @@ Three edges worth flagging:
 
 - **The `SecurityToken` contract itself holds `AGENT_ROLE` on the `IdentityRegistry`.** `forcedRecovery` must retire the lost wallet from the registry, and `removeIdentity` is agent-gated. The role is held by the contract, not by a person. It unlocks every agent function on the registry (`removeIdentity` and both `registerIdentity` overloads), but the token's code calls only `removeIdentity`, and only inside recovery.
 - **ISSUER can grant itself AGENT and CUSTODIAN.** The separation above is an operational control, not a cryptographic one. See [Threat model](#threat-model) for why that is deliberate and what it does and does not protect.
-- **`deposit` is `AGENT_ROLE` on the distributor, and its constructor grants that role to the issuer.** Income originates from the issuer's collections on the underlying note, so the two coincide by default; the role exists so a paying agent can be delegated the deposit duty without also holding admin. The gate is not about trust in the amount — it is that an open `deposit` would let anyone perturb the accumulator every holder's entitlement is computed from.
+- **`deposit` is `AGENT_ROLE` on the distributor, and its constructor grants that role to the issuer.** Income originates from the issuer's collections on the underlying note, so the two coincide by default; the role exists so a paying agent can be delegated the deposit duty without also holding admin. The gate is not about trust in the amount: it is that an open `deposit` would let anyone perturb the accumulator every holder's entitlement is computed from.
 
 ## Architecture
 
@@ -228,7 +228,7 @@ Two structural invariants define the shape:
 
 `DocumentRegistry` deliberately hangs off to the side: no contract reads it. Anchoring is a claim made to holders and auditors, not an input to the transfer decision.
 
-**`DividendDistributor` is a module, but not a rule.** The module interface has two halves — `moduleCheck`, which decides whether a transfer is allowed, and the lifecycle hooks, which observe that one settled. The three rule modules use both. The distributor implements `moduleCheck` as an unconditional `true` and puts all of its logic in the hooks, using the fan-out as an on-chain event bus and giving up the power of veto. Withholding income from a sanctioned holder is a matter for the freeze controls, not the transfer gate.
+**`DividendDistributor` is a module, but not a rule.** The module interface has two halves: `moduleCheck`, which decides whether a transfer is allowed, and the lifecycle hooks, which observe that one settled. The three rule modules use both. The distributor implements `moduleCheck` as an unconditional `true` and puts all of its logic in the hooks, using the fan-out as an on-chain event bus and giving up the power of veto. Withholding income from a sanctioned holder is a matter for the freeze controls, not the transfer gate.
 
 That choice is why income distribution required no change to `SecurityToken` beyond a single view, and why it can be registered on a live deployment with `addModule`. It also has a limit worth stating: `moduleTransferred(from, to, amount)` is byte-identical for a sale and for a forced recovery, and those mean opposite things for anything that accrues value to a holder. The distributor therefore has to ask the token which it is (`recovering()`), making it the one module that depends on the token being a `SecurityToken` rather than any ERC-20. A system with several value-accruing modules would want the transfer kind passed through the hook itself.
 
@@ -260,12 +260,12 @@ _update(from, to, amount)
 6. ModularCompliance.canTransfer    external call, iterates every module  ← last
 ```
 
-Both the public `canTransfer` view and the reverting `_update` path call this same function — the view compares the code to `Ok`, `_update` translates it into the matching custom error. For ordinary transfers and mints they cannot drift, because a front end's pre-check and the on-chain enforcement are the same code. Burn and forced recovery do not pass through the gate, so `canTransfer` is not a pre-check for those two shapes.
+Both the public `canTransfer` view and the reverting `_update` path call this same function: the view compares the code to `Ok`, `_update` translates it into the matching custom error. For ordinary transfers and mints they cannot drift, because a front end's pre-check and the on-chain enforcement are the same code. Burn and forced recovery do not pass through the gate, so `canTransfer` is not a pre-check for those two shapes.
 
 The two non-obvious branches:
 
 - **Burn runs no gate.** The issuer-facing `burn` has already reconciled the frozen portion, and there is no recipient to verify. A freeze must not shelter tokens from the issuer retiring a position under a court order or redemption.
-- **Recovery skips the gate entirely** rather than relaxing it, because every check it would run is either already guaranteed inside `forcedRecovery` (destination verified, same `investorId`, sender's freeze cleared) or is the wrong question: an unexpired lockup or an exhausted holder cap must not strand a compromised position. The lifecycle hook still fires, so stateful modules keep tracking the move even though their verdict on it is not consulted.
+- **Recovery skips the gate entirely** rather than relaxing it, because every check it would run is either already checked inside `forcedRecovery` (destination verified, same `investorId`, sender's freeze cleared) or is the wrong question: an unexpired lockup or an exhausted holder cap must not strand a compromised position. The lifecycle hook still fires, so stateful modules keep tracking the move even though their verdict on it is not consulted.
 
 ### The forced-recovery sequence
 
@@ -289,7 +289,7 @@ CUSTODIAN ──► forcedRecovery(lostWallet, newWallet)          [nonReentrant
    └─ 10. emit RecoverySuccess(lost, new, amount, frozen, wasFullyFrozen)
 ```
 
-Steps 5-9 are why recovery relocates a position without laundering a hold: a frozen lot arrives frozen at its new address. Step 3 is what keeps a compromised custodian key from recovering into an arbitrary verified wallet — see [Threat model](#threat-model) for how far that constraint actually goes.
+Steps 5-9 are why recovery relocates a position without laundering a hold: a frozen lot arrives frozen at its new address. Step 3 is what keeps a compromised custodian key from recovering into an arbitrary verified wallet; see [Threat model](#threat-model) for how far that constraint actually goes.
 
 ### Deployment order
 
@@ -324,7 +324,7 @@ Written against the finished implementation. Four attack surfaces: getting a tra
 
 ### 1. Compliance bypass (defended)
 
-The question is whether any balance can move without clearing the gate. The structural answer is that OZ v5 routes `transfer`, `transferFrom`, `_mint` and `_burn` through a single `_update`, so overriding it leaves no ERC-20 entrypoint uncovered — including any added by a future OZ version.
+The question is whether any balance can move without clearing the gate. The structural answer is that OZ v5 routes `transfer`, `transferFrom`, `_mint` and `_burn` through a single `_update`, so overriding it leaves no ERC-20 entrypoint uncovered, including any later entrypoint that routes through `_update`.
 
 | Bypass attempt | Why it fails |
 |---|---|
@@ -345,7 +345,7 @@ The gate also checks the two holders, not the caller. In `transferFrom` the spen
 
 ### 2. Reentrancy (defended, mostly structurally)
 
-The token makes external calls to the registry and to the engine, and the engine calls out to every module — so the surface exists on the transfer path even though no ether and no arbitrary callee is involved there.
+The token makes external calls to the registry and to the engine, and the engine calls out to every module, so the surface exists on the transfer path even though no ether and no arbitrary callee is involved there.
 
 The ordering in `_update` is CEI: checks, then `super._update` settles balances, then the engine hook fires. A module reentering the token during that hook therefore observes **already-settled** balances and gets no inconsistent intermediate state to exploit; it would simply face the gate again as a fresh transfer.
 
@@ -359,13 +359,13 @@ The residual assumption: **modules are trusted code the issuer registers**, not 
 
 `forcedRecovery` moves an investor's entire balance on a custodian's say-so, exempt from the pause and from every compliance rule. That is the largest single power in the system, so what constrains it matters.
 
-- **Destination must be verified** and **must carry the same `investorId` as the lost wallet**. Without the second check, a custodian could recover into any verified address, including one they control as an onboarded investor — and, via the freeze carry-over, freeze whatever that address already held.
-- **The freeze state travels with the position.** A partial freeze is additive at the destination; a full freeze applies to the whole destination wallet, which is intentional, since the `investorId` check already guarantees it belongs to the same investor. Recovery relocates a hold, it does not launder one.
+- **Destination must be verified** and **must carry the same `investorId` as the lost wallet**. Without the second check, a custodian could recover into any verified address, including one they control as an onboarded investor, and, via the freeze carry-over, freeze whatever that address already held.
+- **The freeze state travels with the position.** A partial freeze is additive at the destination; a full freeze applies to the whole destination wallet, which is intentional, since the `investorId` check already requires it to belong to the same investor. Recovery relocates a hold, it does not launder one.
 - **The lost wallet is evicted** from the registry in the same call, so it can no longer send or receive. The eviction is not permanent: an agent can register the wallet again, after which it can hold the token.
 - **Supply is unchanged** and every recovery emits `RecoverySuccess` naming both wallets and the carried freeze state.
-- **Unclaimed income travels with the position.** This did not come for free. Settled as an ordinary transfer, the accumulator leaves accrued dividends on the lost wallet — so the tokens are rescued while the money stays claimable by whoever holds the compromised keys. The distributor branches on `recovering()` and carries the entitlement across; the behaviour is [tested end to end](docs/tests/13-dividend-distributor.md#forced-recovery) against the real recovery path, not only against a mock.
+- **Unclaimed income travels with the position.** This did not come for free. Settled as an ordinary transfer, the accumulator leaves accrued dividends on the lost wallet, so the tokens are rescued while the money stays claimable by whoever holds the compromised keys. The distributor branches on `recovering()` and carries the entitlement across; the behaviour is [tested end to end](docs/tests/13-dividend-distributor.md#forced-recovery) against the real recovery path, not only against a mock.
 
-The limit, stated plainly: this is deterrence and auditability, not prevention. A compromised custodian key can still shuffle a victim's position between the victim's own wallets. And the `investorId` constraint only holds as far as the registry is honest — **a custodian key plus an agent key together** can link an attacker wallet to the victim's `investorId` and recover into it. What no lone key can do is act invisibly: the destination is a KYC-identified investor, and the event trail is on-chain.
+The limit, stated plainly: this is deterrence and auditability, not prevention. A compromised custodian key can still shuffle a victim's position between the victim's own wallets. And the `investorId` constraint only holds as far as the registry is honest: **a custodian key plus an agent key together** can link an attacker wallet to the victim's `investorId` and recover into it. What no lone key can do is act invisibly: the destination is a KYC-identified investor, and the event trail is on-chain.
 
 ### 4. Key compromise and issuer authority
 
@@ -380,7 +380,7 @@ The keys used most often are the ones most likely to leak. `AGENT_ROLE` is exerc
 
 Neither key alone reaches the other's powers, which is the point of the split. But the containment is asymmetric, and the honest version is worth stating: **a compromised CUSTODIAN key is the more dangerous of the two.**
 
-Section 3 above sets out exactly how far the `investorId` constraint contains that key and where it stops. The operational conclusion is what belongs here: since recovery is **deterred and auditable rather than prevented**, and since the rule set offers no secondary containment (recovery is exempt from it by design), `CUSTODIAN_ROLE` is the role a production deployment should hold to the highest key-management standard — multisig, hardware custody, an approval process tied to the legal determination that a wallet is genuinely lost — rather than the one it treats as rarely-used and therefore low-risk. Frequency of use is not the same as blast radius.
+Section 3 above sets out exactly how far the `investorId` constraint contains that key and where it stops. The operational conclusion is what belongs here: since recovery is **deterred and auditable rather than prevented**, and since the rule set offers no secondary containment (recovery is exempt from it by design), `CUSTODIAN_ROLE` is the role a production deployment should hold to the highest key-management standard (multisig, hardware custody, an approval process tied to the legal determination that a wallet is genuinely lost) rather than the one it treats as rarely-used and therefore low-risk. Frequency of use is not the same as blast radius.
 
 #### 4.2 Issuer-level authority (accepted, not defended)
 

@@ -77,7 +77,7 @@ Every invariant from [Guide 5, Section 7](../05-implementation.md#7-invariants),
 | **Supply conservation** | `Σ balanceOf == totalSupply` | Stateful: [`invariant_balancesSumToTotalSupply`](../../test/invariant/Invariants.t.sol#L108) across sequences, plus [`testFuzz_transferConservesSupply`](../../test/unit/SecurityToken.t.sol#L735) |
 | **Recovery preserves supply** | `forcedRecovery` never changes `totalSupply` | Stateful: [`invariant_supplyMatchesMintsMinusBurns`](../../test/invariant/Invariants.t.sol#L121), tracking supply against ghost mint/burn counters, plus [`testFuzz_recoveryConservesSupply`](../../test/unit/SecurityToken.t.sol#L748) and [`test_scenario_compromisedKeyRecoveredUnderPause`](../../test/scenario/Lifecycle.t.sol#L137) |
 | **Frozen ≤ balance** | `frozenTokens[a] <= balanceOf(a)` | Stateful: [`invariant_frozenNeverExceedsBalance`](../../test/invariant/Invariants.t.sol#L135). Enforced at the write by [`test_freezePartialTokens_revertsAboveBalance`](../../test/unit/SecurityToken.t.sol#L259) and preserved on burn by [`test_burn_eatsFrozenWhenExceedingFree`](../../test/unit/SecurityToken.t.sol#L204) |
-| **Holder count is exact** | The module's count equals the addresses holding a positive balance | Stateful: [`invariant_holderCountMatchesReality`](../../test/invariant/Invariants.t.sol#L151) — **this is the one that caught the self-transfer bug** — plus [`testFuzz_countMatchesReality`](../../test/unit/MaxHoldersModule.t.sol#L318) |
+| **Holder count is exact** | The module's count equals the addresses holding a positive balance | Stateful: [`invariant_holderCountMatchesReality`](../../test/invariant/Invariants.t.sol#L151): **this is the one that caught the self-transfer bug**: plus [`testFuzz_countMatchesReality`](../../test/unit/MaxHoldersModule.t.sol#L318) |
 | **Cap respected** | Holder count never exceeds `maxHolders` | Stateful: [`invariant_holderCountNeverExceedsCap`](../../test/invariant/Invariants.t.sol#L164), plus [`testFuzz_countNeverExceedsCap`](../../test/unit/MaxHoldersModule.t.sol#L339) and the lowering guard [`test_setMaxHolders_revertsBelowCurrentCount`](../../test/unit/MaxHoldersModule.t.sol#L294). **Note:** forced recovery bypasses the gate, but cannot raise the count, since the lost wallet is always emptied in the same movement |
 | **Verified holders only** | No unverified address can *increase* its balance | Stateful: [`invariant_unverifiedHoldersAreConsistent`](../../test/invariant/Invariants.t.sol#L204), plus [`test_transfer_revertsForUnverifiedRecipient`](../../test/unit/SecurityToken.t.sol#L308) and [`test_mint_revertsForUnverifiedRecipient`](../../test/unit/SecurityToken.t.sol#L141). **Reformulated:** an existing holder *can* become unverified via `removeIdentity`, which suspends the position rather than removing it, so the property is not "no unverified holder exists". See [Security Token](./07-security-token.md#the-transfer-gate-42-43) |
 | **Evicted wallets stay empty** | A wallet retired by recovery holds nothing while unverified | Stateful: [`invariant_recoveryLeavesEvictedWalletEmpty`](../../test/invariant/Invariants.t.sol#L183), plus [`test_scenario_retiredWalletCannotBeUsedAgain`](../../test/scenario/Lifecycle.t.sol#L189) |
@@ -89,7 +89,7 @@ Every invariant from [Guide 5, Section 7](../05-implementation.md#7-invariants),
 ## 📚 References
 
 - [Documentation Index](../README.md)
-- [Guide 3: Architecture](../03-architecture.md) — the transfer gate and the binding graph
-- [Guide 4: Trade-offs](../04-tradeoffs.md) — accepted risks the tests deliberately do not defend against
-- [Guide 5: Implementation](../05-implementation.md) — conventions and the invariant table
-- [ROADMAP](../ROADMAP.md) — phase status
+- [Guide 3: Architecture](../03-architecture.md): the transfer gate and the binding graph
+- [Guide 4: Trade-offs](../04-tradeoffs.md): accepted risks the tests deliberately do not defend against
+- [Guide 5: Implementation](../05-implementation.md): conventions and the invariant table
+- [ROADMAP](../ROADMAP.md): phase status

@@ -44,11 +44,11 @@ Three deserve their reasoning stated.
 
 **Supply conservation is where recovery would show up.** `forcedRecovery` touches balances, freeze state and the registry in one call while bypassing the transfer gate entirely. If its ordering were wrong it would mint or destroy, and the ghost-tracked `minted - burned` is what would catch it.
 
-**The cap is not implied by the gate.** Recovery skips `moduleCheck`, so nothing stops it raising the count on the way past — nothing except the fact that a recovery always empties the lost wallet in the same movement that fills the new one. The invariant asserts the consequence rather than trusting the argument.
+**The cap is not implied by the gate.** Recovery skips `moduleCheck`, so nothing stops it raising the count on the way past: nothing except the fact that a recovery always empties the lost wallet in the same movement that fills the new one. The invariant asserts the consequence rather than trusting the argument.
 
 **The eviction property is measured at the right moment.** An earlier version asserted "an evicted wallet that is currently unverified holds nothing", and the fuzzer disproved it with an entirely correct sequence: evict the wallet, re-onboard it, let it receive a transfer, then withdraw the identity again. Nothing was wrong with the system; the invariant was asking about a later state that says nothing about recovery. Recording the balance at the instant the eviction completed asks the question that actually belongs to `forcedRecovery`.
 
-**"Verified holders only" is deliberately weaker than it sounds.** It is *not* "no unverified address holds a balance", which is false by design: `removeIdentity` suspends a live position rather than confiscating it, so an unverified wallet keeps what it had. What the gate guarantees is that the balance cannot **grow**, and that it cannot move. Asserting the stronger form would be asserting a property the system deliberately does not have.
+**"Verified holders only" is deliberately weaker than it sounds.** It is *not* "no unverified address holds a balance", which is false by design: `removeIdentity` suspends a live position rather than confiscating it, so an unverified wallet keeps what it had. What the gate enforces is that the balance cannot **grow**, and that it cannot move. Asserting the stronger form would be asserting a property the system deliberately does not have.
 
 ---
 
@@ -83,11 +83,11 @@ Both are therefore toggles that enter their blocking state on a fraction of draw
 
 ### Why the counters exist
 
-The suite runs with `fail_on_revert = false`. This is necessary — a locked-up transfer *must* be allowed to revert — and it is exactly how an invariant suite silently tests nothing: if every call reverted, every invariant would hold vacuously and the run would still be green.
+The suite runs with `fail_on_revert = false`. This is necessary (a locked-up transfer *must* be allowed to revert), and it is exactly how an invariant suite silently tests nothing: if every call reverted, every invariant would hold vacuously and the run would still be green.
 
 Each action increments a counter only on success, and [`test_handlerExercisesEveryAction`](../../test/invariant/Invariants.t.sol#L241) drives every action against a known-good state and asserts its counter moved. It is not a nicety: it caught two real defects in the handler during development, one where a `vm.prank` was consumed by a state-reading call before reaching the call it was meant to authorise, and one where a throttle read an already-bounded parameter and so **never withdrew an identity at all**.
 
-**Note on placement.** The counters cannot be asserted in `afterInvariant`, which does not observe the state a sequence accumulated and reads zero regardless. The guarantee lives in the deterministic reachability test instead. [`afterInvariant`](../../test/invariant/Invariants.t.sol#L226) is kept purely as a `-vv` readout of what a run exercised.
+**Note on placement.** The counters cannot be asserted in `afterInvariant`, which does not observe the state a sequence accumulated and reads zero regardless. The reachability check lives in the deterministic test instead. [`afterInvariant`](../../test/invariant/Invariants.t.sol#L226) is kept purely as a `-vv` readout of what a run exercised.
 
 ---
 

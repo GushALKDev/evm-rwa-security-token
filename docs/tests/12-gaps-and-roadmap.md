@@ -22,7 +22,7 @@ This is the one gap in the dividend unit worth naming, because the suite it is m
 
 ## Closed
 
-### The handler-based invariant suite (roadmap 6.2 / 6.3) — closed
+### The handler-based invariant suite (roadmap 6.2 / 6.3): closed
 
 Delivered: seven invariants driven by a bounded handler across arbitrary sequences. See [Invariant Suite](./11-invariants.md).
 

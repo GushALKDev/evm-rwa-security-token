@@ -5,7 +5,7 @@
 
 ---
 
-> The centrepiece, and the largest suite. An ERC-20 in shape whose every movement is gated by identity and compliance, plus the issuer powers a regulated instrument requires. Two themes run through the tests: the gate must be impossible to route around, and the powerful operations — burn, freeze, recovery — are tested mostly by what they **cannot** do. Where a mechanism stops tokens moving, there is always a paired test proving the balance survives, because a compliance control that quietly destroys value is a worse failure than one that blocks too much.
+> The centrepiece, and the largest suite. An ERC-20 in shape whose every movement is gated by identity and compliance, plus the issuer powers a regulated instrument requires. Two themes run through the tests: the gate must be impossible to route around, and the powerful operations (burn, freeze, recovery) are tested mostly by what they **cannot** do. Where a mechanism stops tokens moving, there is always a paired test proving the balance survives, because a compliance control that quietly destroys value is a worse failure than one that blocks too much.
 
 ## Constructor
 
@@ -76,7 +76,7 @@ One internal status-code function is shared by `_update` (which reverts) and `ca
 | [`test_transfer_movesUnfrozenPortion`](../../test/unit/SecurityToken.t.sol#L389) | The unfrozen portion still moves freely, so a partial hold is partial |
 | [`test_transfer_revertsWhenComplianceRejects`](../../test/unit/SecurityToken.t.sol#L401) | A module rejecting blocks the transfer |
 
-**Identity is checked on both ends.** The sender-side check exists because `removeIdentity` is what compliance reaches for when an investor may no longer hold the instrument at all — a sanction, a lapsed jurisdiction, a failed re-screening. A gate that only blocked *incoming* transfers would leave the sanctioned party free to sell their entire position, which makes the measure decorative. The three tests above form a set: the position cannot move, it is not confiscated, and compliance can undo the suspension. That is what distinguishes a suspension from a seizure, and it is why the invariant in the [coverage map](./README.md#-invariant-coverage-map) is phrased as "no unverified address can *increase* its balance" rather than "no unverified holder exists".
+**Identity is checked on both ends.** The sender-side check exists because `removeIdentity` is what compliance reaches for when an investor may no longer hold the instrument at all: a sanction, a lapsed jurisdiction, a failed re-screening. A gate that only blocked *incoming* transfers would leave the sanctioned party free to sell their entire position, which makes the measure decorative. The three tests above form a set: the position cannot move, it is not confiscated, and compliance can undo the suspension. That is what distinguishes a suspension from a seizure, and it is why the invariant in the [coverage map](./README.md#-invariant-coverage-map) is phrased as "no unverified address can *increase* its balance" rather than "no unverified holder exists".
 
 ---
 
@@ -89,7 +89,7 @@ One internal status-code function is shared by `_update` (which reverts) and `ca
 | [`test_unpause_resumesTransfers`](../../test/unit/SecurityToken.t.sol#L433) | Unpausing restores normal operation |
 | [`test_pause_revertsForNonAgent`](../../test/unit/SecurityToken.t.sol#L506) | Pausing is agent-gated |
 | [`test_pause_doesNotBlockForcedRecovery`](../../test/unit/SecurityToken.t.sol#L447) | **Recovery works while paused**, and the token stays paused afterwards |
-| [`test_pause_recoveryExemptionDoesNotOutliveTheCall`](../../test/unit/SecurityToken.t.sol#L462) | After the recovery returns, the pause is back in force for everyone — including the wallet that just received the position |
+| [`test_pause_recoveryExemptionDoesNotOutliveTheCall`](../../test/unit/SecurityToken.t.sol#L462) | After the recovery returns, the pause is back in force for everyone, including the wallet that just received the position |
 | [`test_pause_recoveryStillRequiresCustodian`](../../test/unit/SecurityToken.t.sol#L479) | The exemption does not widen *who* may recover |
 | [`test_pause_recoveryStillEnforcesIdentityCheck`](../../test/unit/SecurityToken.t.sol#L494) | Nor does it relax recovery's own investor check |
 
@@ -132,7 +132,7 @@ The most powerful operation in the system: it moves an arbitrary balance between
 | [`test_forcedRecovery_revertsForEmptyWallet`](../../test/unit/SecurityToken.t.sol#L637) | Recovering nothing reverts rather than emitting a misleading success |
 | [`test_forcedRecovery_revertsForSameWallet`](../../test/unit/SecurityToken.t.sol#L723) | Recovering into the same wallet is refused |
 
-The investor check is the difference between recovery and confiscation. Without it, a custodian could move any balance to any verified wallet — including one they control as an onboarded investor — and the operation would look identical on-chain to a legitimate recovery. Requiring a shared `investorId` means the destination must be another wallet of the *same person*, which is the ERC-3643 property of proving the new wallet is a management key of the investor's ONCHAINID. The residual risk, where a custodian key and an agent key collude to link an attacker wallet first, is stated in the [threat model](../../README.md#threat-model).
+The investor check is the difference between recovery and confiscation. Without it, a custodian could move any balance to any verified wallet (including one they control as an onboarded investor), and the operation would look identical on-chain to a legitimate recovery. Requiring a shared `investorId` means the destination must be another wallet of the *same person*, which is the ERC-3643 property of proving the new wallet is a management key of the investor's ONCHAINID. The residual risk, where a custodian key and an agent key collude to link an attacker wallet first, is stated in the [threat model](../../README.md#threat-model).
 
 ### The freeze travels
 
@@ -143,7 +143,7 @@ The investor check is the difference between recovery and confiscation. Without 
 | [`test_forcedRecovery_partialFreezeLeavesExistingBalanceUnfrozen`](../../test/unit/SecurityToken.t.sol#L687) | A partial freeze is **additive**: tokens already at the destination keep their own frozen/unfrozen split |
 | [`test_forcedRecovery_fullFreezeCoversPreExistingBalance`](../../test/unit/SecurityToken.t.sol#L705) | A full freeze **covers the whole destination**, including tokens already there |
 
-Recovery relocates a position; it does not launder a hold. The asymmetry in the last two is deliberate and worth stating: a partial freeze is a property of a *lot*, so it moves with the tokens it applies to, while a full freeze is a property of the *investor*, so it applies to everything they hold at the destination. The identity check guarantees the destination belongs to the same investor, which is what makes the second behaviour correct rather than collateral damage.
+Recovery relocates a position; it does not launder a hold. The asymmetry in the last two is deliberate and worth stating: a partial freeze is a property of a *lot*, so it moves with the tokens it applies to, while a full freeze is a property of the *investor*, so it applies to everything they hold at the destination. The identity check requires that the destination belongs to the same investor, which is what makes the second behaviour correct rather than collateral damage.
 
 ### The gate is bypassed
 
@@ -152,7 +152,7 @@ Recovery relocates a position; it does not launder a hold. The asymmetry in the 
 | [`test_forcedRecovery_succeedsWhenComplianceRejects`](../../test/unit/SecurityToken.t.sol#L646) | A module rejecting does not block recovery: an unexpired lockup cannot strand a compromised position |
 | [`test_forcedRecovery_succeedsIntoFrozenWallet`](../../test/unit/SecurityToken.t.sol#L661) | A frozen destination does not block it either |
 
-Recovery skips the transfer gate entirely rather than relaxing it, for the same reason it skips the pause. Every check the gate performs is either already guaranteed by `forcedRecovery` itself (destination verified, same investor, sender's freeze cleared, exact balance) or is the wrong question to ask during an incident. The frozen-destination case is the sharper of the two: without the bypass, the operation would refuse to proceed because of a state it re-applies moments later.
+Recovery skips the transfer gate entirely rather than relaxing it, for the same reason it skips the pause. Every check the gate performs is either already checked by `forcedRecovery` itself (destination verified, same investor, sender's freeze cleared, exact balance) or is the wrong question to ask during an incident. The frozen-destination case is the sharper of the two: without the bypass, the operation would refuse to proceed because of a state it re-applies moments later.
 
 ---
 

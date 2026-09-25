@@ -40,7 +40,7 @@ where `correction` absorbs the error in pricing an account's *current* balance a
 | [`test_deposit_revertsOnZeroSupply`](../../test/unit/DividendDistributor.t.sol#L140) | **Depositing against zero supply is refused**, since there is no one to credit and the funds would be stranded permanently |
 | [`test_deposit_revertsForNonAgent`](../../test/unit/DividendDistributor.t.sol#L146) | Deposits are AGENT-gated: an open deposit lets anyone perturb the accumulator |
 
-The zero-supply guard is the non-obvious one. Dividing by a zero supply would revert anyway, but the custom error states the actual condition, and the alternative design — accepting the funds and holding them for future holders — silently changes who the money belongs to.
+The zero-supply guard is the non-obvious one. Dividing by a zero supply would revert anyway, but the custom error states the actual condition, and the alternative design (accepting the funds and holding them for future holders) silently changes who the money belongs to.
 
 ---
 
@@ -96,7 +96,7 @@ This group exists because of a bug found here, and it is the most important sect
 
 The fix is to carry the raw modulus in **scaled** units (`scaled % supply`). Every deposit is then exact to within the single final truncation in `accumulated`, so the per-holder shortfall is pinned at one wei and, critically, always points the same way: the contract holds slightly more than it owes, never less.
 
-This is why payout assertions in this suite use a deliberately one-sided helper (`_assertOwed`) rather than exact equality. Rounding down is not an imprecision the tests tolerate, it is the mechanism that keeps the contract solvent — an exact-equality assertion would be asserting a rounding direction the design explicitly does not promise, and would fail the moment the split is not clean.
+This is why payout assertions in this suite use a deliberately one-sided helper (`_assertOwed`) rather than exact equality. Rounding down is not an imprecision the tests tolerate, it is the mechanism that keeps the contract solvent: an exact-equality assertion would be asserting a rounding direction the design explicitly does not promise, and would fail the moment the split is not clean.
 
 ---
 
@@ -109,11 +109,11 @@ This is why payout assertions in this suite use a deliberately one-sided helper 
 | [`test_recovery_carriesTheWithdrawalRecord`](../../test/unit/DividendDistributor.t.sol#L416) | The `withdrawn` record moves too, so recovery cannot re-open a settled claim |
 | [`test_recovery_newWalletAccruesFutureIncome`](../../test/unit/DividendDistributor.t.sol#L434) | The recovered wallet accrues normally afterwards, as the position's only owner |
 
-**The second bug, and the more serious one.** Settling a recovery like an ordinary sale leaves the unclaimed income on the lost wallet — precisely the wallet the investor no longer controls. This was verified end to end before it was fixed: after a successful `forcedRecovery`, the compromised address still drained the full deposit. The tokens were rescued and the money was not.
+**The second bug, and the more serious one.** Settling a recovery like an ordinary sale leaves the unclaimed income on the lost wallet, precisely the wallet the investor no longer controls. This was verified end to end before it was fixed: after a successful `forcedRecovery`, the compromised address still drained the full deposit. The tokens were rescued and the money was not.
 
 The accumulator cannot distinguish the two cases on its own, because `moduleTransferred(from, to, amount)` is byte-identical for a sale and a recovery while the two mean opposite things for anything that accrues value. `SecurityToken` therefore exposes a `recovering()` view over its existing internal flag, and the hook branches on it. Carrying `withdrawn` alongside `correction` matters as much as the correction itself: without it the new wallet could re-claim income the old one had already been legitimately paid.
 
-This is the one place the distributor depends on the token being a `SecurityToken` rather than any ERC-20, and it is a real seam in the module abstraction — see [Trade-offs](../04-tradeoffs.md).
+This is the one place the distributor depends on the token being a `SecurityToken` rather than any ERC-20, and it is a real seam in the module abstraction; see [Trade-offs](../04-tradeoffs.md).
 
 ---
 
@@ -175,8 +175,8 @@ Two mocks are specific to this suite:
 ## 📚 References
 
 - [Testing index](./README.md)
-- [Guide 2: Mathematics §8](../02-mathematics.md#8-dividend-accrual-without-enumeration) — the accumulator, the correction, and why recovery needs its own branch
-- [Max Holders Module](./05-max-holders-module.md) — the self-transfer inference bug this module deliberately avoids repeating
-- [Security Token](./07-security-token.md) — the `_update` branches, including the recovery path these hooks observe
-- [Invariant Suite](./11-invariants.md) — the high-effort run practice applied to this unit's fuzz group
-- [Guide 6: Improvements](../06-improvements.md#6-dividend-distribution-built-in-phase-8) — the design as originally specified
+- [Guide 2: Mathematics §8](../02-mathematics.md#8-dividend-accrual-without-enumeration): the accumulator, the correction, and why recovery needs its own branch
+- [Max Holders Module](./05-max-holders-module.md): the self-transfer inference bug this module deliberately avoids repeating
+- [Security Token](./07-security-token.md): the `_update` branches, including the recovery path these hooks observe
+- [Invariant Suite](./11-invariants.md): the high-effort run practice applied to this unit's fuzz group
+- [Guide 6: Improvements](../06-improvements.md#6-dividend-distribution-built-in-phase-8): the design as originally specified

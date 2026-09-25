@@ -33,7 +33,7 @@ Adding and removing rules is the ISSUER's power, gated by `DEFAULT_ADMIN_ROLE`. 
 | [`test_removeModule_revertsForNonAdmin`](../../test/unit/ModularCompliance.t.sol#L127) | Removal is admin-gated: a rule cannot be disabled by anyone else |
 | [`test_removeModule_revertsWhenNotRegistered`](../../test/unit/ModularCompliance.t.sol#L137) | Removing an unregistered module reverts `ModuleNotFound` rather than succeeding as a no-op |
 
-**Why the integrity check is the interesting one.** A module's engine binding is immutable, set at construction. If a module bound to engine A were added to engine B, every hook B fired at it would revert on `onlyCompliance`, so the module's state would never update. It would appear in `modules()`, appear active in every listing, and enforce nothing — a rule that silently does not exist. Refusing it at registration converts a silent misconfiguration into a failed transaction at deployment time. The same guard is what makes the deployment script's `addModule` calls double as an assertion that the modules were constructed against the right engine.
+**Why the integrity check is the interesting one.** A module's engine binding is immutable, set at construction. If a module bound to engine A were added to engine B, every hook B fired at it would revert on `onlyCompliance`, so the module's state would never update. It would appear in `modules()`, appear active in every listing, and enforce nothing: a rule that silently does not exist. Refusing it at registration converts a silent misconfiguration into a failed transaction at deployment time. The same guard is what makes the deployment script's `addModule` calls double as an assertion that the modules were constructed against the right engine.
 
 ---
 
@@ -78,7 +78,7 @@ The hooks are state-mutating and cannot reject. They run *after* balances move, 
 | [`test_destroyed_revertsForNonToken`](../../test/unit/ModularCompliance.t.sol#L272) | Only the bound token may fire `destroyed` |
 | [`test_hooks_revertBeforeBind`](../../test/unit/ModularCompliance.t.sol#L279) | Before any token is bound, every hook reverts rather than accepting calls from anyone |
 
-The `onlyToken` gate is the reason module state can be trusted. A holder count or a lockup clock is only meaningful if the sole thing that can move it is a real balance change on the real token. Without the gate, anyone could call `transferred` with fabricated arguments and desynchronise the count from reality — which is precisely the property [`testFuzz_countMatchesReality`](../../test/unit/MaxHoldersModule.t.sol#L318) asserts on the other side.
+The `onlyToken` gate is the reason module state can be trusted. A holder count or a lockup clock is only meaningful if the sole thing that can move it is a real balance change on the real token. Without the gate, anyone could call `transferred` with fabricated arguments and desynchronise the count from reality, which is precisely the property [`testFuzz_countMatchesReality`](../../test/unit/MaxHoldersModule.t.sol#L318) asserts on the other side.
 
 `test_hooks_revertBeforeBind` closes the window where `_token` is still zero: without it, an unbound engine would compare the caller against `address(0)` and reject everyone, but the test pins that behaviour rather than leaving it to inference.
 

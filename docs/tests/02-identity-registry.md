@@ -5,7 +5,7 @@
 
 ---
 
-> The registry answers one question the token asks on every movement: may this address hold the instrument, and is that still true? It is a projection of an off-chain KYC process, so the tests concentrate on two things the chain *can* enforce — who is allowed to write a claim, and how a written claim goes stale. A signed attestation is a bearer credential, which is why replay closure gets more tests than the happy path.
+> The registry answers one question the token asks on every movement: may this address hold the instrument, and is that still true? It is a projection of an off-chain KYC process, so the tests concentrate on two things the chain *can* enforce, who is allowed to write a claim, and how a written claim goes stale. A signed attestation is a bearer credential, which is why replay closure gets more tests than the happy path.
 
 ## Constructor (1.1)
 
@@ -58,7 +58,7 @@ A signature is a bearer credential valid until something invalidates it. Three a
 | **Time** | `kycExpiry` | [`test_registerWithAttestation_revertsOnExpiredAttestation`](../../test/unit/IdentityRegistry.t.sol#L335) | An attestation warped past its expiry reverts `AttestationExpired`, exactly like the agent path |
 | **Sequence** | per-investor nonce | [`test_registerWithAttestation_revertsOnReusedNonce`](../../test/unit/IdentityRegistry.t.sol#L272) | The same signature bytes fail on second use, because the consumed nonce changed the digest |
 
-**The nonce's reason to exist** is [`test_registerWithAttestation_replayCannotResurrectRemovedInvestor`](../../test/unit/IdentityRegistry.t.sol#L289), the most load-bearing test in this suite. An agent removes a compromised investor; the *same* still-unexpired signature is replayed. Without the nonce it would silently re-register them, undoing the removal — the expiry alone cannot close that window, because the whole point is that the attestation has not expired yet. The test asserts the investor stays unverified after the replay attempt.
+**The nonce's reason to exist** is [`test_registerWithAttestation_replayCannotResurrectRemovedInvestor`](../../test/unit/IdentityRegistry.t.sol#L289), the most load-bearing test in this suite. An agent removes a compromised investor; the *same* still-unexpired signature is replayed. Without the nonce it would silently re-register them, undoing the removal: the expiry alone cannot close that window, because the whole point is that the attestation has not expired yet. The test asserts the investor stays unverified after the replay attempt.
 
 ### Tampering
 
@@ -102,7 +102,7 @@ An `investorId` stands in for ERC-3643's ONCHAINID. Two wallets sharing one belo
 | [`test_removeIdentity_revertsWhenNotFound`](../../test/unit/IdentityRegistry.t.sol#L441) | Removing an investor who was never registered reverts `IdentityNotFound` rather than succeeding silently |
 | [`test_removeIdentity_revertsForNonAgent`](../../test/unit/IdentityRegistry.t.sol#L448) | Removal is agent-gated |
 
-Removal does not touch balances — the registry has no knowledge of the token, and the dependency runs the other way. The consequence for a holder who loses their identity is enforced in the token's gate and documented under [the transfer gate](./07-security-token.md#the-transfer-gate-42-43).
+Removal does not touch balances: the registry has no knowledge of the token, and the dependency runs the other way. The consequence for a holder who loses their identity is enforced in the token's gate and documented under [the transfer gate](./07-security-token.md#the-transfer-gate-42-43).
 
 ---
 
@@ -129,7 +129,7 @@ The property that matters: a stale attestation stops being valid **without anyon
 | [`test_setClaimSigner_revertsOnZeroAddress`](../../test/unit/IdentityRegistry.t.sol#L515) | Rotating to zero is refused, which would otherwise re-open the "invalid signature recovers to the unset signer" hole |
 | [`test_setClaimSigner_rotationInvalidatesOldSignatures`](../../test/unit/IdentityRegistry.t.sol#L522) | **Rotation is the revocation mechanism.** Every attestation signed by the previous key stops being accepted immediately |
 
-That last test is why a single claim signer is a defensible scope decision rather than an oversight: compromise of the signing key is contained by one issuer transaction, and every outstanding signature dies with it. The cost — no per-issuer or per-claim-type granularity — is stated in [Guide 4](../04-tradeoffs.md).
+That last test is why a single claim signer is a defensible scope decision rather than an oversight: compromise of the signing key is contained by one issuer transaction, and every outstanding signature dies with it. The cost (no per-issuer or per-claim-type granularity) is stated in [Guide 4](../04-tradeoffs.md).
 
 ---
 
@@ -142,4 +142,4 @@ That last test is why a single claim signer is a defensible scope decision rathe
 | [`testFuzz_registerWithAttestation_onlyClaimSignerAccepted`](../../test/unit/IdentityRegistry.t.sol#L567) | For any private key, the attestation is accepted if and only if that key is the configured claim signer |
 | [`testFuzz_registerWithAttestation_submitterIsIrrelevant`](../../test/unit/IdentityRegistry.t.sol#L581) | For any submitter address, a valid signature registers: the caller genuinely does not matter |
 
-The last two are the fuzzed statement of the design claim that authorisation lives in the signature and not in the caller — asserted over the whole key and address space rather than at the two or three points the unit tests pick.
+The last two are the fuzzed statement of the design claim that authorisation lives in the signature and not in the caller: asserted over the whole key and address space rather than at the two or three points the unit tests pick.
