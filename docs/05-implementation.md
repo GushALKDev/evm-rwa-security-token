@@ -33,29 +33,30 @@ src/
 │       ├── AbstractComplianceModule.sol   binding + hook gate          [built]
 │       ├── MaxHoldersModule.sol                                        [built]
 │       ├── CountryRestrictionModule.sol                                [built]
-│       └── LockupModule.sol                                            [built]
-├── interfaces/                        all five interfaces              [built]
+│       ├── LockupModule.sol                                            [built]
+│       └── DividendDistributor.sol    accumulator, observer module     [built]
+├── interfaces/                        all six interfaces               [built]
 ├── DocumentRegistry.sol               ERC-1643-style anchor            [built]
 └── SecurityToken.sol                  the gated ERC-20                 [built]
 ```
 
-As of the current state: **258 tests passing, 100% line/statement/branch/function coverage on every `src/` contract.**
+As of the current state: **303 tests passing (274 concrete, 22 fuzz, 7 stateful invariants; `forge test`), 100% line/statement/branch/function coverage on every `src/` contract (`forge coverage --report summary`).**
 
 ---
 
 ## 2. Coding conventions
 
-These are enforced consistently across the codebase and are worth naming, because a reviewer will see them everywhere:
+These conventions apply across `src/`, with the exceptions noted in the table, and are worth naming because a reviewer will see them everywhere:
 
 | Convention | Rule |
 |:---|:---|
-| **Custom errors** | Every revert is a custom error with parameters, never a string. Cheaper bytecode and runtime, and the parameters carry the failing values. |
-| **CEI** | Checks-Effects-Interactions ordering. The nonce consumption before signature check is a pointed example (effect before the external `recover`). |
-| **Events on state change** | Every state mutation emits an event (`IdentityRegistered`, `ModuleAdded`, `LockupStarted`, `LockupCleared`, ...). |
-| **One-line signatures** | Function signatures stay on one line unless genuinely excessive. |
-| **OZ header blocks** | The `STORAGE` / `MODIFIERS` / `CONSTRUCTOR` / ... banner comments segment every contract. |
+| **Custom errors** | Every revert in `src/` is a custom error, never a string, with parameters where there is a failing value to report. Cheaper bytecode and runtime, and the parameters carry the failing values. The deployment script's sanity checks use `require` strings. |
+| **CEI** | Checks-Effects-Interactions ordering where state follows an external call: `DividendDistributor.claim` records the withdrawal before transferring currency. `forcedRecovery` writes freeze state after its calls to the registry and the engine, and relies on `nonReentrant` and a trusted registry instead. |
+| **Events on state change** | Every admin action and every user-facing state change emits an event (`IdentityRegistered`, `ModuleAdded`, `LockupStarted`, `LockupCleared`, ...). The distributor's correction bookkeeping in the hooks emits none of its own; it follows from the token's `Transfer` events. |
+| **One-line signatures** | Function signatures stay on one line where `forge fmt` allows it; the formatter's line breaks are kept. |
+| **Section banners** | `STORAGE` / `MODIFIERS` / `CONSTRUCTOR` / ... banner comments (the Solmate and forge-std style) segment every contract and interface; the `Roles` library has none. |
 | **NatSpec everywhere** | Every external function and every non-obvious internal one is documented; comments explain *why*, not *what*. |
-| **No em dashes** | Anywhere: code, NatSpec, docs. |
+| **No em dashes** | The rule for code, NatSpec and docs. Three remain in comments in `SecurityToken.sol` (lines 183, 184 and 221). |
 | **English only** | All identifiers and comments. |
 
 Immutables use OZ v5 `_camelCase` (e.g. `_compliance`, `_token`), deliberately **not** the `SCREAMING_SNAKE_CASE` that `forge lint` suggests. This is intentional and should not be "fixed".
@@ -70,13 +71,15 @@ Everything is written from OZ v5 primitives on purpose: the goal is to demonstra
 
 | Primitive | Used by | For |
 |:---|:---|:---|
-| `AccessControl` | registry, engine, modules, token | Role-gated admin (`DEFAULT_ADMIN_ROLE`, `AGENT_ROLE`, `CUSTODIAN_ROLE`) |
+| `AccessControl` | registry, engine, modules, token, document registry, distributor | Role-gated admin (`DEFAULT_ADMIN_ROLE`, `AGENT_ROLE`, `CUSTODIAN_ROLE`) |
 | `EIP712` | `IdentityRegistry` | Domain separator + typed-data hashing for attestations |
 | `ECDSA` | `IdentityRegistry` | `recover` on the attestation digest |
-| `EnumerableSet` | `ModularCompliance` | O(1) module set with enumeration |
+| `EnumerableSet` | `ModularCompliance`, `DocumentRegistry` | O(1) module set and document name index with enumeration |
 | `ERC20` | `SecurityToken` | The token surface, with `_update` overridden as the gate |
 | `Pausable` | `SecurityToken` | Market-wide stop |
-| `ReentrancyGuard` | `SecurityToken` | Guard `forcedRecovery`, the one path mutating freeze state around a transfer |
+| `ReentrancyGuard` | `SecurityToken`, `DividendDistributor` | Guard `forcedRecovery`, the one path mutating freeze state around a transfer, and the distributor's `deposit` and `claim` |
+| `SafeERC20` | `DividendDistributor` | Settlement currency transfers |
+| `SafeCast` | `DividendDistributor` | Checked casts between the scaled accumulator and the signed corrections |
 
 ---
 
@@ -84,16 +87,16 @@ Everything is written from OZ v5 primitives on purpose: the goal is to demonstra
 
 ### 4.1 Shared write path for two entry points
 
-Both registration doors converge on one private `_register`, so they cannot validate differently:
+All three registration entry points (two `registerIdentity` overloads and `registerIdentityWithAttestation`) converge on one private `_register`, so they cannot validate differently:
 
 ```solidity
 function registerIdentity(...) external onlyRole(Roles.AGENT_ROLE) {
-    _register(investor, country_, accredited, kycExpiry, false);
+    _register(investor, country_, accredited, kycExpiry, investorId_, false);
 }
 
 function registerIdentityWithAttestation(..., bytes calldata signature) external {
     // ... nonce + signature verification ...
-    _register(investor, country_, accredited, kycExpiry, true);
+    _register(investor, country_, accredited, kycExpiry, investorId_, true);
 }
 ```
 
@@ -101,7 +104,7 @@ The `signed` flag only feeds the event trail; every validation (zero address, ex
 
 ### 4.2 The hook gate as an abstract base
 
-`AbstractComplianceModule` holds no rule logic. Its entire job is to guarantee each module answers to exactly one engine (immutable binding) and that hooks are `onlyCompliance`. A rule module inherits it and implements only its rule:
+`AbstractComplianceModule` holds no rule logic. Its entire job is to bind each module to exactly one engine (immutable binding) and to restrict hooks to `onlyCompliance`. A rule module inherits it and implements only its rule:
 
 ```solidity
 contract LockupModule is AbstractComplianceModule, AccessControl {
@@ -116,7 +119,7 @@ contract LockupModule is AbstractComplianceModule, AccessControl {
 
 ### 4.3 Post-move balance inspection
 
-Stateful modules infer transitions from `balanceOf` *after* the move, since hooks run post-update. The one-line guards are the whole security surface:
+`LockupModule` and `MaxHoldersModule` infer transitions from `balanceOf` *after* the move, since hooks run post-update (`DividendDistributor` works from `amount` and the token's `recovering()` flag instead). For `LockupModule` the one-line guards below are the whole rule:
 
 ```solidity
 function _startClockIfNew(address to, uint256 amount) private {
@@ -137,12 +140,12 @@ function _startClockIfNew(address to, uint256 amount) private {
 
 The project runs a strict review-gated per-unit loop: implement one contract, test it to green with full coverage, then stop for review before committing. The tests reflect a few firm rules:
 
-- **Negative tests assert the specific selector.** Anything touching signatures or access control gets a bad-signature, wrong-role, reused-nonce, and expired-attestation test, each asserting the exact custom error, never a bare `vm.expectRevert()`. Where the recovered address is unpredictable (signature replay), `expectPartialRevert` matches the selector without the parameters.
+- **Negative tests assert the specific selector.** Anything touching signatures or access control gets a bad-signature, wrong-role, reused-nonce, and expired-attestation test, each asserting the specific custom error. One test still uses a bare `vm.expectRevert()` (`test/unit/IdentityRegistry.t.sol:190`). Where a parameter is unpredictable or irrelevant (a recovered signer address, a role hash, a compliance-failure tuple), `expectPartialRevert` matches the selector without the parameters.
 - **Claims are verified, not asserted.** Storage packing is checked with `forge inspect storageLayout`; revert reasons are probed before being trusted; the anchored document hash is recomputed after any edit to the terms file.
 - **Fuzz where the input space is large.** Holder-count transitions, lockup timing, and freeze arithmetic are fuzzed, not just point-tested.
-- **Mocks are minimal.** `MockToken` and `MockModule` exist only to drive the unit under test; they are test helpers, not part of the coverage target for `src/`.
+- **Mocks are minimal.** `MockToken`, `MockModule` and `MockCurrency` exist only to drive the unit under test; they are test helpers, not part of the coverage target for `src/`.
 
-Current suite: 258 tests, all green. The [testing section](./tests/README.md) catalogues every test and links each claim to the code that proves it.
+Current suite: 303 tests, all green. The [testing section](./tests/README.md) catalogues every test and links each claim to the code that proves it.
 
 ```
 forge test            # run the suite
@@ -157,9 +160,12 @@ forge fmt --check     # formatting gate
 `Deploy.s.sol` (Phase 5) wires the system in the construction order the bindings demand (see [Guide 3 §7](./03-architecture.md#7-deployment-order-and-the-binding-graph)) and anchors the terms document by verified hash:
 
 ```solidity
-bytes32 onChain  = documentRegistry.getDocument("terms").hash;
-bytes32 onDisk   = keccak256(vm.readFile("docs/RealEstateNote-Terms.md"));
-assert(onChain == onDisk);   // deployment fails loudly if they disagree
+d.termsHash = keccak256(bytes(vm.readFile(TERMS_PATH)));
+d.documentRegistry.setDocument(TERMS_NAME, TERMS_URI, d.termsHash);
+// ... in _verify:
+(, bytes32 anchored,) = d.documentRegistry.getDocument(TERMS_NAME);
+require(anchored == d.termsHash, "documents: terms hash mismatch");
+require(anchored == keccak256(bytes(vm.readFile(TERMS_PATH))), "documents: terms drifted from disk");
 ```
 
 The current on-disk hash of the terms document is:
@@ -168,13 +174,13 @@ The current on-disk hash of the terms document is:
 0x30536762f053a4d373521894dfaf049104505d7eb476717273feb537c88847a6
 ```
 
-Any edit to the terms file changes this hash, which is the point: the anchor and the document move together or the deployment aborts.
+Any edit to the terms file changes this hash. The deployment anchors whatever is on disk at deploy time and checks that the registry stored that value; no expected hash is hardcoded in the script or its tests. A later edit therefore shows up as a mismatch between the on-chain anchor and the published file, not as a failed deployment.
 
 ---
 
 ## 7. Invariants
 
-The handler-based invariant suite (Phase 6) drives bounded actors through mint/transfer/freeze/recover sequences and asserts properties that must hold for *any* sequence:
+The handler-based invariant suite (Phase 6) drives six bounded actors through mint, burn, transfer, freeze, pause, recovery, identity withdrawal and time sequences, and asserts properties that must hold for *any* sequence of those actions. The handler does not call `transferFrom`, does not move zero amounts, does not add or remove modules, and does not include the dividend distributor:
 
 | Invariant | Statement |
 |:---|:---|
@@ -183,7 +189,8 @@ The handler-based invariant suite (Phase 6) drives bounded actors through mint/t
 | **Frozen ≤ balance** | `frozen[a] ≤ balanceOf(a)` for every holder |
 | **Holder count is exact** | the module's count equals the number of addresses with positive balance |
 | **Cap respected** | holder count never exceeds `maxHolders` |
-| **Verified recipients only** | no positive balance is ever held by an unverified, un-recovered address |
+| **Unverified wallets cannot move** | an unverified address's frozen amount stays ≤ its balance and `canTransfer` from it returns false |
+| **Recovery empties the evicted wallet** | every wallet retired by `forcedRecovery` held zero at the moment of eviction |
 
 These are the properties the per-unit tests cannot prove, because they are about the *composed* system under arbitrary interleavings.
 

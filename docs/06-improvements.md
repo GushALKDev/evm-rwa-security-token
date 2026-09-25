@@ -12,7 +12,7 @@
 3. [Partitions and a strict per-acquisition lockup](#3-partitions-and-a-strict-per-acquisition-lockup)
 4. [Governance hardening](#4-governance-hardening)
 5. [Upgradeability](#5-upgradeability)
-6. [Dividend distribution (the planned stretch unit)](#6-dividend-distribution-the-planned-stretch-unit)
+6. [Dividend distribution (built in Phase 8)](#6-dividend-distribution-built-in-phase-8)
 7. [Operational and tooling improvements](#7-operational-and-tooling-improvements)
 8. [Priority table](#8-priority-table)
 
@@ -32,7 +32,7 @@ The flat registry collapses ONCHAINID, `IdentityRegistryStorage`, `TrustedIssuer
 - **`TrustedIssuersRegistry`** so more than one KYC provider can attest, each scoped to the claim topics they are trusted for.
 - **`ClaimTopicsRegistry`** so the required claim set is configurable per token.
 
-**Cost:** four contracts and a resolution step on every identity read, versus one `SLOAD` today. Justified only once the single-token / single-issuer assumption breaks. The trust model is already preserved (see [Guide 4 §2.1](./04-tradeoffs.md#21-onchainid-collapsed-into-a-flat-registry)), so this is a scaling change, not a security fix.
+**Cost:** four contracts and a resolution step on every identity read, versus one registry call (two storage reads) today. Justified only once the single-token / single-issuer assumption breaks. The trust model is already preserved (see [Guide 4 §2.1](./04-tradeoffs.md#21-onchainid-collapsed-into-a-flat-registry)), so this is a scaling change, not a security fix.
 
 ---
 
@@ -74,24 +74,27 @@ The POC has no proxies by design. A production instrument outlives any single im
 
 ---
 
-## 6. Dividend distribution (the planned stretch unit)
+## 6. Dividend distribution (built in Phase 8)
 
-The one improvement already on the [ROADMAP](./ROADMAP.md) (Phase 8, stretch). A real-estate note pays income, and holders should receive it pro-rata **without iterating the holder set** (which is unbounded).
+The one improvement that was on the [ROADMAP](./ROADMAP.md) as a stretch unit, now built in Phase 8 as `DividendDistributor`, a compliance module. This section keeps the design as originally specified; the built version is described in [Guide 2 §8](./02-mathematics.md#8-dividend-accrual-without-enumeration). A real-estate note pays income, and holders should receive it pro-rata **without iterating the holder set** (which is unbounded).
 
 The design is the **accumulator pattern**:
 
 ```
-   dividendsPerShare  += deposited / totalSupply        (on each income deposit)
+   dividendsPerShare  += deposited / totalSupply        (on each income deposit; scaled by 2^128,
+                                                         remainder carried to the next deposit)
    owed(holder)        = balanceOf(holder) × dividendsPerShare − correction(holder)
-   correction(holder)  adjusted in the token's transfer hook so a transfer
-                       cannot double-claim across sender and recipient
+   claimable(holder)   = owed(holder) − withdrawn(holder)
+   correction(holder)  adjusted in the module's transfer hook, reached through the
+                       engine's fan-out, so a transfer cannot double-claim across
+                       sender and recipient
 ```
 
 - **Pull, not push:** holders claim; the contract never pushes to a list of addresses.
 - **Reentrancy-guarded** claim path.
 - **Not `ERC20Votes` / `Snapshot`:** no per-block checkpoint history, because dividends need a running accumulator, not a historical balance lookup.
 
-The correction term is what keeps it O(1): a transfer updates both parties' corrections so each is owed exactly their share and no more. Only built if the core is complete and tested, and only after explicit confirmation.
+The correction term is what keeps it O(1): a transfer updates both parties' corrections so each is owed their share, rounded down by at most one wei, and no more. It was built as a compliance module after the core was complete.
 
 ---
 
@@ -115,7 +118,7 @@ Smaller items that would round out a production deployment:
 | Improvement | Trigger that justifies it | Effort | Reverses |
 |:---|:---|:---|:---|
 | Governance hardening (multisig + timelock) | Any real deployment | Low | §4.1 accepted risk |
-| Dividend distributor | The note pays income | Medium | (new capability) |
+| Dividend distributor | The note pays income | Done (Phase 8) | (new capability) |
 | Per-investor lockup snapshot | Period is ever changed post-issuance | Low | §3.3 simplification |
 | ERC-3643 identity hierarchy | Second token or second issuer | High | §2.1 scope cut |
 | Upgradeability + factory | Instrument must outlive its code | Medium | §2.5 scope cut |

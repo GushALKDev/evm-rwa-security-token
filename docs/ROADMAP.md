@@ -31,7 +31,7 @@ The build order is a dependency order, not a preference. Each unit is one contra
 | 8         | Stretch: Dividends            | 4      | 4         | 100%     |
 | **TOTAL** |                               | **35** | **35**    | **100%** |
 
-> The percentage tracks units of implementation, not lines of code. The identity and compliance layers are the architecturally substantive part of an ERC-3643 subset, which is why the project is further along than a contract count alone would suggest.
+> The percentage tracks units of implementation, not lines of code. The identity and compliance layers are the architecturally substantive part of an ERC-3643 subset.
 
 ---
 
@@ -59,7 +59,7 @@ The build order is a dependency order, not a preference. Each unit is one contra
 > **Dependencies:** Phase 0
 
 - [x] **1.1** `IdentityRegistry.sol`
-    - [x] 1.1.1 Packed `Identity` record (`verified`, `accredited`, `country`, `kycExpiry`) in a single slot
+    - [x] 1.1.1 Packed `Identity` record: `verified`, `accredited`, `country`, `kycExpiry` in slot 0; `investorId` (added in Phase 4) in slot 1
     - [x] 1.1.2 `registerIdentity` (AGENT writes an off-chain KYC result directly)
     - [x] 1.1.3 `registerIdentityWithAttestation` (permissionless submit, EIP-712 signed by the claim signer)
     - [x] 1.1.4 Per-investor nonce consumed before signature verification (closes in-window replay)
@@ -87,11 +87,11 @@ The build order is a dependency order, not a preference. Each unit is one contra
 - [x] **2.3** `CountryRestrictionModule.sol` (recipient-side jurisdiction blocklist)
 - [x] **2.4** `LockupModule.sol` (holding period from initial acquisition, dust-relock immune)
 - [x] **2.5** `ModularCompliance.sol` (EnumerableSet of modules, `canTransfer` view, hook fan-out, `bindToken` once)
-- [x] **2.6** Unit + fuzz tests for each (100% coverage on all five contracts; 138 tests total in the suite)
+- [x] **2.6** Unit + fuzz tests for each (100% coverage on all five contracts; 138 tests in the suite at the close of Phase 2)
 
 **Deliverables:**
 
-- A rule set that changes by governance action (add/remove a module), never by redeploying the token.
+- A rule set that changes by governance action (add/remove a module), never by redeploying the token. The holder cap and the lockup have to be registered before the first balance they track, and no stateful module (those two and the dividend distributor) can be removed and added back while tokens move, or its state no longer matches balances.
 - Stateful rules (holder count, lockup clocks) whose state can only be mutated by the bound token, through the engine.
 
 **Reference:** [02-mathematics.md](./02-mathematics.md) (holder-count transitions, lockup clock), [04-tradeoffs.md](./04-tradeoffs.md) (lockup model choice)
@@ -104,7 +104,7 @@ The build order is a dependency order, not a preference. Each unit is one contra
 >
 > **Dependencies:** Phase 0
 
-- [x] **3.1** `DocumentRegistry.sol` (ERC-1643-style: `setDocument`/`removeDocument`, `{hash, uri, timestamp}` per name, ISSUER-gated)
+- [x] **3.1** `DocumentRegistry.sol` (ERC-1643-style: `setDocument`/`removeDocument`, `{uri, contentHash, lastModified}` per name, ISSUER-gated)
     - [x] 3.1.1 `EnumerableSet.Bytes32Set` name index (O(1) add/remove/membership, enumerable for `getAllDocuments`)
     - [x] 3.1.2 `setDocument` upserts: a new name joins the index, a re-anchor overwrites the record in place
     - [x] 3.1.3 `name` is a `bytes32` label (`bytes32("TERMS")`), human readable off-chain rather than an opaque hash
@@ -113,7 +113,7 @@ The build order is a dependency order, not a preference. Each unit is one contra
 
 **Deliverables:**
 
-- A `name → {hash, uri, timestamp}` anchor where the hash is of the content, not the URI.
+- A `name → {uri, contentHash, lastModified}` anchor where the hash is of the content, not the URI.
 - The seam the deployment script uses to publish the terms hash on-chain.
 
 **Reference:** [03-architecture.md](./03-architecture.md) (on-chain/off-chain boundary)
@@ -128,7 +128,7 @@ The build order is a dependency order, not a preference. Each unit is one contra
 
 - [x] **4.1** `SecurityToken.sol` skeleton (OZ ERC20 + AccessControl + Pausable + ReentrancyGuard)
 - [x] **4.2** Transfer gate: one internal status-code function shared by `_update` (reverts) and `canTransfer` (bool), so they cannot drift
-- [x] **4.3** Three explicit `_update` branches (mint, burn, transfer), each calling the matching engine hook
+- [x] **4.3** Explicit `_update` branches (mint, burn, transfer), each calling the matching engine hook; a fourth branch for forced recovery was added in 1c36f97
 - [x] **4.4** Freeze controls: full freeze (`setAddressFrozen`) and partial freeze (`freezePartialTokens`/`unfreezePartialTokens`)
 - [x] **4.5** `forcedRecovery` (CUSTODIAN): move full balance to a verified wallet, carry over both freeze states, retire the lost wallet, preserve supply
 - [x] **4.6** `mint`/`burn` (ISSUER); burn eats frozen balance if needed (issuer retiring a position outranks a freeze)
@@ -150,12 +150,12 @@ The build order is a dependency order, not a preference. Each unit is one contra
 > **Dependencies:** Phase 4
 
 - [x] **5.1** `Deploy.s.sol`: engine → registry → token → modules, then `addModule`, `bindToken`, grant the token `AGENT_ROLE` on the registry
-- [x] **5.2** Anchor `docs/RealEstateNote-Terms.md` via `vm.readFile` + `keccak256`, and `assert` the on-chain hash matches
+- [x] **5.2** Anchor `docs/RealEstateNote-Terms.md` via `vm.readFile` + `keccak256`, and `require` that the on-chain hash matches
 - [x] **5.3** Deployment sanity checks (roles granted, engine bound, document anchored)
 
 **Deliverables:**
 
-- A one-command deployment that fails loudly if the anchored hash and the file on disk disagree.
+- A one-command deployment that anchors the hash of the terms file as it is on disk at deploy time, and fails if the registry did not store that hash.
 
 **Reference:** [05-implementation.md](./05-implementation.md) (deployment order)
 
@@ -221,7 +221,7 @@ The build order is a dependency order, not a preference. Each unit is one contra
 1. **Compounding insolvency.** Carrying each deposit's rounding residue in currency units rounds the dust up every time and the error compounds, so by the third deposit the sum of claims exceeded the sum of deposits. Fixed by carrying the raw modulus in scaled units, which pins the shortfall at one wei per holder and always errs toward solvency.
 2. **Recovery left the money behind.** After `forcedRecovery` the unclaimed income stayed claimable by the compromised wallet, verified end to end. The hook cannot distinguish a recovery from a sale on its arguments alone, so `SecurityToken` gained a `recovering()` view (a getter over the existing flag, no logic change) and the distributor now carries both the correction and the withdrawal record to the new wallet.
 
-**Note on item 8.2:** the roadmap originally said "the token's transfer hook". The correction is applied in the *module's* hook, driven by the engine's fan-out. The token itself was not given a dividend hook, which is the stronger outcome: the capability can be added to and removed from a live system with `addModule` / `removeModule`.
+**Note on item 8.2:** the roadmap originally said "the token's transfer hook". The correction is applied in the *module's* hook, driven by the engine's fan-out. The token itself was not given a dividend hook, which is the stronger outcome: the capability can be registered on a live system with `addModule`. Registering it late is safe (existing balances earn from the next deposit), but removing it and adding it back while tokens move desynchronizes the corrections, so removal is not supported on a live system.
 
 **Deliberately not done:** the distributor is not wired into `script/Deploy.s.sol`, since Phase 8 is a stretch and adding it would change the documented deployment. The scenario suite registers it after `_deploy` returns instead. See [Gaps](./tests/12-gaps-and-roadmap.md).
 

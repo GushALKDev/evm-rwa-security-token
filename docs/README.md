@@ -10,7 +10,7 @@
 | Document | Description | Status |
 | :------- | :---------- | :----- |
 | **[Project README](../README.md)** | Overview, scoping decisions, role matrix, threat model, build instructions | ✅ Complete |
-| **[ROADMAP](./ROADMAP.md)** | Eight-phase implementation plan and progress tracker | ✅ Complete |
+| **[ROADMAP](./ROADMAP.md)** | Nine-phase (0 to 8) implementation plan and progress tracker | ✅ Complete |
 | **[Terms document](./RealEstateNote-Terms.md)** | The legal instrument the token represents, anchored on-chain by content hash | ✅ Complete |
 | **[LICENSE](../LICENSE)** | MIT License | ✅ Complete |
 
@@ -36,6 +36,7 @@
     - Holder-count transitions without enumeration
     - The lockup clock state machine and the anti-griefing guard
     - Freeze and burn arithmetic
+    - Dividend accrual: the accumulator, the correction, and rounding direction
 
 ### Architecture & Implementation
 
@@ -70,7 +71,7 @@
     - Partitions and a strict per-acquisition lockup
     - Governance hardening (multisig, timelock)
     - Upgradeability and factory
-    - Dividend distribution (the planned stretch unit)
+    - Dividend distribution (built in Phase 8)
     - Operational and tooling improvements, with a priority table
 
 ### Verification
@@ -133,11 +134,11 @@ docs/
 
 ## 📊 Progress Tracking
 
-See [ROADMAP.md](./ROADMAP.md) for detailed progress across 8 phases and 35 trackable items.
+See [ROADMAP.md](./ROADMAP.md) for detailed progress across 9 phases (0 to 8) and 35 trackable items.
 
-**Current status:** Phases 0 to 6 complete (foundations, identity, compliance, document anchoring, the token, deployment, and the scenario plus invariant suites).
+**Current status:** Phases 0 to 8 complete (foundations, identity, compliance, document anchoring, the token, deployment, the scenario and invariant suites, documentation, and the dividend distributor).
 
-**Test suite:** 258 tests passing, 100% line/statement/branch/function coverage on every `src/` contract. See the [testing section](./tests/README.md) for what each block covers.
+**Test suite:** 303 tests passing (`forge test`), 100% line/statement/branch/function coverage on every `src/` contract (`forge coverage --report summary`). See the [testing section](./tests/README.md) for what each block covers.
 
 ---
 

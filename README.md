@@ -2,7 +2,7 @@
 
 A proof-of-concept for compliant tokenization of a real-world financial asset (a real-estate-backed note) as a permissioned security token, modeling the identity, compliance, and custody architecture used by regulated digital-asset platforms.
 
-> **Unaudited educational proof-of-concept.** This code has not been audited and is not fit for production or for representing real financial instruments. See [Standards and scoping](#standards-and-scoping) for what was deliberately left out.
+> **Proof of concept. Not audited and not deployed.** This code is educational and is not fit for production or for representing real financial instruments. See [Standards and scoping](#standards-and-scoping) for what was deliberately left out.
 
 ## Implementation status
 
@@ -58,7 +58,7 @@ The README is the narrative entry point. The technical guides in [`docs/`](docs/
 
 ## The asset
 
-A **Series A real-estate-backed note**: a debt instrument secured by a residential property in Valencia, Spain, held through an SPV, issued by a fictional entity to a whitelist of accredited investors. Face value 1,000 EURC per token, 36 month maturity. The governing terms live in [`docs/RealEstateNote-Terms.md`](docs/RealEstateNote-Terms.md) and are anchored on-chain by content hash.
+A **Series A real-estate-backed note**: a debt instrument secured by a residential property in Valencia, Spain, held through an SPV, issued by a fictional entity to a whitelist of accredited investors (the registry stores an `accredited` flag, but no module reads it, so the token does not enforce accreditation). Face value 1,000 EURC per token, 36 month maturity. The governing terms live in [`docs/RealEstateNote-Terms.md`](docs/RealEstateNote-Terms.md) and are anchored on-chain by content hash.
 
 The asset choice matters for the architecture. A note is a claim on a real property against a real issuer, enforceable in a real court. The register of who owns that claim has to be legally defensible, which is what drives every design decision below: transfers are restricted because securities law restricts them, balances can be frozen because courts order freezes, and lost wallets can be recovered because losing a private key does not extinguish legal ownership.
 
@@ -71,10 +71,10 @@ That inverts the default. In an ERC-20, transfers are permitted unless the balan
 | | ERC-20 | Permissioned security token |
 |---|---|---|
 | Who may hold | Anyone with an address | Only KYC-verified investors, and only while their attestation is current |
-| Transfer check | Balance sufficiency | Balance, recipient identity, freeze state, pause, plus a composable rule set |
+| Transfer check | Balance sufficiency | Balance, sender and recipient identity, freeze state, pause, plus a composable rule set |
 | Issuer powers | None after deploy | Mint, burn, freeze (full and partial), pause, forced recovery |
 | Lost keys | Funds are gone | Custodian moves the position to a new verified wallet; ownership survives the key |
-| Rules change | Redeploy the token | Add or remove a compliance module; the token is untouched |
+| Rules change | Redeploy the token | Add or remove a compliance module; the token is untouched (with limits for stateful modules, see [Architecture](#architecture)) |
 
 The ERC-20 interface is preserved so that existing tooling can read balances and construct transfers. The semantics underneath are different, and a wallet that assumes ERC-20 semantics will see reverts it does not expect. That is intentional: the revert is the compliance boundary doing its job.
 
@@ -85,7 +85,7 @@ This project implements a **coherent subset, written from scratch**, of two stan
 - **[ERC-3643](https://eips.ethereum.org/EIPS/eip-3643) (T-REX)** for the identity and compliance model: the identity registry, the modular compliance engine, and the gated transfer.
 - **[ERC-1643](https://github.com/ethereum/EIPs/issues/1643)** (from the [ERC-1400](https://github.com/ethereum/EIPs/issues/1411) family) for document anchoring. Neither reached Final status, so the concept is borrowed rather than the specification implemented.
 
-**This is an educational reimplementation.** A production deployment would build on the audited [`@tokenysolutions/T-REX`](https://github.com/TokenySolutions/T-REX) reference implementation rather than rewriting the standard. Everything here is written from OpenZeppelin primitives (ERC20, AccessControl, Pausable, ReentrancyGuard, EnumerableSet, ECDSA) on purpose: the goal is to demonstrate understanding of the architecture, not to deploy existing code.
+**This is an educational reimplementation.** A production deployment would build on the audited [`@tokenysolutions/T-REX`](https://github.com/TokenySolutions/T-REX) reference implementation rather than rewriting the standard. Everything here is written from OpenZeppelin primitives (ERC20, AccessControl, Pausable, ReentrancyGuard, EnumerableSet, ECDSA, EIP712, SafeERC20, SafeCast) on purpose: the goal is to demonstrate understanding of the architecture, not to deploy existing code.
 
 ### What was deliberately left out, and why
 
@@ -105,7 +105,7 @@ The identity registry accepts records through two doors, which exist to make an 
 
 2. **`registerIdentityWithAttestation`** (permissionless to submit). The caller supplies an EIP-712 attestation signed by the authorized claim signer. The registry recovers the signer and rejects anything it did not sign. Trust rests on the signature, not on whoever pays for the transaction.
 
-The second path is ERC-3643's trust model in miniature, and it is the reason the standard bothers with ONCHAINID at all: **verification should not rest on trusting whoever writes to the registry.** The signed payload binds the investor, the attributes, the expiry, and a per-investor nonce, under a domain separator carrying the chain ID and the registry address.
+The second path is ERC-3643's trust model in miniature, and it is the reason the standard bothers with ONCHAINID at all: **verification should not rest on trusting whoever writes to the registry.** The signed payload binds the investor, the attributes, the expiry, the investor id, and a per-investor nonce, under a domain separator carrying the chain ID and the registry address.
 
 Each of those bindings closes a specific hole. The domain separator stops a signature from being replayed on another chain or against another registry deployment. The expiry stops it from being replayed after the KYC lapses. The nonce closes the gap the expiry leaves open: without it, an attestation replayed *within* its validity window could silently re-register an investor the agent had just removed. That last one is the subtle one, and it is why the nonce is not optional.
 
@@ -123,7 +123,7 @@ The strict reading is only implementable if each **parcel** of tokens carries it
 - Subsequent receipts never reset it. This single guard (`lockStart != 0`, do not overwrite) is the anti-griefing property, and it is tested explicitly, including the 1-wei re-lock attempt.
 - Exiting to a zero balance clears the clock, so an investor who sells out and later buys back is locked afresh rather than keeping an expired clock forever.
 
-This is what T-REX does in practice. The anchored terms document says "from initial acquisition" so that the legal document and the contract describe the same instrument: a mismatch between the anchored terms and the enforced behavior would undermine the point of anchoring them at all.
+The anchored terms document says "from initial acquisition" so that the legal document and the contract describe the same instrument: a mismatch between the anchored terms and the enforced behavior would undermine the point of anchoring them at all.
 
 ## On-chain and off-chain boundary
 
@@ -155,26 +155,31 @@ Three roles, using OpenZeppelin `AccessControl`. ISSUER is the `DEFAULT_ADMIN_RO
 | `forcedRecovery` | SecurityToken | | | X |
 | `registerIdentity`, `removeIdentity` | IdentityRegistry | | X | |
 | `setClaimSigner` | IdentityRegistry | X | | |
+| `setMaxHolders` | MaxHoldersModule | | X | |
+| `setLockupPeriod` | LockupModule | | X | |
+| `setCountryRestricted` | CountryRestrictionModule | | X | |
+| `grantRole`, `revokeRole` | every contract | X | | |
 | `addModule`, `removeModule`, `bindToken` | ModularCompliance | X | | |
 | `setDocument`, `removeDocument` | DocumentRegistry | X | | |
-| `deposit` | DividendDistributor | X | X | |
+| `deposit` | DividendDistributor | X‡ | ‡ | |
 | `registerIdentityWithAttestation` | IdentityRegistry | \* | \* | \* |
 | `claim` | DividendDistributor | † | † | † |
 
 \* Permissionless: anyone may submit, authorization comes from the claim signer's signature.
 † Holder-facing: any account may claim, and only ever its own accrued entitlement.
+‡ Gated by `AGENT_ROLE` on the distributor, which its constructor grants to the issuer only. The operational agent holds it only if the issuer grants it.
 
 The split is meant to reflect how a regulated desk actually operates. **AGENT** is the compliance officer: an operational role, used daily, to onboard investors and freeze balances. **CUSTODIAN** is the recovery role, used rarely and under a legal process. They are separate so that day-to-day compliance operations carry no power to seize an investor's position. **ISSUER** controls supply and configuration but cannot freeze or recover directly.
 
-Two edges worth flagging:
+Three edges worth flagging:
 
-- **The `SecurityToken` contract itself holds `AGENT_ROLE` on the `IdentityRegistry`.** `forcedRecovery` must retire the lost wallet from the registry, and `removeIdentity` is agent-gated. The role is held by the contract, not by a person, and it is exercised only inside recovery.
+- **The `SecurityToken` contract itself holds `AGENT_ROLE` on the `IdentityRegistry`.** `forcedRecovery` must retire the lost wallet from the registry, and `removeIdentity` is agent-gated. The role is held by the contract, not by a person. It unlocks every agent function on the registry (`removeIdentity` and both `registerIdentity` overloads), but the token's code calls only `removeIdentity`, and only inside recovery.
 - **ISSUER can grant itself AGENT and CUSTODIAN.** The separation above is an operational control, not a cryptographic one. See [Threat model](#threat-model) for why that is deliberate and what it does and does not protect.
 - **`deposit` is `AGENT_ROLE` on the distributor, and its constructor grants that role to the issuer.** Income originates from the issuer's collections on the underlying note, so the two coincide by default; the role exists so a paying agent can be delegated the deposit duty without also holding admin. The gate is not about trust in the amount — it is that an open `deposit` would let anyone perturb the accumulator every holder's entitlement is computed from.
 
 ## Architecture
 
-Six contracts. The token is the only one an investor touches; everything else it consults on their behalf.
+Eight contracts: the seven that `Deploy.s.sol` deploys, plus the optional `DividendDistributor`. An investor mostly touches the token, which consults the rest on their behalf; the exceptions are `claim` on the distributor and the permissionless `registerIdentityWithAttestation` on the registry.
 
 ```
      ISSUER            AGENT                CUSTODIAN
@@ -225,7 +230,9 @@ Two structural invariants define the shape:
 
 **`DividendDistributor` is a module, but not a rule.** The module interface has two halves — `moduleCheck`, which decides whether a transfer is allowed, and the lifecycle hooks, which observe that one settled. The three rule modules use both. The distributor implements `moduleCheck` as an unconditional `true` and puts all of its logic in the hooks, using the fan-out as an on-chain event bus and giving up the power of veto. Withholding income from a sanctioned holder is a matter for the freeze controls, not the transfer gate.
 
-That choice is why income distribution required no change to `SecurityToken` beyond a single view, and why it can be attached to and detached from a live deployment with `addModule` / `removeModule`. It also has a limit worth stating: `moduleTransferred(from, to, amount)` is byte-identical for a sale and for a forced recovery, and those mean opposite things for anything that accrues value to a holder. The distributor therefore has to ask the token which it is (`recovering()`), making it the one module that depends on the token being a `SecurityToken` rather than any ERC-20. A system with several value-accruing modules would want the transfer kind passed through the hook itself.
+That choice is why income distribution required no change to `SecurityToken` beyond a single view, and why it can be registered on a live deployment with `addModule`. It also has a limit worth stating: `moduleTransferred(from, to, amount)` is byte-identical for a sale and for a forced recovery, and those mean opposite things for anything that accrues value to a holder. The distributor therefore has to ask the token which it is (`recovering()`), making it the one module that depends on the token being a `SecurityToken` rather than any ERC-20. A system with several value-accruing modules would want the transfer kind passed through the hook itself.
+
+**Registering or removing a stateful module on a live token desynchronizes it.** A module only sees the movements that happen while it is registered, and neither `addModule` nor `removeModule` reconciles its state with existing balances. A `MaxHoldersModule` added after holders exist starts its count at zero, so the first existing holder who exits reverts on an arithmetic underflow. A `LockupModule` added late has no clock for existing holders, so they are not locked; removed and re-added, it keeps an expired clock for a holder who exited while it was detached, so that holder is not locked on re-entry. A `DividendDistributor` removed and re-added pays holders who acquired while it was detached for income they did not hold through, so claims can exceed its balance, and `claimable` reverts for a holder who claimed and then sold while it was detached. Registering the distributor late is safe, since existing balances simply earn from the next deposit; the dividend scenario suite registers it before the first mint. Rules can change without redeploying the token, but the holder cap and the lockup have to be registered before the first balance they track, and no stateful module can be removed and added back while tokens move.
 
 ### The transfer gate
 
@@ -242,18 +249,18 @@ _update(from, to, amount)
    └─ otherwise   TRANSFER  →  _checkTransfer → move → compliance.transferred(...)
 ```
 
-`_checkTransfer` is one internal function returning a status code, ordered cheapest and most fundamental first so the common rejections short-circuit before the external call:
+`_checkTransfer` is one internal function returning a status code, ordered so the common rejections short-circuit before the module iteration, which is the expensive step:
 
 ```
-1. recipient verified?              registry SLOAD
+1. recipient verified?              registry call
 2. recipient not frozen?            token SLOAD
-3. sender verified?                 registry SLOAD   ┐
+3. sender verified?                 registry call    ┐
 4. sender not frozen?               token SLOAD      ├ skipped on mint
 5. unfrozen balance >= amount?      token SLOAD      ┘
 6. ModularCompliance.canTransfer    external call, iterates every module  ← last
 ```
 
-Both the public `canTransfer` view and the reverting `_update` path call this same function — the view compares the code to `Ok`, `_update` translates it into the matching custom error. They cannot drift, because a front end's pre-check and the on-chain enforcement are literally the same code.
+Both the public `canTransfer` view and the reverting `_update` path call this same function — the view compares the code to `Ok`, `_update` translates it into the matching custom error. For ordinary transfers and mints they cannot drift, because a front end's pre-check and the on-chain enforcement are the same code. Burn and forced recovery do not pass through the gate, so `canTransfer` is not a pre-check for those two shapes.
 
 The two non-obvious branches:
 
@@ -303,7 +310,9 @@ The bindings impose a strict construction order; each arrow is a dependency that
   6. DocumentRegistry(issuer) + setDocument(TERMS, uri, hash)
 ```
 
-Note that this is *not* the order a naive reading suggests (engine, modules, registry, token): `MaxHolders` and `Lockup` hold the token as an `immutable`, so they cannot precede it, and the token takes the engine in its constructor with no setter. `Deploy.s.sol` performs this and `assert`s the anchored hash matches the file on disk, so a drifted terms document fails the deployment loudly.
+Note that this is *not* the order a naive reading suggests (engine, modules, registry, token): `MaxHolders` and `Lockup` hold the token as an `immutable`, so they cannot precede it, and the token takes the engine in its constructor with no setter. `Deploy.s.sol` performs this, hashes `docs/RealEstateNote-Terms.md` as read at deployment, and checks with `require` that the anchored hash equals that hash. No expected hash is hardcoded in the script or in its tests, so the check confirms the anchor matches the file the script read; it does not detect an edit to the document made before the script runs.
+
+The script deploys and wires the three rule modules only. `DividendDistributor` is not part of it (`_verify` requires exactly three modules); the dividend scenario suite deploys and registers it separately.
 
 One limitation the script does not hide: the wiring calls are admin-gated, so the executing account must be the issuer. A real deployment needs a deploy-then-handover step (deploy under a hot key, transfer `DEFAULT_ADMIN_ROLE` to the multisig, renounce), which is governance plumbing deliberately out of scope here.
 
@@ -328,9 +337,11 @@ The question is whether any balance can move without clearing the gate. The stru
 | Sit out the lockup by receiving dust to reset someone else's clock | The clock starts only on the 0→positive transition and is never overwritten while non-zero (`lockStart != 0`), so a 1-wei send cannot re-lock a victim |
 | Inflate the holder count to exhaust the cap and DoS onboarding | Self-transfers are discarded in the hook. **This was a real bug**, found by the invariant suite: a full-balance self-transfer made `balanceOf(to) == amount` read as "joined from zero" while the sender was plainly not empty, so the signals failed to cancel and anyone could pump the count for free |
 
-The last row is the honest part of this section. The holder-count and lockup modules both infer transitions from post-transfer balances rather than reading pre-transfer state, and that inference is where the bugs live. `invariant_holderCountMatchesReality` now cross-checks the incremental count against enumerated real balances on every run.
+The last row is the honest part of this section. The holder-count and lockup modules both infer transitions from post-transfer balances rather than reading pre-transfer state, and that inference is where the bugs live. `invariant_holderCountMatchesReality` now cross-checks the incremental count against enumerated real balances on every run. Its handler only issues transfers and burns of at least one token from a non-empty wallet, and never calls `transferFrom`, so zero-amount movements are outside what the invariant checks.
 
 What is *not* defended: a rule the module set does not encode is not enforced. The gate is exactly as strict as the registered modules, and the ISSUER can remove them.
+
+The gate also checks the two holders, not the caller. In `transferFrom` the spender needs only an allowance, so an unverified or frozen spender can move tokens between two verified, unfrozen holders; ERC-3643 behaves the same way. Allowances a lost wallet granted survive `forcedRecovery` and are not carried to the new wallet. They cannot move anything while the lost wallet holds nothing and stays unregistered.
 
 ### 2. Reentrancy (defended, mostly structurally)
 
@@ -350,7 +361,7 @@ The residual assumption: **modules are trusted code the issuer registers**, not 
 
 - **Destination must be verified** and **must carry the same `investorId` as the lost wallet**. Without the second check, a custodian could recover into any verified address, including one they control as an onboarded investor — and, via the freeze carry-over, freeze whatever that address already held.
 - **The freeze state travels with the position.** A partial freeze is additive at the destination; a full freeze applies to the whole destination wallet, which is intentional, since the `investorId` check already guarantees it belongs to the same investor. Recovery relocates a hold, it does not launder one.
-- **The lost wallet is evicted** from the registry in the same call, so it cannot hold the token again.
+- **The lost wallet is evicted** from the registry in the same call, so it can no longer send or receive. The eviction is not permanent: an agent can register the wallet again, after which it can hold the token.
 - **Supply is unchanged** and every recovery emits `RecoverySuccess` naming both wallets and the carried freeze state.
 - **Unclaimed income travels with the position.** This did not come for free. Settled as an ordinary transfer, the accumulator leaves accrued dividends on the lost wallet — so the tokens are rescued while the money stays claimable by whoever holds the compromised keys. The distributor branches on `recovering()` and carries the entitlement across; the behaviour is [tested end to end](docs/tests/13-dividend-distributor.md#forced-recovery) against the real recovery path, not only against a mock.
 
@@ -364,8 +375,8 @@ Access control here spans two threat models that are easy to conflate and should
 
 The keys used most often are the ones most likely to leak. `AGENT_ROLE` is exercised daily to onboard investors and manage freezes; `CUSTODIAN_ROLE` is exercised rarely but holds the power to move balances. Separating them is real defense-in-depth over the exposed surface:
 
-- A **compromised AGENT key** can freeze balances, onboard bogus investors, and pause the token. It **cannot** perform `forcedRecovery`, so it cannot move an existing investor's position, and it cannot mint or burn.
-- A **compromised CUSTODIAN key** can perform recovery. It cannot mint, burn, freeze, or write the identity registry.
+- A **compromised AGENT key** can freeze balances, onboard bogus investors, remove identities (suspending positions), set any wallet's `investorId`, change the holder cap, the lockup period and the blocked countries, and pause the token. It **cannot** perform `forcedRecovery`, so it cannot move an existing investor's position, and it cannot mint or burn.
+- A **compromised CUSTODIAN key** can perform recovery. It cannot mint, burn or freeze, and its only write to the identity registry is the eviction of the lost wallet that recovery performs.
 
 Neither key alone reaches the other's powers, which is the point of the split. But the containment is asymmetric, and the honest version is worth stating: **a compromised CUSTODIAN key is the more dangerous of the two.**
 

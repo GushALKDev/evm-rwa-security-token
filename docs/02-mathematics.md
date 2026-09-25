@@ -21,7 +21,7 @@
 
 ## 1. Why this guide exists
 
-A security token has almost no financial mathematics: no PnL, no interest accrual on-chain, no curve. What it has instead is **cryptographic and bookkeeping mathematics**, and those are where the subtle correctness properties hide. This guide covers the digest that authorizes an off-chain identity, the bit-level record layout, and the small integer arithmetic that tracks holders, lockups, and freezes without ever iterating an unbounded set.
+A security token has little financial mathematics: no PnL and no curve, and the one piece of income accounting, dividend distribution, is bookkeeping over a single accumulator (section 8). What it has instead is **cryptographic and bookkeeping mathematics**, and those are where the subtle correctness properties hide. This guide covers the digest that authorizes an off-chain identity, the bit-level record layout, and the small integer arithmetic that tracks holders, lockups, and freezes without ever iterating an unbounded set.
 
 ---
 
@@ -33,11 +33,11 @@ The permissionless registration path (`registerIdentityWithAttestation`) accepts
 
 ```solidity
 bytes32 public constant ATTESTATION_TYPEHASH = keccak256(
-    "IdentityAttestation(address investor,uint16 country,bool accredited,uint64 kycExpiry,uint256 nonce)"
+    "IdentityAttestation(address investor,uint16 country,bool accredited,uint64 kycExpiry,bytes32 investorId,uint256 nonce)"
 );
 ```
 
-The type hash is `keccak256` of the canonical type string. Five fields are signed: the investor, the three attested attributes, and the nonce.
+The type hash is `keccak256` of the canonical type string. Six fields are signed: the investor, the three attested attributes, the `investorId` that links wallets of the same person, and the nonce.
 
 ### 2.2 The digest
 
@@ -47,11 +47,11 @@ The full EIP-712 digest is:
 digest = keccak256(
     0x19 ‖ 0x01
     ‖ domainSeparator
-    ‖ keccak256(ATTESTATION_TYPEHASH ‖ investor ‖ country ‖ accredited ‖ kycExpiry ‖ nonce)
+    ‖ keccak256(ATTESTATION_TYPEHASH ‖ investor ‖ country ‖ accredited ‖ kycExpiry ‖ investorId ‖ nonce)
 )
 ```
 
-where `‖` is `abi.encode` concatenation (each field padded to 32 bytes) and `domainSeparator` is:
+where, inside the struct hash and the domain separator, `‖` is `abi.encode` concatenation (each field padded to 32 bytes); the outer digest packs the two prefix bytes `0x19 0x01` unpadded, followed by the two 32-byte hashes. `domainSeparator` is:
 
 ```
 domainSeparator = keccak256(
@@ -64,7 +64,9 @@ In the contract this is assembled by OpenZeppelin's `EIP712._hashTypedDataV4`:
 
 ```solidity
 bytes32 digest = _hashTypedDataV4(
-    keccak256(abi.encode(ATTESTATION_TYPEHASH, investor, country_, accredited, kycExpiry, usedNonce))
+    keccak256(
+        abi.encode(ATTESTATION_TYPEHASH, investor, country_, accredited, kycExpiry, investorId_, usedNonce)
+    )
 );
 address recovered = digest.recover(signature);
 if (recovered != signer) revert InvalidAttestationSigner(recovered, signer);
@@ -94,9 +96,9 @@ uint256 usedNonce = _nonces[investor]++;   // read current, then increment store
 Suppose the current stored nonce is `n`. A legitimate attestation was signed over nonce `n`.
 
 1. First submission: `usedNonce = n`, stored becomes `n+1`. Digest matches the signature, signer check passes, record written.
-2. Replay of the same payload: `usedNonce = n+1`, stored becomes `n+2`. The digest is now computed over `n+1`, but the signature was over `n`. `recover` returns **a different address**, the signer check fails, revert.
+2. Replay of the same payload: `usedNonce = n+1`. The digest is now computed over `n+1`, but the signature was over `n`. `recover` returns **a different address**, the signer check fails, and the revert also rolls back the increment, so the stored nonce stays at `n+1`.
 
-The nonce is consumed as an *effect before the check* on purpose (CEI-friendly, and it means even a reverting inner path cannot leave the nonce reusable). Because the recovered address is unpredictable on a replay, tests assert this with `expectPartialRevert` on the `InvalidAttestationSigner` selector rather than matching exact parameters.
+The nonce is consumed as an *effect before the check* for CEI ordering. A revert anywhere in the call rolls the increment back, which is harmless because a reverted registration writes nothing. Because the recovered address is unpredictable on a replay, tests assert this with `expectPartialRevert` on the `InvalidAttestationSigner` selector rather than matching exact parameters.
 
 Expiry alone would **not** close the sequence axis: within the validity window, the same signature would keep re-registering a just-removed investor. That is precisely the hole the nonce exists to close, and why it is not optional.
 
@@ -104,7 +106,7 @@ Expiry alone would **not** close the sequence axis: within the validity window, 
 
 ## 4. Storage packing of the identity record
 
-The `Identity` record is read on every transfer (the recipient must be verified), so it is laid out to occupy **one storage slot**, one `SLOAD`:
+The verification attributes are read on every transfer (both the recipient and the sender must be verified), so they share **one storage slot**. The fifth field, `investorId`, is read only by recovery and sits alone in slot 1:
 
 ```solidity
 struct Identity {
@@ -112,17 +114,20 @@ struct Identity {
     bool accredited;   //  1 byte   │
     uint16 country;    //  2 bytes  │  Slot 0 (12 bytes used, 20 free)
     uint64 kycExpiry;  //  8 bytes ─┘
+    bytes32 investorId; // 32 bytes     Slot 1
 }
 ```
 
-The field order matters. Solidity packs sequential fields into a slot right-to-left as long as they fit in 32 bytes; `1 + 1 + 2 + 8 = 12 ≤ 32`, so all four share slot 0. Reordering would not break packing here (there is ample room), but keeping the small flags adjacent is the idiomatic layout and leaves the free 20 bytes contiguous for a future field.
+The field order matters. Solidity packs sequential fields into a slot right-to-left as long as they fit in 32 bytes; `1 + 1 + 2 + 8 = 12 ≤ 32`, so the four verification fields share slot 0. Reordering would not break packing here (there is ample room), but keeping the small flags adjacent is the idiomatic layout.
+
+The layout does not by itself make the read one `SLOAD`. `isVerified` copies the whole record to memory (`Identity memory record = _identities[investor]`), which reads both slots even though `investorId` is unused there: `vm.record` / `vm.accesses` on a call to `isVerified` shows two storage reads, against one for `country`. The gate calls `isVerified` twice per transfer.
 
 Two design points ride on the field widths:
 
 - **`country` as `uint16`** holds an ISO 3166-1 numeric code (max 894), not a string. The country restriction rule compares integers, never parses bytes.
-- **`kycExpiry` as `uint64`** is a Unix timestamp; `uint64` covers to year 584942, so no overflow concern, and it keeps the whole record in one slot.
+- **`kycExpiry` as `uint64`** is a Unix timestamp in seconds; `uint64` covers roughly 584 billion years, so overflow is not a concern, and it keeps the verification fields in one slot.
 
-> Packing is verified, not asserted: `forge inspect storageLayout` confirms the four fields share slot 0. This is a project convention (see the workflow notes), not a claim taken on faith.
+> Packing is verified, not asserted: `forge inspect IdentityRegistry storageLayout` shows the four verification fields in slot 0 and `investorId` in slot 1.
 
 ---
 
@@ -134,6 +139,8 @@ Two design points ride on the field widths:
 |:---|:---|:---|
 | `balanceOf(to) == amount` | Recipient held zero before; they just joined | `count + 1` |
 | `balanceOf(from) == 0` | Sender sent their whole balance; they just left | `count - 1` |
+
+A self-transfer (`from == to`) is discarded before either test, and the joined test also requires `amount != 0`.
 
 On a transfer both can happen, and the arithmetic composes cleanly:
 
@@ -156,12 +163,12 @@ The four cases:
                           ↑ new holder      ↑ both already held
 ```
 
-The **swap case (`Δ = 0`)** is the one that makes the cap usable. If a full-balance transfer at the cap were rejected, the token would deadlock: at max holders, nobody could ever move their whole position to a new investor. Because a sender emptying and a recipient joining net to zero, one holder can replace another at the cap. A *new* holder joining while nobody leaves is the only case the cap rejects.
+The **swap case (`Δ = 0`)** is the one that makes the cap usable. If a full-balance transfer at the cap were rejected, the token would deadlock: at max holders, nobody could ever move their whole position to a new investor. Because a sender emptying and a recipient joining net to zero, one holder can replace another at the cap. At the cap, the rule rejects any transfer to a zero-balance recipient unless the sender empties out in the same transfer, which in practice means a new holder joining while nobody leaves.
 
 Two guards keep the count honest:
 
 - The cap **cannot be set below the live count** (`setMaxHolders` reverts otherwise), or the invariant "count ≤ cap" would be violated retroactively.
-- The count is only ever mutated in hooks, which are `onlyCompliance`, so it cannot desync from real balances.
+- The count is only ever mutated in hooks, which are `onlyCompliance`, so it cannot desync from real balances. This assumes the module is registered before the first mint and stays registered: a module added to a token that already has holders starts at zero (see the [README](../README.md#architecture)).
 
 ---
 
@@ -184,7 +191,7 @@ function moduleCheck(address from, address, uint256) external view returns (bool
 
 ### 6.2 The clock state machine
 
-The clock is a per-investor `uint64` timestamp; `0` means "no position, no clock". Three transitions:
+The clock is a per-wallet `uint64` timestamp; `0` means "no position, no clock" (or, for a module registered after issuance, a position acquired before the module existed). Three transitions:
 
 ```
         mint / receive         (holds, clock running)      exit to zero
@@ -222,7 +229,7 @@ The strictly-correct per-acquisition reading would lock each *parcel* separately
 
 Two freeze concepts coexist on the `SecurityToken`, and their interaction with transfers and burns is small integer arithmetic worth stating precisely.
 
-- **Full freeze:** a boolean per wallet. A fully frozen wallet can neither send nor receive.
+- **Full freeze:** a boolean per wallet. A fully frozen wallet can neither send nor receive through a mint or a normal transfer; an issuer burn and a custodian recovery still reach it.
 - **Partial freeze:** an amount `frozen[investor] ≤ balanceOf(investor)`. On a normal transfer, only the **unfrozen** portion may move:
 
 ```
@@ -237,7 +244,7 @@ if amount > balanceOf(from) − frozen[from]:
     frozen[from] ← frozen[from] − (amount − (balanceOf(from) − frozen[from]))
 ```
 
-Forced recovery preserves the freeze arithmetic across wallets: it carries **both** `frozen[lost]` and the full-freeze flag to the new wallet, then zeroes the lost wallet. This is what stops recovery from being used to launder a freeze, and it keeps `Σ balances == totalSupply` invariant because the move is a pure reassignment, never a mint or burn. These behaviors are specified in `ISecurityToken` and land with Phase 4; see [Guide 5](./05-implementation.md).
+Forced recovery preserves the freeze arithmetic across wallets: it snapshots **both** `frozen[lost]` and the full-freeze flag, clears them on the lost wallet and evicts it from the registry, moves the full balance, then re-applies both on the new wallet. This is what stops recovery from being used to launder a freeze, and it keeps `Σ balances == totalSupply` invariant because the move is a pure reassignment, never a mint or burn. These behaviors are implemented in `SecurityToken.forcedRecovery`; see [Guide 5](./05-implementation.md).
 
 ---
 
@@ -255,7 +262,7 @@ The most common misreading of this module is that its transfer hook pays dividen
 | `claim(to)` | Each holder, independently | Whenever they choose | Yes, out |
 | `moduleCreated` / `moduleDestroyed` / `moduleTransferred` | The engine, automatically | On every balance change | **No** |
 
-The hooks are bookkeeping. They adjust one number per affected account so that the payout formula stays true, and nothing else.
+The hooks are bookkeeping. They adjust the correction of each affected account (and, on a forced recovery, the withdrawal record too) so that the payout formula stays true, and nothing else.
 
 ### 8.2 How a balance change reaches the module
 
@@ -327,7 +334,7 @@ Worked, with a holder minted 100 tokens when the accumulator already stood at 5:
 
 The gain is 600 = `150 × 4`: both lots earn on the new deposit.
 
-Equivalently, `correction` is a per-wallet zero mark, and the formula is `balance × (dividendsPerShare_now − dividendsPerShare_at_entry)`. Carrying it as a running total rather than a snapshot is what lets it stay exact across arbitrarily many balance changes at arbitrary accumulator values.
+For a holder who bought once and never sold, this reduces to `balance × (dividendsPerShare_now − dividendsPerShare_at_entry)`. Carrying the correction as a running total rather than a snapshot is what keeps it exact across partial sales and several entry points at different accumulator values.
 
 ### 8.5 Pull, not push
 
@@ -351,13 +358,13 @@ correction[lost] = 0;                  withdrawn[lost] = 0
 
 Carrying `withdrawn` matters as much as the correction. Move only the correction and the new wallet inherits the gross entitlement with a zero withdrawal record, re-claiming income the old wallet was already legitimately paid.
 
-This is the one place the distributor depends on the token being a `SecurityToken` rather than any ERC-20. The alternative — a distinct `moduleRecovered` hook on `IComplianceModule` — removes the coupling at the cost of widening the interface for every module; see [Guide 4](./04-tradeoffs.md).
+This is the one place the distributor depends on the token being a `SecurityToken` rather than any ERC-20. The alternative — a distinct `moduleRecovered` hook on `IComplianceModule` — removes the coupling at the cost of widening the interface for every module.
 
 ### 8.7 Scale and rounding direction
 
 `amount / totalSupply` truncates to zero for any realistic supply, so the accumulator is scaled by `2**128` and descaled on read. Two roundings remain, handled differently on purpose:
 
-- **The deposit's own truncation is carried, not lost.** The remainder is kept in `residue` in **scaled** units (`scaled % supply`) and folded into the next deposit. Carrying it in currency units instead rounds the dust *up* every deposit and compounds until claims exceed deposits — this was a real bug in this contract, caught by a multi-deposit fuzz property.
+- **The deposit's own truncation is carried, not lost.** The remainder is kept in `residue` in **scaled** units (`scaled % supply`) and folded into the next deposit. Carrying it in currency units instead rounds the dust *up* every deposit and compounds until claims exceed deposits — this was a real bug in this contract, found by testing across repeated deposits. The regression tests are `test_deposit_claimsNeverExceedFundsAcrossManyDeposits` and `testFuzz_solventAcrossRepeatedDeposits`.
 - **Each holder's descaling truncates down**, at most one wei each. This is the direction that keeps the contract solvent: the sum of claims sits at or below what was deposited, never above, so the last claimant is never left short.
 
 `deposit` reverts on zero supply rather than accruing to nobody. A consequence worth noting: once the note is fully amortised and supply reaches zero, no further deposit is possible, but everything deposited earlier stays claimable by its holders — who by then hold no tokens at all, and are made whole by their negative corrections.

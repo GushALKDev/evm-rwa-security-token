@@ -30,7 +30,7 @@ The goal is not to deploy the standard. Audited reference implementations alread
 
 ## 2. The asset and why it drives the design
 
-The token represents a **Series A real-estate-backed note**: a debt instrument secured by a residential property in Valencia, Spain, held through an SPV, issued to a whitelist of accredited investors. Face value 1,000 EURC per token, 36-month maturity. The governing terms live in [`RealEstateNote-Terms.md`](./RealEstateNote-Terms.md) and are anchored on-chain by content hash.
+The token represents a **Series A real-estate-backed note**: a debt instrument secured by a residential property in Valencia, Spain, held through an SPV, issued to a whitelist of accredited investors (the registry stores an `accredited` flag, but no module reads it, so the token does not enforce accreditation). Face value 1,000 EURC per token, 36-month maturity. The governing terms live in [`RealEstateNote-Terms.md`](./RealEstateNote-Terms.md) and are anchored on-chain by content hash.
 
 The asset choice is not decoration. A note is a claim on a real property against a real issuer, enforceable in a real court, and that single fact drives every design decision:
 
@@ -56,8 +56,9 @@ That inverts the default. In an ERC-20, transfers are permitted unless the balan
     ┌───────────────┐              ┌──────────────────────────┐
     │ balance ok?   │              │ not paused?              │
     │   ├─ yes → OK │              │ recipient verified?      │
-    │   └─ no  → ✗  │              │ sender not frozen?       │
-    └───────────────┘              │ recipient not frozen?    │
+    │   └─ no  → ✗  │              │ recipient not frozen?    │
+    └───────────────┘              │ sender verified?         │
+                                   │ sender not frozen?       │
                                    │ unfrozen balance enough? │
      "allowed unless               │ all compliance modules   │
       you can't"                   │        approve?          │
@@ -76,40 +77,42 @@ The ERC-20 interface is preserved so existing tooling can read balances and buil
 
 ## 4. The four moving parts
 
-The system is four cooperating contracts, built in dependency order. Only the last one is the token.
+The system has four cooperating parts (identity, compliance, documents and the token), built in dependency order. Only the last one is the token.
 
 ```
-┌──────────────────────────────────────────────────────────────────┐
-│                         SecurityToken                            │
-│  ERC-20 shape + issuer powers (mint, burn, freeze, recovery)    │
-│  Every _update passes through the transfer gate ───────┐        │
-└──────────────────┬─────────────────────────┬───────────┼────────┘
-                   │ "is the recipient       │ "do the   │
-                   │  allowed to hold?"      │  rules    │ "which document
-                   ▼                         │  pass?"   │  is in force?"
-        ┌────────────────────┐               ▼           ▼
-        │  IdentityRegistry  │     ┌───────────────────┐ ┌──────────────────┐
-        │  KYC projection,   │     │ ModularCompliance │ │ DocumentRegistry │
-        │  two write paths   │     │  composes modules │ │  hash + URI      │
-        └────────────────────┘     └─────────┬─────────┘ └──────────────────┘
-                                             │ fans hooks to
-                              ┌──────────────┼──────────────┐
-                              ▼              ▼              ▼
-                       ┌───────────┐  ┌────────────┐  ┌──────────┐
-                       │MaxHolders │  │  Country   │  │  Lockup  │
-                       │  Module   │  │Restriction │  │  Module  │
-                       └───────────┘  └────────────┘  └──────────┘
+┌──────────────────────────────────────────────────────────────┐   ┌──────────────────┐
+│                         SecurityToken                        │   │ DocumentRegistry │
+│  ERC-20 shape + privileged powers (issuer mint/burn,         │   │  hash + URI,     │
+│  agent freeze/pause, custodian recovery)                     │   │  standalone: no  │
+│  Mints and transfers pass the gate; burn and recovery do not │   │  contract reads  │
+└──────────────────┬─────────────────────────┬─────────────────┘   │  it on-chain     │
+                   │ "are sender and         │ "do the rules     └──────────────────┘
+                   │  recipient allowed?"    │  pass?"
+                   ▼                         ▼
+        ┌────────────────────┐     ┌───────────────────┐
+        │  IdentityRegistry  │     │ ModularCompliance │
+        │  KYC projection,   │     │  composes modules │
+        │  two write paths   │     └─────────┬─────────┘
+        └────────────────────┘               │ fans hooks to
+                         ┌───────────────┬───┴───────────┬───────────────┐
+                         ▼               ▼               ▼               ▼
+                   ┌───────────┐  ┌────────────┐  ┌──────────┐  ┌──────────────┐
+                   │MaxHolders │  │  Country   │  │  Lockup  │  │  Dividend    │
+                   │  Module   │  │Restriction │  │  Module  │  │ Distributor  │
+                   └───────────┘  └────────────┘  └──────────┘  └──────────────┘
+                     rules: each can veto a transfer               observer: never
+                                                                   vetoes
 ```
 
 | Contract | Question it answers | Status |
 |:---|:---|:---|
 | **IdentityRegistry** | May this address hold the token, and is that still true? | Built |
 | **ModularCompliance** | Do the plugged-in rules permit this transfer? | Built |
-| **Compliance modules** | One rule each (holder cap, jurisdiction, lockup) | Built |
+| **Compliance modules** | One rule each (holder cap, jurisdiction, lockup), plus the dividend distributor, which observes and never vetoes | Built |
 | **DocumentRegistry** | Which exact terms document is in force? | Built |
 | **SecurityToken** | Compose all of the above into a gated ERC-20 | Built |
 
-The key structural choice: **the token references the engine, never the individual modules.** Changing the rule set is a governance action (add or remove a module) rather than a token redeploy. See [Guide 3](./03-architecture.md) for how this seam is wired.
+The key structural choice: **the token references the engine, never the individual modules.** Changing the rule set is a governance action (add or remove a module) rather than a token redeploy. The holder cap and the lockup have to be registered before the first balance they track, and no stateful module (those two and the dividend distributor) can be removed and added back while tokens move, or its state no longer matches balances. See [Guide 3](./03-architecture.md) for how this seam is wired.
 
 ---
 
@@ -137,9 +140,9 @@ Two properties of the boundary are worth stating up front, because everything el
 | **ONCHAINID** | ERC-3643's per-investor on-chain identity contract holding signed claims. Collapsed into a flat registry here (see [README](../README.md#what-was-deliberately-left-out-and-why)). |
 | **Attestation** | A signed statement (EIP-712 payload) that an investor passed KYC, with a shelf life (`kycExpiry`). |
 | **Claim signer** | The single authorized address whose signature the registry trusts on the attestation path. |
-| **Compliance module** | A single pluggable transfer rule (holder cap, jurisdiction, lockup) registered on the engine. |
+| **Compliance module** | A contract registered on the engine that either enforces one transfer rule (holder cap, jurisdiction, lockup) or observes balance changes through the lifecycle hooks (dividend distribution). |
 | **Lifecycle hook** | A post-transfer callback (`transferred`/`created`/`destroyed`) letting stateful modules update. |
-| **Forced recovery** | Custodian-only move of a full position from a lost wallet to a new verified one, supply unchanged. |
+| **Forced recovery** | Custodian-only move of a full position from a lost wallet to a verified wallet registered under the same `investorId`, evicting the lost wallet from the registry, with supply unchanged. |
 | **Full / partial freeze** | Immobilizing an entire wallet, or a portion of a balance (a disputed lot, a pledge). |
 | **ISSUER / AGENT / CUSTODIAN** | The three roles: supply & config / compliance operations / recovery. See the [README matrix](../README.md#role-and-permission-matrix). |
 

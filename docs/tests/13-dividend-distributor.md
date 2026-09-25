@@ -1,7 +1,7 @@
 # Dividend Distributor (Phase 8)
 
 **Suites:** [`DividendDistributorTest`](../../test/unit/DividendDistributor.t.sol) (36 unit + 5 fuzz) · [`DividendsTest`](../../test/scenario/Dividends.t.sol) (4 scenario)
-**Covers:** roadmap items 8.1-8.4 · [Guide 6, dividend distribution](../06-improvements.md#6-dividend-distribution-the-planned-stretch-unit)
+**Covers:** roadmap items 8.1-8.4 · [Guide 6, dividend distribution](../06-improvements.md#6-dividend-distribution-built-in-phase-8)
 
 ---
 
@@ -179,4 +179,4 @@ Two mocks are specific to this suite:
 - [Max Holders Module](./05-max-holders-module.md) — the self-transfer inference bug this module deliberately avoids repeating
 - [Security Token](./07-security-token.md) — the `_update` branches, including the recovery path these hooks observe
 - [Invariant Suite](./11-invariants.md) — the high-effort run practice applied to this unit's fuzz group
-- [Guide 6: Improvements](../06-improvements.md#6-dividend-distribution-the-planned-stretch-unit) — the design as originally specified
+- [Guide 6: Improvements](../06-improvements.md#6-dividend-distribution-built-in-phase-8) — the design as originally specified

@@ -41,7 +41,7 @@ The registry answers "which issuers may attest which claim topics". With one KYC
 
 ### 2.3 No claim topics or claim schemes
 
-Attributes (`country`, `accredited`, `kycExpiry`) are **typed struct fields**, not generic claim blobs. Generic claims buy extensibility this POC has no use for, at the cost of making every rule parse bytes. Typed fields keep the record in one storage slot (see [Guide 2 §4](./02-mathematics.md#4-storage-packing-of-the-identity-record)) and the rules readable.
+Attributes (`country`, `accredited`, `kycExpiry`) are **typed struct fields**, not generic claim blobs. Generic claims buy extensibility this POC has no use for, at the cost of making every rule parse bytes. Typed fields keep the verification attributes packed in one storage slot, with the investor id in a second (see [Guide 2 §4](./02-mathematics.md#4-storage-packing-of-the-identity-record)) and the rules readable.
 
 ### 2.4 ERC-1400 partitions omitted, which forces the lockup model
 
@@ -83,7 +83,7 @@ The chosen path trades a little subtlety (the four-case transition table, the de
 
 ### 3.2 Nonce consumed before signature verification
 
-The nonce is post-incremented *before* the digest is built, so a replay recovers a different address and fails the signer check. The alternative (check signature, then bump nonce) leaves a reentrancy-shaped window and is less CEI-clean. See [Guide 2 §3](./02-mathematics.md#3-replay-the-three-axes-and-what-closes-each).
+The nonce is post-incremented *before* the digest is built, so a replay recovers a different address and fails the signer check. The alternative (check the signature, then bump the nonce) is equally safe here, because no external call sits between the two; incrementing first keeps the effect ahead of the check as a matter of CEI style. The nonce advances only on the signed path: `registerIdentity` and `removeIdentity` do not touch it. See [Guide 2 §3](./02-mathematics.md#3-replay-the-three-axes-and-what-closes-each).
 
 ### 3.3 Lockup period applies to existing clocks
 
@@ -94,11 +94,11 @@ The nonce is post-incremented *before* the digest is built, so a replay recovers
 
 ### 3.4 `bindToken` / engine binding settable once
 
-Both the token→engine and module→engine bindings are one-time. Rebinding a live engine would let a second token drive the lifecycle hooks of modules whose state was accumulated from the first, corrupting every stateful rule. The cost is zero (a module is cheap to redeploy); the property bought is that stateful rules cannot be hijacked.
+Both the token→engine and module→engine bindings are one-time. Rebinding a live engine would let a second token drive the lifecycle hooks of modules whose state was accumulated from the first, corrupting every stateful rule. Redeploying a stateless module costs nothing. Redeploying a stateful one on a live token loses its accumulated state (holder count, lockup clocks, dividend corrections), which a new instance cannot rebuild from the hooks alone. The property bought is that stateful rules cannot be hijacked.
 
 ### 3.5 One status-code function for `_update` and `canTransfer`
 
-The transfer gate is implemented once and consumed two ways (revert vs bool), so the enforced rule and the advertised pre-check cannot drift. The alternative (two parallel implementations) is a classic source of "the front end said it would pass but the transfer reverted" bugs. See [Guide 3 §4](./03-architecture.md#4-the-transfer-gate-a-superset-check).
+The transfer gate is implemented once and consumed two ways (revert vs bool), so for transfers and mints the enforced rule and the advertised pre-check cannot drift (burn and forced recovery do not pass through the gate). The alternative (two parallel implementations) is a classic source of "the front end said it would pass but the transfer reverted" bugs. See [Guide 3 §4](./03-architecture.md#4-the-transfer-gate-a-superset-check).
 
 ---
 
@@ -117,9 +117,9 @@ Full treatment: [README threat model §4.2](../README.md#42-issuer-level-authori
 
 ### 4.2 A compromised custodian key is deterred, not prevented
 
-`forcedRecovery` can only target a destination that is already verified **and registered under the same `investorId` as the lost wallet**, so a custodian cannot move a balance to an unrelated third party. What a compromised key can still do is move a victim's position between that victim's own wallets, and, if the attacker can get a wallet of their own linked to the victim's `investorId` by the agent, out of the victim's control entirely. What it **cannot** do is hide: every recovery emits `RecoverySuccess` naming both wallets, the destination is a KYC-identified investor, and total supply is unchanged.
+`forcedRecovery` can only target a destination that is already verified **and registered under the same `investorId` as the lost wallet**, so a custodian cannot move a balance to an unrelated third party. What a compromised key can still do is move a victim's position between that victim's own wallets, and, if the attacker can get a wallet of their own linked to the victim's `investorId` by the agent or through an attestation from the claim signer, out of the victim's control entirely. What it **cannot** do is hide: every recovery emits `RecoverySuccess` naming both wallets, the destination is a KYC-identified investor, and total supply is unchanged.
 
-Recovery also bypasses the pause and the transfer gate, so no compliance rule limits it: a lockup still running or a frozen destination will not stop a custodian. That is deliberate, since the alternative is a compromised position stranded on a wallet the investor no longer controls, but it does mean the modular rule set is not a second line of defence against this key.
+Recovery also bypasses the pause and the transfer gate, so no compliance rule limits it: a lockup still running or a frozen destination will not stop a custodian. That is deliberate, since the alternative is a compromised position stranded on a wallet the investor no longer controls, but it does mean the modular rule set is not a second line of defence against this key. Because the lifecycle hook still fires, a recovery into an empty wallet also starts a new lockup clock on that wallet.
 
 - **The mitigation is auditability, not prevention.** This is why `CUSTODIAN_ROLE` deserves the highest key-management standard, not the lowest because it is rarely used. Blast radius, not frequency, sets the standard. Full treatment: [README threat model §4.1](../README.md#41-operational-key-compromise-defended).
 
@@ -133,16 +133,16 @@ Recovery also bypasses the pause and the transfer gate, so no compliance rule li
 
 | Decision | Advantage | Cost / trade-off |
 |:---|:---|:---|
-| Flat registry (no ONCHAINID) | Simpler, one `SLOAD` per identity | Identity not reusable across tokens |
+| Flat registry (no ONCHAINID) | Simpler, one registry call per identity check | Identity not reusable across tokens |
 | Single claim signer | One address, one recovery check | No multi-issuer / multi-topic attestations |
-| Typed attributes (no claim blobs) | Record in one slot, readable rules | Adding an attribute is a code change |
+| Typed attributes (no claim blobs) | Attributes packed in one slot, readable rules | Adding an attribute is a code change |
 | No partitions | No tranche accounting complexity | Forces "from initial acquisition" lockup |
 | No proxies / factory | Nothing to read through | Not upgradeable; a real deploy needs this |
 | Incremental holder count | O(1) gas | Swap-at-cap subtlety; count can't drift |
 | Lockup from initial acquisition | Immune to dust-relock griefing | Not strictly per-acquisition |
-| One gate for revert + view | Enforcement and pre-check can't diverge | Slightly more indirection |
+| One gate for revert + view | Transfer and mint pre-checks match enforcement | Slightly more indirection; burn and recovery are outside the view |
 | ISSUER = admin, self-grants roles | Faithful to ERC-3643, issuer can act | Centralization (mitigate with multisig) |
-| Recovery = verified destination only | Theft is attributable and legible | Not prevented, only deterred |
+| Recovery = verified same-investor destination only | Theft is attributable and legible | Not prevented, only deterred |
 
 ---
 

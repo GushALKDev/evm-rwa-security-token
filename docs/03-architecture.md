@@ -24,7 +24,7 @@
 
 ## 1. System overview
 
-Five contracts (plus shared `Roles` and an abstract module base), all built and tested. The [README](../README.md#architecture) carries the top-level diagrams (component graph, transfer gate, recovery sequence, deployment order); this guide goes seam by seam.
+Eight contracts (plus shared `Roles` and an abstract module base), all built and tested: the token, `IdentityRegistry`, `ModularCompliance`, `DocumentRegistry` and four modules (`MaxHolders`, `CountryRestriction`, `Lockup` and `DividendDistributor`). `Deploy.s.sol` deploys seven of them; `DividendDistributor` is not part of the script and is registered separately. The [README](../README.md#architecture) carries the top-level diagrams (component graph, transfer gate, recovery sequence, deployment order); this guide goes seam by seam.
 
 ```
                               ┌───────────────────────────────┐
@@ -48,6 +48,8 @@ Five contracts (plus shared `Roles` and an abstract module base), all built and 
                                      │ MaxHolders │ │ Country │ │ Lockup │
                                      │   Module   │ │ Restr.  │ │ Module │
                                      └────────────┘ └─────────┘ └────────┘
+                                     (plus DividendDistributor, an observer
+                                      module registered the same way)
                               ┌──────────────────┐
         ISSUER ──────────────►│ DocumentRegistry │  (hash + URI per name)
                               └──────────────────┘
@@ -55,8 +57,8 @@ Five contracts (plus shared `Roles` and an abstract module base), all built and 
 
 Two invariants define the shape:
 
-1. **The token references the engine, never the modules.** The rule set is pluggable at the engine, so it changes by governance action, not token redeploy.
-2. **Every module answers to exactly one engine, and every engine to exactly one token.** Both bindings are set once and never rebindable. This is what keeps stateful rules from being corrupted by a second caller.
+1. **The token references the engine, never the modules.** The rule set is pluggable at the engine, so it changes by governance action, not token redeploy. A stateful module registered on a live token starts with empty state and misses every move made while it is not registered. The holder cap and the lockup have to be registered before the first balance they track, and no stateful module (those two and the dividend distributor) can be removed and added back while tokens move, or its state no longer matches balances. See the [README](../README.md#architecture).
+2. **Every module answers to exactly one engine, and every engine to exactly one token.** Both bindings are set once and never rebindable. This is what keeps stateful rules from being corrupted by a second caller. Nothing checks that a stateful module's own token address matches the token bound to the engine, so that pairing is a deployment-time responsibility.
 
 ---
 
@@ -110,10 +112,10 @@ If lifecycle hooks were callable by anyone, an attacker could desynchronize a st
 
 Every module extends `AbstractComplianceModule`, which holds the engine binding as an **immutable** and gates hooks with `onlyCompliance`. Two guards, working together, make the module graph trustworthy:
 
-- **`addModule` rejects a module not already pointing at this engine** (`ModuleNotBound`). Otherwise the engine could register a module whose `onlyCompliance` gate rejects every call the engine makes, silently never updating its state.
+- **`addModule` rejects a module not already pointing at this engine** (`ModuleNotBound`). Otherwise the engine could register a module whose `onlyCompliance` gate rejects every hook call the engine makes, which would revert every mint, burn and transfer.
 - **The binding is immutable.** A module cannot be re-pointed at a second engine that would corrupt the state the first accumulated. A module is cheap to redeploy, so there is no use case for rebinding.
 
-The three modules are each one rule:
+The three rule modules are each one rule. A fourth module, `DividendDistributor`, never vetoes (its `moduleCheck` always returns true) and uses the hooks only to account income:
 
 | Module | Rule | State | Checked on |
 |:---|:---|:---|:---|
@@ -133,17 +135,17 @@ The token-level check is a **superset** of the engine's `canTransfer`. It layers
 canTransfer(from, to, amount)          [ order = cheapest / most-likely-to-reject first ]
    │
    ├─ 1. not paused?                    ── SLOAD
-   ├─ 2. recipient verified?            ── SLOAD (registry)
+   ├─ 2. recipient verified?            ── registry call
    ├─ 3. recipient not fully frozen?    ── SLOAD
-   ├─ 4. sender verified?               ── SLOAD (registry)   [skipped on mint]
+   ├─ 4. sender verified?               ── registry call      [skipped on mint]
    ├─ 5. sender not fully frozen?       ── SLOAD              [skipped on mint]
    ├─ 6. unfrozen balance ≥ amount?     ── SLOAD              [skipped on mint]
    └─ 7. ModularCompliance.canTransfer  ── external call, iterates modules  ← most expensive, last
 ```
 
-The ordering is deliberate: pause, identity, freeze and balance are single `SLOAD`s on the token itself; the module iteration is an external call across the engine to every module, so it runs last and only if everything cheaper passed.
+The ordering is deliberate: pause, freeze and balance are storage reads on the token itself, and identity is one external view call to the registry per party (it reads both slots of the record, see [Guide 2 §4](./02-mathematics.md#4-storage-packing-of-the-identity-record)); the module iteration is an external call to the engine plus one call per module, so it runs last and only if everything cheaper passed. A burn runs only step 1: it skips identity, freeze and the module check, and `burn` itself reconciles the frozen portion. Forced recovery skips all seven steps.
 
-**Both ends are checked for identity, not just the recipient.** Withdrawing an investor's identity therefore suspends their position rather than only capping it: they keep the balance but cannot move it. This matters because `removeIdentity` is what compliance reaches for when an investor may no longer hold the instrument at all, and a rule that only blocked incoming transfers would leave the sanctioned party free to sell out. The tokens survive the suspension, since losing an attestation does not extinguish title; only the issuer (`burn`) or the custodian (`forcedRecovery`) can remove them, and re-verifying releases the position.
+**Both ends are checked for identity, not just the recipient** (the ends are the sender and the recipient; the `transferFrom` spender is not checked). Withdrawing an investor's identity therefore suspends their position rather than only capping it: they keep the balance but cannot move it. This matters because `removeIdentity` is what compliance reaches for when an investor may no longer hold the instrument at all, and a rule that only blocked incoming transfers would leave the sanctioned party free to sell out. The tokens survive the suspension, since losing an attestation does not extinguish title; only the issuer (`burn`) or the custodian (`forcedRecovery`) can remove them, and re-verifying releases the position. With `DividendDistributor` registered, a suspended holder can still claim income, because `claim` checks neither identity nor freeze.
 
 ### One implementation, two callers
 
@@ -152,7 +154,7 @@ The gate has a single internal status-code function, shared by:
 - **`_update`** (the ERC-20 transfer path): reverts with the custom error matching the failing status.
 - **`canTransfer`** (the public view): returns a bool.
 
-They share one implementation precisely so the on-chain enforcement and the off-chain pre-check **cannot drift**. A front end calling `canTransfer` gets exactly the answer `_update` would enforce, because it is the same code. `_update` branches explicitly by shape (mint `from == 0`, burn `to == 0`, forced recovery, transfer) so each calls the correct engine hook. The recovery branch skips the gate entirely rather than relaxing it: a pause or a modular rule must not strand a compromised position on a wallet the investor no longer controls, and the checks that do matter there are performed inside `forcedRecovery` itself. The lifecycle hook still fires, so stateful modules keep tracking the movement even though their verdict on it is not consulted. The [README](../README.md#why-a-permissioned-token-is-not-an-erc-20) covers the semantics.
+They share one implementation precisely so the on-chain enforcement and the off-chain pre-check **cannot drift** for ordinary transfers and mints. A front end calling `canTransfer` gets exactly the answer `_update` would enforce for those, because it is the same code. Burn and forced recovery do not pass through the gate, so `canTransfer` is not a pre-check for those two shapes. `_update` branches explicitly by shape (mint `from == 0`, burn `to == 0`, forced recovery, transfer) so each calls the correct engine hook. The recovery branch skips the gate entirely rather than relaxing it: a pause or a modular rule must not strand a compromised position on a wallet the investor no longer controls, and the checks that do matter there are performed inside `forcedRecovery` itself. The lifecycle hook still fires, so stateful modules keep tracking the movement even though their verdict on it is not consulted. One consequence: a recovery into an empty wallet starts a new lockup clock on that wallet, because `LockupModule` sees a 0 to positive transition. The [README](../README.md#why-a-permissioned-token-is-not-an-erc-20) covers the semantics.
 
 ---
 
@@ -164,13 +166,13 @@ Compliance splits cleanly into two kinds of call:
    BEFORE a move settles              AFTER a move settles
    ─────────────────────              ─────────────────────
    canTransfer / moduleCheck          transferred / created / destroyed
-   pure/view, may reject              state-mutating, cannot reject
+   pure/view, may reject              state-mutating, no verdict
    "is this allowed?"                 "record that it happened"
 ```
 
-The `moduleCheck` calls are `view` and decide permission. The lifecycle hooks run *after* the balance update in `_update`, are state-mutating, and cannot reject: their job is to let stateful modules record what happened (a holder joined, a lockup clock started). This ordering is why the holder-count and lockup logic can read `balanceOf` to detect a `0 → positive` transition; the balance is already current when the hook fires (see [Guide 2](./02-mathematics.md#5-holder-count-transitions-without-enumeration)).
+The `moduleCheck` calls are `view` and decide permission. The lifecycle hooks run *after* the balance update in `_update`, are state-mutating, and return no verdict (a hook that reverts still aborts the move, as `MaxHoldersModule` does on an arithmetic underflow): their job is to let stateful modules record what happened (a holder joined, a lockup clock started). This ordering is why the holder-count and lockup logic can read `balanceOf` to detect a `0 → positive` transition; the balance is already current when the hook fires (see [Guide 2](./02-mathematics.md#5-holder-count-transitions-without-enumeration)).
 
-The engine fans each hook to every module in registration order:
+The engine fans each hook to every module in set order (registration order until the first `removeModule`, which moves the last module into the removed slot):
 
 ```solidity
 function transferred(address from, address to, uint256 amount) external onlyToken {
@@ -187,22 +189,22 @@ A stateless module (like `CountryRestriction`) simply no-ops the hooks. `canTran
 
 ## 6. Document anchoring
 
-`DocumentRegistry` is the ERC-1643-style anchor: a mapping from a document name to `{hash, uri, timestamp}`, writable only by the ISSUER.
+`DocumentRegistry` is the ERC-1643-style anchor: a mapping from a document name to `{uri, contentHash, lastModified}`, writable only by the ISSUER.
 
 ```
-  name ──► { keccak256(content) , uri , setAt }
+  name ──► { keccak256(content) , uri , lastModified }
                      ▲                ▲
              proves WHICH bytes   says WHERE to
              are in force          fetch them
 ```
 
-The hash is of the **content**, not the URI. The URI can be re-hosted freely; the hash is what a holder recomputes after fetching, to prove the exact bytes. Hashing the URI would prove only that a link did not change, which is worth nothing. The deployment script anchors [`RealEstateNote-Terms.md`](./RealEstateNote-Terms.md) this way and asserts the on-chain hash matches the file on disk.
+The hash is of the **content**, not the URI. The URI can be re-hosted freely; the hash is what a holder recomputes after fetching, to prove the exact bytes. Hashing the URI would prove only that a link did not change, which is worth nothing. The deployment script anchors [`RealEstateNote-Terms.md`](./RealEstateNote-Terms.md) this way: it hashes the file as read at deployment and `require`s that the on-chain hash equals that value. The registry itself stores whatever hash the issuer supplies; it cannot check it against the content.
 
 ---
 
 ## 7. Deployment order and the binding graph
 
-The bindings impose a strict construction order. Each arrow is a dependency that must already exist:
+The bindings impose a partial order: the engine and the registry (in either order) before the token, and the token before the modules that hold it (`CountryRestriction` only needs the engine and the registry). The script uses this linearization:
 
 ```
   1. ModularCompliance(issuer)                 engine must exist first:
@@ -220,13 +222,16 @@ The bindings impose a strict construction order. Each arrow is a dependency that
               │
               ├─► engine.addModule(each)        modules already point at engine
               ├─► engine.bindToken(token)       one-time
-              └─► registry.grantRole(AGENT, token)   token retires lost wallets
-                                                     during forcedRecovery
+              ├─► registry.grantRole(AGENT, token)   token de-registers lost
+              │                                      wallets during forcedRecovery
+              ├─► token.grantRole(CUSTODIAN, custodian)
+              ├─► token.grantRole(AGENT, agent)
+              └─► DocumentRegistry(issuer) + setDocument(TERMS, uri, hash)
 ```
 
-The order is worth stating because the intuitive one is wrong. "Engine, modules, registry, token" is not satisfiable: two of the three modules take the token address as an `immutable`, and the token takes the registry and the engine as constructor arguments with no setter for either. The token must therefore be constructed after the registry and the engine, but before the modules that watch its balances.
+The order is worth stating because the intuitive one is wrong. "Engine, modules, registry, token" is not satisfiable: two of the three rule modules (and `DividendDistributor`) take the token address as an `immutable`, and the token takes the registry and the engine as constructor arguments with no setter for either. The token must therefore be constructed after the registry and the engine, but before the modules that watch its balances.
 
-The last grant is the one non-obvious edge: `forcedRecovery` calls `removeIdentity` on the registry, which is `AGENT`-gated, so the **token contract itself** holds `AGENT_ROLE` on the registry. The role is held by code, not a person, and exercised only inside recovery. `Deploy.s.sol` performs this wiring and `assert`s the anchored document hash, so a mismatch between the file and the chain fails the deployment loudly. Its one limitation: the wiring calls are admin-gated, so the executing account must be the issuer, and a real deployment needs a deploy-then-handover step. See [Guide 5](./05-implementation.md) for the script and the invariant suite that exercises the assembled system.
+The last grant is the one non-obvious edge: `forcedRecovery` calls `removeIdentity` on the registry, which is `AGENT`-gated, so the **token contract itself** holds `AGENT_ROLE` on the registry. The role is held by code, not a person. It would also permit both `registerIdentity` overloads, but the token's code calls only `removeIdentity`, and only inside recovery. `Deploy.s.sol` performs this wiring and `require`s that the anchored hash equals the hash of the file it just read, which catches a failed or wrong anchor write but not an edit to the file made before the run. Its limitations: the wiring calls are admin-gated, so the executing account must be the issuer and a real deployment needs a deploy-then-handover step; the three operator roles default to the broadcasting account when the `ISSUER`, `AGENT` and `CUSTODIAN` environment variables are unset; and `DividendDistributor` is not deployed. See [Guide 5](./05-implementation.md) for the script and the invariant suite that exercises the assembled system.
 
 ---
 
