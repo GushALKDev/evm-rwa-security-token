@@ -24,4 +24,16 @@ runs = 64
 depth = 64
 fail_on_revert = false
 
+# Matches the formatting already in the tree: forge fmt --check passes with no diff.
+[fmt]
+line_length = 120
+tab_width = 4
+bracket_spacing = false
+int_types = "long"
+multiline_func_header = "attributes_first"
+quote_style = "double"
+number_underscore = "preserve"
+sort_imports = false
+wrap_comments = false
+
 # See more config options https://github.com/foundry-rs/foundry/blob/master/crates/config/README.md#all-options
