@@ -184,4 +184,30 @@ contract RegressionsTest is Test, Deploy {
         d.identityRegistry.registerIdentityWithAttestation(alice, ES, true, expiry, bytes32(0), sig);
         assertEq(d.identityRegistry.country(alice), fr);
     }
+
+    /*//////////////////////////////////////////////////////////////
+              A REMOVED LOST WALLET CAN STILL BE RECOVERED
+    //////////////////////////////////////////////////////////////*/
+
+    /// @dev Compliance suspends a wallet with `removeIdentity`, then the investor reports it lost.
+    ///      The removal used to delete the investor id, so recovery reverted with
+    ///      `RecoveryAcrossInvestors(0, id)` and the position stayed stranded.
+    function test_forcedRecovery_succeedsAfterAgentRemovedLostWallet() public {
+        bytes32 id = keccak256("investor-alice");
+        address aliceNew = makeAddr("aliceNew");
+        _onboardAs(alice, id);
+        _onboardAs(aliceNew, id);
+        d.token.mint(alice, AMOUNT);
+
+        vm.prank(agent);
+        d.identityRegistry.removeIdentity(alice);
+        assertEq(d.identityRegistry.investorId(alice), id, "removal must keep the investor id");
+
+        vm.prank(custodian);
+        d.token.forcedRecovery(alice, aliceNew);
+
+        assertEq(d.token.balanceOf(aliceNew), AMOUNT);
+        assertEq(d.token.balanceOf(alice), 0);
+        assertFalse(d.identityRegistry.isVerified(alice));
+    }
 }

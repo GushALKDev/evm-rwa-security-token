@@ -446,9 +446,35 @@ contract IdentityRegistryTest is Test {
 
         IIdentityRegistry.Identity memory rec = registry.identity(investor);
         assertFalse(rec.verified);
+        assertFalse(rec.accredited);
         assertEq(rec.country, 0);
         assertEq(rec.kycExpiry, 0);
         assertFalse(registry.isVerified(investor));
+        // The investor id survives removal, so recovery can still match the wallet.
+        assertEq(rec.investorId, keccak256(abi.encode(investor)));
+        assertEq(registry.investorId(investor), keccak256(abi.encode(investor)));
+    }
+
+    /// @dev A removed wallet is suspended, not banned: the agent can register it again.
+    function test_removeIdentity_walletCanBeRegisteredAgain() public {
+        vm.startPrank(agent);
+        registry.registerIdentity(investor, ES, true, futureExpiry);
+        registry.removeIdentity(investor);
+        registry.registerIdentity(investor, ES, false, futureExpiry);
+        vm.stopPrank();
+
+        assertTrue(registry.isVerified(investor));
+        assertFalse(registry.identity(investor).accredited);
+    }
+
+    /// @dev Removing a wallet that is already removed reverts: there is nothing verified to clear.
+    function test_removeIdentity_revertsWhenAlreadyRemoved() public {
+        vm.startPrank(agent);
+        registry.registerIdentity(investor, ES, true, futureExpiry);
+        registry.removeIdentity(investor);
+        vm.expectRevert(abi.encodeWithSelector(IIdentityRegistry.IdentityNotFound.selector, investor));
+        registry.removeIdentity(investor);
+        vm.stopPrank();
     }
 
     function test_removeIdentity_revertsWhenNotFound() public {

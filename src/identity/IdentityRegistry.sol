@@ -128,12 +128,18 @@ contract IdentityRegistry is IIdentityRegistry, AccessControl, EIP712 {
 
     /// @inheritdoc IIdentityRegistry
     function removeIdentity(address investor) external onlyRole(Roles.AGENT_ROLE) {
-        if (!_identities[investor].verified) revert IdentityNotFound(investor);
+        Identity storage record = _identities[investor];
+        if (!record.verified) revert IdentityNotFound(investor);
 
         // Retire every attestation issued for this wallet so far. Without this, a signature that
         // was issued but never submitted would re-register the investor after the removal.
         ++_nonces[investor];
-        delete _identities[investor];
+
+        // Clear everything that makes the wallet verified, but keep the investor id. Removal
+        // suspends a wallet; it does not change who owns it, and forced recovery still has to
+        // match a removed wallet to the same investor's new wallet to move the position out.
+        _identities[investor] =
+            Identity({verified: false, accredited: false, country: 0, kycExpiry: 0, investorId: record.investorId});
 
         emit IdentityRemoved(investor);
     }

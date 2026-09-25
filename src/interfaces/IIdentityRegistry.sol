@@ -158,8 +158,12 @@ interface IIdentityRegistry {
     ) external;
 
     /**
-     * @notice Deletes an investor record.
+     * @notice Withdraws an investor's verification.
      * @dev Restricted to AGENT. Also used by the token's recovery flow to retire a lost wallet.
+     *      Clears `verified`, `accredited`, `country` and `kycExpiry`, and advances the nonce, but
+     *      keeps `investorId`, so a removed wallet can still be recovered into another wallet of
+     *      the same investor. Reverts with `IdentityNotFound` if the wallet is not currently
+     *      registered. The wallet can be registered again later through either door.
      * @param investor The investor wallet.
      */
     function removeIdentity(address investor) external;
@@ -204,7 +208,8 @@ interface IIdentityRegistry {
      * @dev Zero when no record exists, which is why callers comparing two wallets must reject a
      *      zero result rather than treat it as a match.
      * @param investor The investor wallet.
-     * @return The investor identifier, zero if no record exists.
+     * @return The investor identifier, zero if the wallet was never registered. It survives
+     *         `removeIdentity`.
      */
     function investorId(address investor) external view returns (bytes32);
 

@@ -201,7 +201,10 @@ contract SecurityToken is ISecurityToken, ERC20, AccessControl, Pausable, Reentr
         // sender, and so the partial-freeze gate cannot block the custodian's own move.
         delete _frozenTokens[lostWallet];
         delete _frozen[lostWallet];
-        _identityRegistry.removeIdentity(lostWallet);
+        // The agent may already have removed the lost wallet (a suspension before the loss was
+        // reported). Its investor id survives removal, which is what let the check above pass, and
+        // removing it a second time would revert.
+        if (_identityRegistry.identity(lostWallet).verified) _identityRegistry.removeIdentity(lostWallet);
 
         // Move the full balance. The flag exempts this one move from both the pause and the
         // transfer gate, and is cleared immediately after, so nothing beyond this transfer passes.
