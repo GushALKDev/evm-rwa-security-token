@@ -402,6 +402,19 @@ contract IdentityRegistryTest is Test {
         }
     }
 
+    /// @dev Every write to a record advances the nonce, not only a signed registration: an agent
+    ///      registration and a removal both retire attestations issued before them.
+    function test_nonces_advanceOnAgentWritesAndRemoval() public {
+        vm.startPrank(agent);
+        registry.registerIdentity(investor, ES, true, futureExpiry);
+        assertEq(registry.nonces(investor), 1);
+        registry.registerIdentity(investor, ES, true, futureExpiry, keccak256("id"));
+        assertEq(registry.nonces(investor), 2);
+        registry.removeIdentity(investor);
+        assertEq(registry.nonces(investor), 3);
+        vm.stopPrank();
+    }
+
     /// @dev Nonces are per-investor, so one investor's activity cannot invalidate another's.
     function test_nonces_areIndependentPerInvestor() public {
         bytes memory sigA = _sign(signerKey, investor, ES, true, futureExpiry);

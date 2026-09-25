@@ -137,7 +137,8 @@ interface IIdentityRegistry {
      *      signed payload binds the investor, attributes, expiry and the investor's current
      *      nonce, under a domain separator carrying chainId and this contract's address. The
      *      nonce closes replay within the validity window (for example re-registration after a
-     *      removal); the expiry alone would not.
+     *      removal); the expiry alone would not. Agent registrations and removals advance the
+     *      nonce too, so an attestation issued before either can no longer be submitted.
      * @param investor The investor wallet.
      * @param country ISO 3166-1 numeric country code.
      * @param accredited Accredited investor flag.
@@ -209,7 +210,8 @@ interface IIdentityRegistry {
 
     /**
      * @notice Returns the current attestation nonce for an investor.
-     * @dev Must be included in the next EIP-712 attestation for this investor.
+     * @dev Must be included in the next EIP-712 attestation for this investor. Advanced by every
+     *      write to the record: a signed registration, an agent registration and a removal.
      * @param investor The investor wallet.
      * @return The current nonce.
      */

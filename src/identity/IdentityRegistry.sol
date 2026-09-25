@@ -35,7 +35,9 @@ contract IdentityRegistry is IIdentityRegistry, AccessControl, EIP712 {
      * @notice EIP-712 type hash for an identity attestation.
      * @dev The nonce is part of the signed struct: it is what stops a signature being replayed
      *      inside its validity window, for example to silently re-register an investor an agent
-     *      had just removed. The expiry alone would not close that.
+     *      had just removed. The expiry alone would not close that. Every write to a record
+     *      advances it (a signed registration, an agent registration and a removal), so no
+     *      attestation issued before the latest write can be submitted after it.
      */
     bytes32 public constant ATTESTATION_TYPEHASH = keccak256(
         "IdentityAttestation(address investor,uint16 country,bool accredited,uint64 kycExpiry,bytes32 investorId,uint256 nonce)"
@@ -48,7 +50,7 @@ contract IdentityRegistry is IIdentityRegistry, AccessControl, EIP712 {
     /// @dev Investor records. Slot 0 holds the verification attributes read on every transfer.
     mapping(address investor => Identity record) private _identities;
 
-    /// @dev Per-investor attestation nonce, incremented on every successful signed registration.
+    /// @dev Per-investor attestation nonce, advanced on every write to the investor's record.
     mapping(address investor => uint256 nonce) private _nonces;
 
     /// @dev The single address authorized to sign attestations.
@@ -81,6 +83,8 @@ contract IdentityRegistry is IIdentityRegistry, AccessControl, EIP712 {
         external
         onlyRole(Roles.AGENT_ROLE)
     {
+        // An agent write supersedes any attestation issued before it.
+        ++_nonces[investor];
         _register(investor, country_, accredited, kycExpiry, bytes32(0), false);
     }
 
@@ -89,6 +93,8 @@ contract IdentityRegistry is IIdentityRegistry, AccessControl, EIP712 {
         external
         onlyRole(Roles.AGENT_ROLE)
     {
+        // An agent write supersedes any attestation issued before it.
+        ++_nonces[investor];
         _register(investor, country_, accredited, kycExpiry, investorId_, false);
     }
 
@@ -124,6 +130,9 @@ contract IdentityRegistry is IIdentityRegistry, AccessControl, EIP712 {
     function removeIdentity(address investor) external onlyRole(Roles.AGENT_ROLE) {
         if (!_identities[investor].verified) revert IdentityNotFound(investor);
 
+        // Retire every attestation issued for this wallet so far. Without this, a signature that
+        // was issued but never submitted would re-register the investor after the removal.
+        ++_nonces[investor];
         delete _identities[investor];
 
         emit IdentityRemoved(investor);
