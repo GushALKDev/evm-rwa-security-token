@@ -11,6 +11,7 @@ import {AbstractComplianceModule} from "./AbstractComplianceModule.sol";
 import {IComplianceModule} from "../../interfaces/IComplianceModule.sol";
 import {IDividendDistributor} from "../../interfaces/IDividendDistributor.sol";
 import {ISecurityToken} from "../../interfaces/ISecurityToken.sol";
+import {IIdentityRegistry} from "../../interfaces/IIdentityRegistry.sol";
 import {Roles} from "../../Roles.sol";
 
 /**
@@ -67,17 +68,24 @@ import {Roles} from "../../Roles.sol";
  *
  *      This is a compliance module. It is registered on the engine like a rule and gets its
  *      accounting from the lifecycle hooks the engine already fans out, so `SecurityToken` needs
- *      no dividend-specific hook and was not modified to support it. `moduleCheck` always returns
- *      true: the distributor observes transfers, it never blocks one. Withholding income is a
- *      matter for the freeze controls on the token, not for the transfer gate.
+ *      no dividend-specific hook; the only change it needed was the `recovering()` view.
+ *      `moduleCheck` always returns true: the distributor observes transfers, it never blocks one.
+ *
+ *      Withholding income is tied to the token's own controls rather than to the transfer gate:
+ *      `claim` reverts while the caller is fully frozen on the token or not verified in the
+ *      token's identity registry. Nothing is forfeited, the entitlement keeps accruing and is
+ *      released when the freeze is lifted or the holder is verified again. A partial freeze does
+ *      not block a claim, since it immobilises a lot of tokens rather than the holder. The
+ *      registry is read through the token (`identityRegistry()`), not taken as a constructor
+ *      argument, so the distributor cannot disagree with the token about which registry decides.
  *
  *      Forced recovery needs its own branch in the transfer hook. The hook fires on that path, but
  *      settling it like a sale would strand the unclaimed income on the compromised wallet, where
  *      whoever holds its keys could still withdraw it: the tokens would be rescued and the money
  *      left behind. The module therefore asks the token whether it is mid recovery and, if so,
  *      carries the entitlement across with the balance rather than splitting it between the two
- *      wallets. This is the one place the distributor depends on the token being a SecurityToken
- *      and not merely an ERC-20.
+ *      wallets. This, and the freeze and identity reads in `claim`, are where the distributor
+ *      depends on the token being a SecurityToken and not merely an ERC-20.
  */
 contract DividendDistributor is AbstractComplianceModule, IDividendDistributor, AccessControl, ReentrancyGuard {
     using SafeERC20 for IERC20;
@@ -185,11 +193,16 @@ contract DividendDistributor is AbstractComplianceModule, IDividendDistributor, 
     /**
      * @inheritdoc IDividendDistributor
      * @dev Pull, not push: the contract never iterates holders to pay them, and a holder that
-     *      cannot receive the currency cannot block anyone else's claim. Guarded and CEI-ordered,
-     *      so a malicious currency cannot reenter to claim twice.
+     *      cannot receive the currency cannot block anyone else's claim. CEI-ordered, so a
+     *      reentrant claim finds the withdrawal already recorded and has nothing left to take; the
+     *      guard rejects the reentry before it gets that far.
      */
     function claim(address to) external nonReentrant {
         if (to == address(0)) revert ZeroAddress();
+        if (_token.isFrozen(msg.sender)) revert ClaimantFrozen(msg.sender);
+        if (!IIdentityRegistry(_token.identityRegistry()).isVerified(msg.sender)) {
+            revert ClaimantNotVerified(msg.sender);
+        }
 
         uint256 amount = claimable(msg.sender);
         if (amount == 0) revert NothingToClaim(msg.sender);

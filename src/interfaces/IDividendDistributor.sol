@@ -49,6 +49,13 @@ interface IDividendDistributor {
     /// @notice Thrown when a claim would pay nothing.
     error NothingToClaim(address account);
 
+    /// @notice Thrown when a fully frozen holder claims. The entitlement is kept, not forfeited.
+    error ClaimantFrozen(address account);
+
+    /// @notice Thrown when a holder that is not verified (removed or expired KYC) claims. The
+    ///         entitlement is kept, not forfeited.
+    error ClaimantNotVerified(address account);
+
     /*//////////////////////////////////////////////////////////////
                                DISTRIBUTION
     //////////////////////////////////////////////////////////////*/
@@ -61,6 +68,11 @@ interface IDividendDistributor {
 
     /**
      * @notice Withdraws the caller's accrued dividends.
+     * @dev Reverts while the caller is fully frozen on the token or not verified in its identity
+     *      registry (an expired KYC counts as not verified). Income keeps accruing while the
+     *      holder is blocked and becomes claimable once the freeze is lifted or the holder is
+     *      verified again. A partial freeze does not block a claim: it immobilises tokens, not the
+     *      holder's income.
      * @param to The address to pay.
      */
     function claim(address to) external;

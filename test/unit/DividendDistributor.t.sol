@@ -205,6 +205,47 @@ contract DividendDistributorTest is Test {
         dist.claim(address(0));
     }
 
+    /// @dev A fully frozen holder is refused, whatever they are owed.
+    function test_claim_revertsWhileFullyFrozen() public {
+        _mint(alice, SHARES);
+        _deposit(INCOME);
+        token.setFrozen(alice, true);
+
+        vm.prank(alice);
+        vm.expectRevert(abi.encodeWithSelector(IDividendDistributor.ClaimantFrozen.selector, alice));
+        dist.claim(alice);
+    }
+
+    /// @dev A holder the registry does not verify is refused.
+    function test_claim_revertsWhileUnverified() public {
+        _mint(alice, SHARES);
+        _deposit(INCOME);
+        token.setVerified(alice, false);
+
+        vm.prank(alice);
+        vm.expectRevert(abi.encodeWithSelector(IDividendDistributor.ClaimantNotVerified.selector, alice));
+        dist.claim(alice);
+    }
+
+    /// @dev Blocking withholds the payout, not the accrual: a deposit made while blocked is owed
+    ///      in full once the block is lifted.
+    function test_claim_entitlementAccruesWhileBlocked() public {
+        _mint(alice, SHARES);
+        token.setFrozen(alice, true);
+        token.setVerified(alice, false);
+        _deposit(INCOME);
+        _deposit(INCOME);
+
+        token.setFrozen(alice, false);
+        token.setVerified(alice, true);
+        uint256 owed = dist.claimable(alice);
+        _assertOwed(owed, INCOME * 2, "blocked holder lost accrued income");
+
+        vm.prank(alice);
+        dist.claim(alice);
+        assertEq(currency.balanceOf(alice), owed);
+    }
+
     function test_claim_revertsWhenNothingAccrued() public {
         _mint(alice, SHARES);
         _deposit(INCOME);

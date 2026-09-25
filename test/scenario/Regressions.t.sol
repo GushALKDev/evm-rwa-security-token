@@ -7,6 +7,9 @@ import {MessageHashUtils} from "@openzeppelin/contracts/utils/cryptography/Messa
 import {Deploy} from "../../script/Deploy.s.sol";
 import {ISecurityToken} from "../../src/interfaces/ISecurityToken.sol";
 import {IIdentityRegistry} from "../../src/interfaces/IIdentityRegistry.sol";
+import {IDividendDistributor} from "../../src/interfaces/IDividendDistributor.sol";
+import {DividendDistributor} from "../../src/compliance/modules/DividendDistributor.sol";
+import {MockCurrency} from "../helpers/MockCurrency.sol";
 
 /**
  * @title RegressionsTest
@@ -64,6 +67,14 @@ contract RegressionsTest is Test, Deploy {
         bytes32 digest = MessageHashUtils.toTypedDataHash(d.identityRegistry.domainSeparator(), structHash);
         (uint8 v, bytes32 r, bytes32 s) = vm.sign(key, digest);
         return abi.encodePacked(r, s, v);
+    }
+
+    function _attachDistributor() internal returns (DividendDistributor dist, MockCurrency currency) {
+        currency = new MockCurrency();
+        dist = new DividendDistributor(address(d.compliance), address(d.token), address(currency), issuer);
+        d.compliance.addModule(address(dist));
+        currency.mint(issuer, 1_000_000e6);
+        currency.approve(address(dist), type(uint256).max);
     }
 
     function _liveHolders(address[4] memory wallets) internal view returns (uint256 live) {
@@ -271,5 +282,81 @@ contract RegressionsTest is Test, Deploy {
         d.token.forcedRecovery(alice, aliceNew);
 
         assertEq(d.lockup.lockStart(aliceNew), earlier);
+    }
+
+    /*//////////////////////////////////////////////////////////////
+          INCOME IS WITHHELD FROM FROZEN AND UNVERIFIED HOLDERS
+    //////////////////////////////////////////////////////////////*/
+
+    /// @dev A fully frozen holder cannot claim, and the income is kept for them rather than
+    ///      forfeited: lifting the freeze releases it, including what accrued meanwhile.
+    function test_claim_blockedWhileFullyFrozen_releasedAfterUnfreeze() public {
+        (DividendDistributor dist, MockCurrency currency) = _attachDistributor();
+        _onboard(alice);
+        d.token.mint(alice, AMOUNT);
+        dist.deposit(900e6);
+        vm.prank(agent);
+        d.token.setAddressFrozen(alice, true);
+        dist.deposit(900e6);
+
+        vm.prank(alice);
+        vm.expectRevert(abi.encodeWithSelector(IDividendDistributor.ClaimantFrozen.selector, alice));
+        dist.claim(alice);
+
+        vm.prank(agent);
+        d.token.setAddressFrozen(alice, false);
+        uint256 owed = dist.claimable(alice);
+        assertGe(owed + 1, 1_800e6, "income accrued during the freeze was lost");
+        vm.prank(alice);
+        dist.claim(alice);
+        assertEq(currency.balanceOf(alice), owed);
+    }
+
+    /// @dev A holder whose identity was withdrawn cannot claim until verified again.
+    function test_claim_blockedWhileUnverified_releasedAfterReverification() public {
+        (DividendDistributor dist, MockCurrency currency) = _attachDistributor();
+        _onboard(alice);
+        d.token.mint(alice, AMOUNT);
+        dist.deposit(900e6);
+        vm.prank(agent);
+        d.identityRegistry.removeIdentity(alice);
+
+        vm.prank(alice);
+        vm.expectRevert(abi.encodeWithSelector(IDividendDistributor.ClaimantNotVerified.selector, alice));
+        dist.claim(alice);
+
+        _onboard(alice);
+        vm.prank(alice);
+        dist.claim(alice);
+        assertEq(currency.balanceOf(alice), 900e6 - 1);
+    }
+
+    /// @dev An expired KYC counts as not verified.
+    function test_claim_blockedAfterKycExpiry() public {
+        (DividendDistributor dist,) = _attachDistributor();
+        vm.prank(agent);
+        d.identityRegistry.registerIdentity(alice, ES, true, uint64(block.timestamp + 30 days));
+        d.token.mint(alice, AMOUNT);
+        dist.deposit(900e6);
+        vm.warp(block.timestamp + 30 days);
+
+        vm.prank(alice);
+        vm.expectRevert(abi.encodeWithSelector(IDividendDistributor.ClaimantNotVerified.selector, alice));
+        dist.claim(alice);
+    }
+
+    /// @dev A partial freeze immobilises a lot of tokens, not the holder, so it does not withhold
+    ///      income.
+    function test_claim_allowedUnderPartialFreeze() public {
+        (DividendDistributor dist, MockCurrency currency) = _attachDistributor();
+        _onboard(alice);
+        d.token.mint(alice, AMOUNT);
+        dist.deposit(900e6);
+        vm.prank(agent);
+        d.token.freezePartialTokens(alice, AMOUNT);
+
+        vm.prank(alice);
+        dist.claim(alice);
+        assertEq(currency.balanceOf(alice), 900e6 - 1);
     }
 }
