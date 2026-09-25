@@ -369,6 +369,8 @@ This is the one place the distributor depends on the token being a `SecurityToke
 
 `deposit` reverts on zero supply rather than accruing to nobody. A consequence worth noting: once the note is fully amortised and supply reaches zero, no further deposit is possible, but everything deposited earlier stays claimable by its holders, who by then hold no tokens at all, and are made whole by their negative corrections.
 
+The settlement currency has to be a standard ERC-20. `deposit` raises the accumulator by `amount` and then pulls `amount` with `safeTransferFrom`, without measuring what actually arrived, so a fee-on-transfer or rebasing currency would leave the contract owing more than it holds. Such currencies are not supported, and nothing in the contract detects or rejects them; the currency is fixed at construction.
+
 ---
 
 **See also:**
