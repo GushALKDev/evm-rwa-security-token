@@ -37,7 +37,7 @@ Built one contract per unit in dependency order, each with its own unit and fuzz
 | 7 | Documentation and threat model | Done |
 | 8 | Stretch: dividend distribution | Done |
 
-Current state: **303 tests passing, 100% line/statement/branch/function coverage on every `src/` contract.** Every test is catalogued in the [testing section](docs/tests/README.md).
+Current state: **303 tests passing across twelve suites** (`forge test`), and **100% line, statement, branch and function coverage on every `src/` contract** (`forge coverage --report summary`, which runs without `--ir-minimum`). The deployment script itself is not fully covered: `script/Deploy.s.sol` reports 60.71% of lines, because the tests call `_deploy` directly and never `run()`. Every test is catalogued in the [testing section](docs/tests/README.md).
 
 ## Documentation
 
@@ -394,7 +394,7 @@ forge test
 
 Formatting (enforced in CI): `forge fmt`.
 
-`forge test` runs all 303 tests across eleven suites (eight unit, two scenario, one invariant). The invariant suite is worth running deeper than its default before trusting a change to a stateful module:
+`forge test` runs all 303 tests across twelve suites (nine unit, two scenario, one invariant): 274 concrete tests, 22 fuzz tests and 7 stateful invariants. The default profile runs 256 fuzz runs per fuzz test and 64 runs of depth 64 per invariant; the `ci` profile (`FOUNDRY_PROFILE=ci forge test`) raises these to 1,000 fuzz runs and 256 invariant runs of depth 128. The invariant suite is worth running deeper than its default before trusting a change to a stateful module:
 
 ```bash
 FOUNDRY_INVARIANT_RUNS=300 FOUNDRY_INVARIANT_DEPTH=100 forge test --match-path 'test/invariant/*'
@@ -408,7 +408,7 @@ The dividend arithmetic is sensitive to rounding in a way the default fuzz budge
 FOUNDRY_FUZZ_RUNS=20000 forge test --match-contract DividendDistributorTest
 ```
 
-Both bugs that suite found were only reachable across *repeated* deposits: every single-deposit property passed while the contract was quietly becoming insolvent. See the [testing section](docs/tests/README.md) for the full catalogue.
+The compounding-insolvency bug that suite found was only reachable across *repeated* deposits: every single-deposit property passed while the contract was quietly becoming insolvent. See the [testing section](docs/tests/README.md) for the full catalogue.
 
 ## License
 
