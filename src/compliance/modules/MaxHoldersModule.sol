@@ -146,10 +146,15 @@ contract MaxHoldersModule is AbstractComplianceModule, AccessControl {
         // balanceOf(to) == amount read as "came from zero" while the sender is plainly not empty,
         // so the two signals fail to cancel and the count would rise for a holder who never
         // appeared. Anyone could then inflate the count at will and exhaust the cap.
-        if (from == to) return;
+        //
+        // A zero amount moves nothing either, and must be discarded for the mirror reason: a
+        // sender that already held zero reads as "just left" while nobody joined, so the count
+        // would fall for a holder who never existed. `transferFrom(emptyWallet, x, 0)` needs no
+        // allowance, so any address could drain the count and walk past the cap.
+        if (from == to || amount == 0) return;
 
         // Hooks run after balances move: balanceOf(to) == amount means "to" came from zero.
-        bool recipientJoined = _token.balanceOf(to) == amount && amount != 0;
+        bool recipientJoined = _token.balanceOf(to) == amount;
         bool senderLeft = _token.balanceOf(from) == 0;
 
         if (recipientJoined == senderLeft) return; // both or neither: count is unchanged
@@ -161,8 +166,8 @@ contract MaxHoldersModule is AbstractComplianceModule, AccessControl {
 
     /// @inheritdoc IComplianceModule
     function moduleCreated(address to, uint256 amount) external onlyCompliance {
-        // A mint has no sender to offset the new holder.
-        if (_token.balanceOf(to) != amount || amount == 0) return;
+        // A zero mint adds no holder. Otherwise a mint has no sender to offset the new holder.
+        if (amount == 0 || _token.balanceOf(to) != amount) return;
 
         ++_holderCount;
 
@@ -170,9 +175,11 @@ contract MaxHoldersModule is AbstractComplianceModule, AccessControl {
     }
 
     /// @inheritdoc IComplianceModule
-    function moduleDestroyed(address from, uint256) external onlyCompliance {
-        // A burn that empties an account removes a holder.
-        if (_token.balanceOf(from) != 0) return;
+    function moduleDestroyed(address from, uint256 amount) external onlyCompliance {
+        // A burn that empties an account removes a holder. A zero burn empties nothing: without
+        // this guard, burning zero from a wallet that already held nothing would remove a holder
+        // that was never counted.
+        if (amount == 0 || _token.balanceOf(from) != 0) return;
 
         --_holderCount;
 

@@ -224,8 +224,8 @@ contract DividendDistributor is AbstractComplianceModule, IDividendDistributor, 
         // discarded rather than allowed to net out: the two updates below would cancel exactly,
         // but only after transiting through an intermediate value, and skipping the write is both
         // cheaper and immune to the sign-handling trap that the same inference caused in
-        // MaxHoldersModule.
-        if (from == to) return;
+        // MaxHoldersModule. A zero amount moves no shares, so it owes no correction either.
+        if (from == to || amount == 0) return;
 
         // A forced recovery is not a sale, and settling it like one would leave the unclaimed
         // income behind on a wallet the investor no longer controls, for whoever compromised it to

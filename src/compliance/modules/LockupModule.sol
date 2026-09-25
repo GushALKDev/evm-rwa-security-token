@@ -139,6 +139,8 @@ contract LockupModule is AbstractComplianceModule, AccessControl {
 
     /// @inheritdoc IComplianceModule
     function moduleTransferred(address from, address to, uint256 amount) external onlyCompliance {
+        // A zero amount acquires and disposes of nothing, so it can neither start nor clear a clock.
+        if (amount == 0) return;
         _startClockIfNew(to, amount);
         _clearClockIfExited(from);
     }
@@ -151,7 +153,8 @@ contract LockupModule is AbstractComplianceModule, AccessControl {
     }
 
     /// @inheritdoc IComplianceModule
-    function moduleDestroyed(address from, uint256) external onlyCompliance {
+    function moduleDestroyed(address from, uint256 amount) external onlyCompliance {
+        if (amount == 0) return;
         _clearClockIfExited(from);
     }
 
