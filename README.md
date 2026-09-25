@@ -386,13 +386,13 @@ The consequence, stated plainly: the AGENT/CUSTODIAN separation is an **operatio
 Requires [Foundry](https://book.getfoundry.sh/getting-started/installation).
 
 ```bash
-git clone --recurse-submodules <repo-url>
-cd rwa-security-token
+git clone --recurse-submodules https://github.com/GushALKDev/evm-rwa-security-token
+cd evm-rwa-security-token
 forge build
 forge test
 ```
 
-Formatting (enforced in CI): `forge fmt`.
+Formatting is `forge fmt` with the default configuration (`foundry.toml` has no `[fmt]` section). CI ([`.github/workflows/test.yml`](.github/workflows/test.yml)) runs `forge fmt --check`, `forge build --sizes` and `forge test -vvv` under `FOUNDRY_PROFILE=ci` on every push and pull request.
 
 `forge test` runs all 303 tests across twelve suites (nine unit, two scenario, one invariant): 274 concrete tests, 22 fuzz tests and 7 stateful invariants. The default profile runs 256 fuzz runs per fuzz test and 64 runs of depth 64 per invariant; the `ci` profile (`FOUNDRY_PROFILE=ci forge test`) raises these to 1,000 fuzz runs and 256 invariant runs of depth 128. The invariant suite is worth running deeper than its default before trusting a change to a stateful module:
 

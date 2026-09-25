@@ -60,7 +60,7 @@ These are enforced consistently across the codebase and are worth naming, becaus
 
 Immutables use OZ v5 `_camelCase` (e.g. `_compliance`, `_token`), deliberately **not** the `SCREAMING_SNAKE_CASE` that `forge lint` suggests. This is intentional and should not be "fixed".
 
-Formatting is `forge fmt`, enforced in CI.
+Formatting is `forge fmt` with the default configuration; CI (`.github/workflows/test.yml`) runs `forge fmt --check`.
 
 ---
 
