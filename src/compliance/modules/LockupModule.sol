@@ -2,10 +2,10 @@
 pragma solidity ^0.8.24;
 
 import {AccessControl} from "@openzeppelin/contracts/access/AccessControl.sol";
-import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 
 import {AbstractComplianceModule} from "./AbstractComplianceModule.sol";
 import {IComplianceModule} from "../../interfaces/IComplianceModule.sol";
+import {ISecurityToken} from "../../interfaces/ISecurityToken.sol";
 import {Roles} from "../../Roles.sol";
 
 /**
@@ -64,8 +64,9 @@ contract LockupModule is AbstractComplianceModule, AccessControl {
                                  STORAGE
     //////////////////////////////////////////////////////////////*/
 
-    /// @dev The token whose balances define acquisition.
-    IERC20 private immutable _token;
+    /// @dev The token whose balances define acquisition. Typed as ISecurityToken rather than
+    ///      IERC20 so the transfer hook can ask whether a move is a forced recovery.
+    ISecurityToken private immutable _token;
 
     /// @dev Seconds an investor must hold before they may send.
     uint64 private _lockupPeriod;
@@ -90,7 +91,7 @@ contract LockupModule is AbstractComplianceModule, AccessControl {
     {
         if (token_ == address(0) || issuer == address(0) || agent == address(0)) revert ZeroAddress();
 
-        _token = IERC20(token_);
+        _token = ISecurityToken(token_);
         _lockupPeriod = lockupPeriod_;
         _grantRole(DEFAULT_ADMIN_ROLE, issuer);
         _grantRole(Roles.AGENT_ROLE, agent);
@@ -141,6 +142,14 @@ contract LockupModule is AbstractComplianceModule, AccessControl {
     function moduleTransferred(address from, address to, uint256 amount) external onlyCompliance {
         // A zero amount acquires and disposes of nothing, so it can neither start nor clear a clock.
         if (amount == 0) return;
+        // A forced recovery is not an acquisition. The hook cannot tell it from a sale, so the
+        // module asks the token, as DividendDistributor does. Treating it as a sale would start a
+        // fresh full-period clock on the destination and lock an investor again for moving
+        // their own position out of a lost wallet.
+        if (_token.recovering()) {
+            _carryClock(from, to);
+            return;
+        }
         _startClockIfNew(to, amount);
         _clearClockIfExited(from);
     }
@@ -225,6 +234,27 @@ contract LockupModule is AbstractComplianceModule, AccessControl {
         _lockStart[to] = start;
 
         emit LockupStarted(to, start, start + _lockupPeriod);
+    }
+
+    /**
+     * @dev Moves a clock across a forced recovery. The lost wallet always ends empty, so its clock
+     *      is cleared. The destination keeps the earlier of the two starts: both wallets belong to
+     *      one investor, and the lockup runs from that investor's initial acquisition.
+     * @param from The lost wallet.
+     * @param to The recovery destination.
+     */
+    function _carryClock(address from, address to) private {
+        uint64 lostStart = _lockStart[from];
+        if (lostStart == 0) return;
+
+        delete _lockStart[from];
+        emit LockupCleared(from);
+
+        uint64 destStart = _lockStart[to];
+        if (destStart != 0 && destStart <= lostStart) return;
+
+        _lockStart[to] = lostStart;
+        emit LockupStarted(to, lostStart, lostStart + _lockupPeriod);
     }
 
     /**

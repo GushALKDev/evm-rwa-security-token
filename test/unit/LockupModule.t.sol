@@ -197,6 +197,58 @@ contract LockupModuleTest is Test {
     }
 
     /*//////////////////////////////////////////////////////////////
+                            FORCED RECOVERY
+    //////////////////////////////////////////////////////////////*/
+
+    /// @dev Mirrors the token's recovery path: the balance moves, then the hook fires while the
+    ///      token reports that a recovery is in progress.
+    function _recover(address from, address to) internal {
+        uint256 amount = token.balanceOf(from);
+        vm.prank(from);
+        token.transfer(to, amount);
+        token.setRecovering(true);
+        vm.prank(engine);
+        module.moduleTransferred(from, to, amount);
+        token.setRecovering(false);
+    }
+
+    /// @dev Recovery into an empty wallet hands over the lost wallet's start, not a fresh one.
+    function test_recovery_carriesClockToEmptyWallet() public {
+        _mint(alice, AMOUNT);
+        uint64 start = module.lockStart(alice);
+        vm.warp(block.timestamp + 100 days);
+
+        _recover(alice, bob);
+
+        assertEq(module.lockStart(bob), start);
+        assertEq(module.lockStart(alice), 0);
+    }
+
+    /// @dev A destination whose own clock is older keeps it: the earlier acquisition wins.
+    function test_recovery_keepsDestinationsEarlierStart() public {
+        _mint(bob, AMOUNT);
+        uint64 bobStart = module.lockStart(bob);
+        vm.warp(block.timestamp + 10 days);
+        _mint(alice, AMOUNT);
+
+        _recover(alice, bob);
+
+        assertEq(module.lockStart(bob), bobStart);
+        assertEq(module.lockStart(alice), 0);
+    }
+
+    /// @dev A lost wallet with no clock (a position acquired before the module existed) has
+    ///      nothing to carry, and the destination's state is left alone.
+    function test_recovery_withoutClockOnLostWallet_changesNothing() public {
+        token.mint(alice, AMOUNT);
+
+        _recover(alice, bob);
+
+        assertEq(module.lockStart(bob), 0);
+        assertEq(module.lockStart(alice), 0);
+    }
+
+    /*//////////////////////////////////////////////////////////////
                             CLOCK CLEARING
     //////////////////////////////////////////////////////////////*/
 

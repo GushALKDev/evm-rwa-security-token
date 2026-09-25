@@ -15,7 +15,7 @@ import {MockToken} from "../helpers/MockToken.sol";
 
 contract DividendDistributorTest is Test {
     DividendDistributor internal dist;
-    MockRecoverableToken internal token;
+    MockToken internal token;
     MockCurrency internal currency;
 
     address internal engine = makeAddr("compliance");
@@ -33,7 +33,7 @@ contract DividendDistributorTest is Test {
     uint256 internal constant DUST = 1;
 
     function setUp() public {
-        token = new MockRecoverableToken();
+        token = new MockToken();
         currency = new MockCurrency();
         dist = new DividendDistributor(engine, address(token), address(currency), issuer);
 
@@ -608,20 +608,6 @@ contract DividendDistributorTest is Test {
             dist.claim(bob);
             assertEq(currency.balanceOf(bob), owedBob);
         }
-    }
-}
-
-/**
- * @notice A MockToken that can report itself as mid forced recovery.
- * @dev The distributor asks the token whether a transfer is a recovery, which a plain ERC-20
- *      cannot answer. Only the flag is modelled here, not the recovery logic: the real interaction
- *      with `SecurityToken.forcedRecovery` is covered end to end in the scenario suite.
- */
-contract MockRecoverableToken is MockToken {
-    bool public recovering;
-
-    function setRecovering(bool value) external {
-        recovering = value;
     }
 }
 

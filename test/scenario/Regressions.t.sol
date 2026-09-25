@@ -210,4 +210,66 @@ contract RegressionsTest is Test, Deploy {
         assertEq(d.token.balanceOf(alice), 0);
         assertFalse(d.identityRegistry.isVerified(alice));
     }
+
+    /*//////////////////////////////////////////////////////////////
+              FORCED RECOVERY DOES NOT RESTART THE LOCKUP
+    //////////////////////////////////////////////////////////////*/
+
+    /// @dev A position whose lockup already expired must still be free after recovery. The
+    ///      recovery hook used to look like a fresh acquisition to `LockupModule`, which started a
+    ///      new full-period clock on the destination.
+    function test_forcedRecovery_keepsAnExpiredLockupExpired() public {
+        bytes32 id = keccak256("investor-alice");
+        address aliceNew = makeAddr("aliceNew");
+        _onboardAs(alice, id);
+        _onboardAs(aliceNew, id);
+        _onboard(bob);
+        d.token.mint(alice, AMOUNT);
+        uint64 start = d.lockup.lockStart(alice);
+        vm.warp(block.timestamp + LOCKUP_PERIOD + 1);
+
+        vm.prank(custodian);
+        d.token.forcedRecovery(alice, aliceNew);
+
+        assertEq(d.lockup.lockStart(aliceNew), start, "recovery restarted the clock");
+        assertEq(d.lockup.lockStart(alice), 0, "lost wallet kept a clock");
+        vm.prank(aliceNew);
+        d.token.transfer(bob, 1);
+    }
+
+    /// @dev An unexpired lockup keeps its original unlock time: recovery neither shortens nor
+    ///      extends it.
+    function test_forcedRecovery_keepsTheOriginalUnlockTime() public {
+        bytes32 id = keccak256("investor-alice");
+        address aliceNew = makeAddr("aliceNew");
+        _onboardAs(alice, id);
+        _onboardAs(aliceNew, id);
+        d.token.mint(alice, AMOUNT);
+        uint64 unlocksAt = d.lockup.unlocksAt(alice);
+        vm.warp(block.timestamp + 100 days);
+
+        vm.prank(custodian);
+        d.token.forcedRecovery(alice, aliceNew);
+
+        assertEq(d.lockup.unlocksAt(aliceNew), unlocksAt);
+    }
+
+    /// @dev Recovering into a wallet the investor already holds on keeps the earlier of the two
+    ///      starts: both lots belong to one investor, and the lockup runs from initial acquisition.
+    function test_forcedRecovery_intoHoldingWallet_keepsTheEarlierStart() public {
+        bytes32 id = keccak256("investor-alice");
+        address aliceNew = makeAddr("aliceNew");
+        _onboardAs(alice, id);
+        _onboardAs(aliceNew, id);
+        d.token.mint(alice, AMOUNT);
+        uint64 earlier = d.lockup.lockStart(alice);
+        vm.warp(block.timestamp + 30 days);
+        d.token.mint(aliceNew, AMOUNT);
+        assertGt(d.lockup.lockStart(aliceNew), earlier);
+
+        vm.prank(custodian);
+        d.token.forcedRecovery(alice, aliceNew);
+
+        assertEq(d.lockup.lockStart(aliceNew), earlier);
+    }
 }
