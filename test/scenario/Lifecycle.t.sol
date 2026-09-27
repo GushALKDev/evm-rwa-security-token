@@ -367,6 +367,11 @@ contract LifecycleTest is Test, Deploy {
     /**
      * @dev Every rule must pass, so clearing one is not enough. Walk a transfer past each blocker
      *      in turn and confirm it only settles once the last one is cleared.
+     *
+     *      The engine reports a modular rejection as one `ComplianceCheckFailed`, which does not
+     *      say which module refused: `canTransfer` returns a bool in ERC-3643 and this repository
+     *      keeps that interface. So each step also asks every module for its own verdict, which
+     *      pins the rejection on the rule the step expects.
      */
     function test_scenario_everyRuleMustPassIndependently() public {
         _onboard(alice, ES);
@@ -384,16 +389,22 @@ contract LifecycleTest is Test, Deploy {
         vm.prank(alice);
         d.token.transfer(bob, 1e18);
 
-        // Release the freeze: still blocked, now by the lockup.
+        // Release the freeze: still blocked, by the lockup and the country rule together.
         vm.prank(agent);
         d.token.unfreezePartialTokens(alice, AMOUNT);
-        vm.expectPartialRevert(ISecurityToken.ComplianceCheckFailed.selector);
+        assertFalse(d.lockup.moduleCheck(alice, bob, 1e18), "lockup should refuse");
+        assertFalse(d.countryRestriction.moduleCheck(alice, bob, 1e18), "country rule should refuse");
+        assertTrue(d.maxHolders.moduleCheck(alice, bob, 1e18), "holder cap should allow");
+        vm.expectRevert(abi.encodeWithSelector(ISecurityToken.ComplianceCheckFailed.selector, alice, bob, 1e18));
         vm.prank(alice);
         d.token.transfer(bob, 1e18);
 
         // Clear the lockup: still blocked, now only by the country rule.
         _passLockup();
-        vm.expectPartialRevert(ISecurityToken.ComplianceCheckFailed.selector);
+        assertTrue(d.lockup.moduleCheck(alice, bob, 1e18), "lockup should allow");
+        assertFalse(d.countryRestriction.moduleCheck(alice, bob, 1e18), "country rule should refuse");
+        assertTrue(d.maxHolders.moduleCheck(alice, bob, 1e18), "holder cap should allow");
+        vm.expectRevert(abi.encodeWithSelector(ISecurityToken.ComplianceCheckFailed.selector, alice, bob, 1e18));
         vm.prank(alice);
         d.token.transfer(bob, 1e18);
 
