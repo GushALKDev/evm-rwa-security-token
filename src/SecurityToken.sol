@@ -52,10 +52,10 @@ contract SecurityToken is ISecurityToken, ERC20, AccessControl, Pausable, Reentr
     //////////////////////////////////////////////////////////////*/
 
     /// @dev The identity registry answering "may this address hold the token, and is that current?".
-    IIdentityRegistry private _identityRegistry;
+    IIdentityRegistry private immutable _identityRegistry;
 
     /// @dev The modular compliance engine holding the pluggable rule set.
-    IModularCompliance private _compliance;
+    IModularCompliance private immutable _compliance;
 
     /// @dev Wallets that can neither send nor receive while the flag is set.
     mapping(address investor => bool frozen) private _frozen;

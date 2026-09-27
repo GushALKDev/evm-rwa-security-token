@@ -160,10 +160,16 @@ contract IdentityRegistry is IIdentityRegistry, AccessControl, EIP712 {
 
     /// @inheritdoc IIdentityRegistry
     function isVerified(address investor) external view returns (bool) {
-        Identity memory record = _identities[investor];
+        // A storage pointer reads only the fields used, both in slot 0. Copying the record to
+        // memory would also load the investor id from slot 1, on a path that runs twice per
+        // transfer.
+        Identity storage record = _identities[investor];
+
+        bool verified = record.verified;
+        uint64 kycExpiry = record.kycExpiry;
 
         // An attestation is a statement with a shelf life: a stale record is not a verified one.
-        return record.verified && record.kycExpiry > block.timestamp;
+        return verified && kycExpiry > block.timestamp;
     }
 
     /// @inheritdoc IIdentityRegistry
