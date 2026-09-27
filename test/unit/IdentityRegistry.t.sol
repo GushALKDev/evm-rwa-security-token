@@ -186,8 +186,9 @@ contract IdentityRegistryTest is Test {
         bytes32 sharedId = keccak256("investor-alpha");
         bytes memory sig = _signWithId(signerKey, investor, ES, true, futureExpiry, sharedId);
 
-        // Same signature, different id: the digest no longer matches, so the recovery fails.
-        vm.expectRevert();
+        // Same signature, different id: the digest no longer matches, so the signature recovers
+        // some other address and the signer check rejects it.
+        vm.expectPartialRevert(IIdentityRegistry.InvalidAttestationSigner.selector);
         vm.prank(relayer);
         registry.registerIdentityWithAttestation(investor, ES, true, futureExpiry, keccak256("investor-beta"), sig);
 
@@ -615,18 +616,25 @@ contract IdentityRegistryTest is Test {
         assertEq(registry.isVerified(investor), checkAt < expiry);
     }
 
-    /// @dev Property: only the configured claim signer's signatures are ever accepted.
-    function testFuzz_registerWithAttestation_onlyClaimSignerAccepted(uint256 key) public {
-        key = bound(key, 1, type(uint128).max);
-        vm.assume(vm.addr(key) != signer);
+    /// @dev Property: a signature is accepted if and only if its key is the configured claim
+    ///      signer. Half the runs make the fuzzed key the signer first, so both directions of the
+    ///      equivalence are exercised over the whole secp256k1 key range.
+    function testFuzz_registerWithAttestation_onlyClaimSignerAccepted(uint256 key, bool makeSigner) public {
+        key = bound(key, 1, SECP256K1_ORDER - 1);
+        address keyAddress = vm.addr(key);
+        if (makeSigner) {
+            vm.prank(issuer);
+            registry.setClaimSigner(keyAddress);
+        }
+        bool accepted = keyAddress == registry.claimSigner();
 
         bytes memory sig = _sign(key, investor, ES, true, futureExpiry);
 
         vm.prank(relayer);
-        vm.expectPartialRevert(IIdentityRegistry.InvalidAttestationSigner.selector);
+        if (!accepted) vm.expectPartialRevert(IIdentityRegistry.InvalidAttestationSigner.selector);
         registry.registerIdentityWithAttestation(investor, ES, true, futureExpiry, bytes32(0), sig);
 
-        assertFalse(registry.isVerified(investor));
+        assertEq(registry.isVerified(investor), accepted);
     }
 
     /// @dev Property: a valid attestation is accepted no matter who submits it.
