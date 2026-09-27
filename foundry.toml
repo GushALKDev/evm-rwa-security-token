@@ -10,6 +10,13 @@ remappings = [
     "@openzeppelin/contracts/=lib/openzeppelin-contracts/contracts/",
     "forge-std/=lib/forge-std/src/",
 ]
+# Gas benchmarks are not tests: they are excluded here and run by the gas profile below.
+no_match_path = "test/gas/*"
+
+# Gas benchmarks only: FOUNDRY_PROFILE=gas forge test --isolate --gas-report
+[profile.gas]
+match_path = "test/gas/*"
+no_match_path = "test/scratch/*"
 
 [profile.ci]
 verbosity = 3
