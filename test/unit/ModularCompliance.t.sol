@@ -207,6 +207,43 @@ contract ModularComplianceTest is Test {
         assertEq(engine.token(), tokenAddr);
     }
 
+    /// @dev A module reading the bound token, or no token at all, is accepted in either order.
+    function test_moduleToken_matchingOrZeroIsAccepted() public {
+        moduleA.setToken(tokenAddr);
+        vm.startPrank(issuer);
+        engine.addModule(address(moduleA));
+        engine.bindToken(tokenAddr);
+        engine.addModule(address(moduleB));
+        vm.stopPrank();
+        assertEq(engine.modules().length, 2);
+    }
+
+    /// @dev Bound first, then a module reading another token is offered.
+    function test_addModule_revertsForModuleReadingAnotherToken() public {
+        _bind();
+        moduleA.setToken(stranger);
+        vm.expectRevert(
+            abi.encodeWithSelector(
+                IModularCompliance.ModuleTokenMismatch.selector, address(moduleA), stranger, tokenAddr
+            )
+        );
+        vm.prank(issuer);
+        engine.addModule(address(moduleA));
+    }
+
+    /// @dev Registered first, then the engine is bound to a token the module does not read.
+    function test_bindToken_revertsWhenARegisteredModuleReadsAnotherToken() public {
+        moduleB.setToken(stranger);
+        _addBoth();
+        vm.expectRevert(
+            abi.encodeWithSelector(
+                IModularCompliance.ModuleTokenMismatch.selector, address(moduleB), stranger, tokenAddr
+            )
+        );
+        vm.prank(issuer);
+        engine.bindToken(tokenAddr);
+    }
+
     function test_bindToken_revertsForNonAdmin() public {
         bytes32 adminRole = engine.DEFAULT_ADMIN_ROLE();
         vm.prank(stranger);

@@ -82,6 +82,9 @@ contract ModularCompliance is IModularCompliance, AccessControl {
         // empty state, and a stateful module refuses to come back after a removal, since it missed
         // every movement made while it was out.
         if (!IComplianceModule(module).canComplianceBind(address(this))) revert ModuleCannotBind(module);
+        // Once a token is bound, a module that reads balances must read that token's.
+        address bound = _token;
+        if (bound != address(0)) _requireSameToken(module, bound);
 
         _modules.add(module);
 
@@ -103,10 +106,32 @@ contract ModularCompliance is IModularCompliance, AccessControl {
     function bindToken(address token_) external onlyRole(DEFAULT_ADMIN_ROLE) {
         if (token_ == address(0)) revert ZeroAddress();
         if (_token != address(0)) revert TokenAlreadyBound(_token);
+        // Modules registered before the binding must read the token being bound.
+        uint256 length = _modules.length();
+        for (uint256 i; i < length; ++i) {
+            _requireSameToken(_modules.at(i), token_);
+        }
 
         _token = token_;
 
         emit TokenBound(token_);
+    }
+
+    /*//////////////////////////////////////////////////////////////
+                                INTERNAL
+    //////////////////////////////////////////////////////////////*/
+
+    /**
+     * @dev Reverts if `module` reads a token other than `token_`. A module that reads no token
+     *      reports zero and passes.
+     * @param module The module to check.
+     * @param token_ The token the engine is, or is about to be, bound to.
+     */
+    function _requireSameToken(address module, address token_) private view {
+        address moduleToken = IComplianceModule(module).token();
+        if (moduleToken != address(0) && moduleToken != token_) {
+            revert ModuleTokenMismatch(module, moduleToken, token_);
+        }
     }
 
     /*//////////////////////////////////////////////////////////////

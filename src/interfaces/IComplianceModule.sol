@@ -137,6 +137,14 @@ interface IComplianceModule {
     function compliance() external view returns (address);
 
     /**
+     * @notice The token whose balances this module reads.
+     * @dev Zero for a module that reads no token balances. The engine requires a non-zero value
+     *      to equal its bound token.
+     * @return The token address, or zero.
+     */
+    function token() external view returns (address);
+
+    /**
      * @notice A human readable identifier for the rule, for tooling and audit trails.
      * @return The module name.
      */

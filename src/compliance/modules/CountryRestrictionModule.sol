@@ -135,6 +135,12 @@ contract CountryRestrictionModule is AbstractComplianceModule, AccessControl {
     }
 
     /// @inheritdoc IComplianceModule
+    /// @dev Zero: the rule reads the registry, not token balances.
+    function token() external pure returns (address) {
+        return address(0);
+    }
+
+    /// @inheritdoc IComplianceModule
     /// @dev Stateless: nothing it holds is derived from token movements, so it can be removed and
     ///      attached again at any time.
     function isPlugAndPlay() public pure override returns (bool) {

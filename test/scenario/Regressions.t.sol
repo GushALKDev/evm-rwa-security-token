@@ -13,6 +13,8 @@ import {MaxHoldersModule} from "../../src/compliance/modules/MaxHoldersModule.so
 import {LockupModule} from "../../src/compliance/modules/LockupModule.sol";
 import {DividendDistributor} from "../../src/compliance/modules/DividendDistributor.sol";
 import {MockCurrency} from "../helpers/MockCurrency.sol";
+import {MockToken} from "../helpers/MockToken.sol";
+import {ModularCompliance} from "../../src/compliance/ModularCompliance.sol";
 
 /**
  * @title RegressionsTest
@@ -455,5 +457,39 @@ contract RegressionsTest is Test, Deploy {
         d.compliance.addModule(address(d.countryRestriction));
 
         assertTrue(d.compliance.isModuleRegistered(address(d.countryRestriction)));
+    }
+
+    /*//////////////////////////////////////////////////////////////
+              A MODULE MUST READ THE ENGINE'S OWN TOKEN
+    //////////////////////////////////////////////////////////////*/
+
+    /// @dev A holder cap built against another token would count that token's holders while
+    ///      vetoing this one's transfers. With a token already bound, addModule must refuse it.
+    function test_addModule_rejectsModuleBuiltForAnotherToken() public {
+        MockToken other = new MockToken();
+        MaxHoldersModule foreign = new MaxHoldersModule(address(d.compliance), address(other), issuer, agent, 10);
+
+        vm.expectRevert(
+            abi.encodeWithSelector(
+                IModularCompliance.ModuleTokenMismatch.selector, address(foreign), address(other), address(d.token)
+            )
+        );
+        d.compliance.addModule(address(foreign));
+    }
+
+    /// @dev The other order: the module is registered first, then the engine is bound to a
+    ///      different token. bindToken must refuse.
+    function test_bindToken_rejectsRegisteredModuleForAnotherToken() public {
+        ModularCompliance engine = new ModularCompliance(issuer);
+        MockToken other = new MockToken();
+        LockupModule foreign = new LockupModule(address(engine), address(other), issuer, agent, 365 days);
+        engine.addModule(address(foreign));
+
+        vm.expectRevert(
+            abi.encodeWithSelector(
+                IModularCompliance.ModuleTokenMismatch.selector, address(foreign), address(other), address(d.token)
+            )
+        );
+        engine.bindToken(address(d.token));
     }
 }

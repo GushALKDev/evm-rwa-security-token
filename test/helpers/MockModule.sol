@@ -22,9 +22,14 @@ contract MockModule is AbstractComplianceModule {
     address public lastFrom;
     address public lastTo;
     uint256 public lastAmount;
+    address public token;
 
     constructor(address compliance_, string memory name_) AbstractComplianceModule(compliance_) {
         _name = name_;
+    }
+
+    function setToken(address token_) external {
+        token = token_;
     }
 
     function setAllow(bool allow_) external {
@@ -77,6 +82,10 @@ contract WrongEngineModule is AbstractComplianceModule {
 
     function name() external pure returns (string memory) {
         return "WrongEngineModule";
+    }
+
+    function token() external pure returns (address) {
+        return address(0);
     }
 
     function isPlugAndPlay() public pure override returns (bool) {

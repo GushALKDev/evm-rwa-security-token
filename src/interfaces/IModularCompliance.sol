@@ -62,6 +62,10 @@ interface IModularCompliance {
     ///         attached before and removed.
     error ModuleCannotBind(address module);
 
+    /// @notice Thrown when a module reads a different token than the one bound to this engine, so
+    ///         its rule would be evaluated against the wrong balances.
+    error ModuleTokenMismatch(address module, address moduleToken, address boundToken);
+
     /*//////////////////////////////////////////////////////////////
                               MODULE ADMIN
     //////////////////////////////////////////////////////////////*/
