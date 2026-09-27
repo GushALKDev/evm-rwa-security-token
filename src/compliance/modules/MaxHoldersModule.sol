@@ -214,6 +214,20 @@ contract MaxHoldersModule is AbstractComplianceModule, AccessControl {
         return address(_token);
     }
 
+    /**
+     * @inheritdoc IComplianceModule
+     * @dev Stateful, and its state is inferred from balance transitions it has to witness from the
+     *      first mint: it cannot join a token that already has supply.
+     */
+    function canComplianceBind(address compliance_) public view override returns (bool) {
+        return super.canComplianceBind(compliance_) && _token.totalSupply() == 0;
+    }
+
+    /// @inheritdoc IComplianceModule
+    function isPlugAndPlay() public pure override returns (bool) {
+        return false;
+    }
+
     /// @inheritdoc IComplianceModule
     function name() external pure returns (string memory) {
         return "MaxHoldersModule";

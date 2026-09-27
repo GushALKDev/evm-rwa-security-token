@@ -135,6 +135,13 @@ contract CountryRestrictionModule is AbstractComplianceModule, AccessControl {
     }
 
     /// @inheritdoc IComplianceModule
+    /// @dev Stateless: nothing it holds is derived from token movements, so it can be removed and
+    ///      attached again at any time.
+    function isPlugAndPlay() public pure override returns (bool) {
+        return true;
+    }
+
+    /// @inheritdoc IComplianceModule
     function name() external pure returns (string memory) {
         return "CountryRestrictionModule";
     }

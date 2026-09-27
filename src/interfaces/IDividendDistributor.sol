@@ -49,6 +49,10 @@ interface IDividendDistributor {
     /// @notice Thrown when a claim would pay nothing.
     error NothingToClaim(address account);
 
+    /// @notice Thrown when depositing into a distributor that is not attached to its engine. A
+    ///         detached distributor no longer sees transfers, so new income could not be split.
+    error DistributorNotAttached();
+
     /// @notice Thrown when a fully frozen holder claims. The entitlement is kept, not forfeited.
     error ClaimantFrozen(address account);
 

@@ -57,6 +57,11 @@ interface IModularCompliance {
     /// @notice Thrown when binding a token to an engine that already has one.
     error TokenAlreadyBound(address token);
 
+    /// @notice Thrown when a module refuses to bind to this engine (`canComplianceBind` false):
+    ///         a stateful module offered to a token that already has supply, or one that was
+    ///         attached before and removed.
+    error ModuleCannotBind(address module);
+
     /*//////////////////////////////////////////////////////////////
                               MODULE ADMIN
     //////////////////////////////////////////////////////////////*/

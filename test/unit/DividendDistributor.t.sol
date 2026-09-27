@@ -36,6 +36,9 @@ contract DividendDistributorTest is Test {
         token = new MockToken();
         currency = new MockCurrency();
         dist = new DividendDistributor(engine, address(token), address(currency), issuer);
+        // The engine attaches a module when it registers it; deposits require that attachment.
+        vm.prank(engine);
+        dist.bindCompliance(engine);
 
         currency.mint(issuer, 1_000_000e6);
         vm.prank(issuer);
@@ -527,6 +530,8 @@ contract DividendDistributorTest is Test {
     function test_claim_isReentrancyGuarded() public {
         ReenteringCurrency evil = new ReenteringCurrency();
         DividendDistributor target = new DividendDistributor(engine, address(token), address(evil), issuer);
+        vm.prank(engine);
+        target.bindCompliance(engine);
 
         evil.mint(issuer, 1_000e6);
         vm.prank(issuer);

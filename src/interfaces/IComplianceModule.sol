@@ -22,6 +22,22 @@ interface IComplianceModule {
     error OnlyCompliance(address caller, address compliance);
 
     /*//////////////////////////////////////////////////////////////
+                                 EVENTS
+    //////////////////////////////////////////////////////////////*/
+
+    /**
+     * @notice Emitted when the engine attaches this module (`addModule`).
+     * @param compliance The engine.
+     */
+    event ComplianceBound(address indexed compliance);
+
+    /**
+     * @notice Emitted when the engine detaches this module (`removeModule`).
+     * @param compliance The engine.
+     */
+    event ComplianceUnbound(address indexed compliance);
+
+    /*//////////////////////////////////////////////////////////////
                                   CHECK
     //////////////////////////////////////////////////////////////*/
 
@@ -66,6 +82,49 @@ interface IComplianceModule {
      * @param amount The burned amount.
      */
     function moduleDestroyed(address from, uint256 amount) external;
+
+    /*//////////////////////////////////////////////////////////////
+                               ATTACHMENT
+    //////////////////////////////////////////////////////////////*/
+
+    /**
+     * @notice Records that the engine attached this module.
+     * @dev Restricted to the bound engine, which calls it from `addModule` after checking
+     *      `canComplianceBind`. Follows the T-REX `IModule` shape.
+     * @param compliance_ The engine.
+     */
+    function bindCompliance(address compliance_) external;
+
+    /**
+     * @notice Records that the engine detached this module.
+     * @dev Restricted to the bound engine, which calls it from `removeModule`.
+     * @param compliance_ The engine.
+     */
+    function unbindCompliance(address compliance_) external;
+
+    /**
+     * @notice Whether `compliance_` may attach this module now.
+     * @dev A stateful module refuses once it has been attached before, since it missed every
+     *      movement made while it was out, and a module that infers state from balances also
+     *      refuses once the token has supply, since it would start from empty state.
+     * @param compliance_ The engine asking.
+     * @return True if the engine may attach this module.
+     */
+    function canComplianceBind(address compliance_) external view returns (bool);
+
+    /**
+     * @notice Whether this module is currently attached to `compliance_`.
+     * @param compliance_ The engine.
+     * @return True while attached.
+     */
+    function isComplianceBound(address compliance_) external view returns (bool);
+
+    /**
+     * @notice Whether this module keeps no state derived from token movements, so it can be
+     *         attached, removed and attached again at any time.
+     * @return True for a stateless module.
+     */
+    function isPlugAndPlay() external pure returns (bool);
 
     /*//////////////////////////////////////////////////////////////
                                   VIEWS

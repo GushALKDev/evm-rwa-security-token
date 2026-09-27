@@ -57,6 +57,10 @@ contract MockModule is AbstractComplianceModule {
     function name() external view returns (string memory) {
         return _name;
     }
+
+    function isPlugAndPlay() public pure virtual override returns (bool) {
+        return true;
+    }
 }
 
 /// @notice A module bound to a different engine, to exercise the ModuleNotBound guard in addModule.
@@ -73,5 +77,18 @@ contract WrongEngineModule is AbstractComplianceModule {
 
     function name() external pure returns (string memory) {
         return "WrongEngineModule";
+    }
+
+    function isPlugAndPlay() public pure override returns (bool) {
+        return true;
+    }
+}
+
+/// @notice A stateful stand-in: not plug and play, so the engine can attach it only once.
+contract StatefulMockModule is MockModule {
+    constructor(address compliance_) MockModule(compliance_, "StatefulMockModule") {}
+
+    function isPlugAndPlay() public pure override returns (bool) {
+        return false;
     }
 }

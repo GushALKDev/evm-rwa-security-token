@@ -8,6 +8,9 @@ import {Deploy} from "../../script/Deploy.s.sol";
 import {ISecurityToken} from "../../src/interfaces/ISecurityToken.sol";
 import {IIdentityRegistry} from "../../src/interfaces/IIdentityRegistry.sol";
 import {IDividendDistributor} from "../../src/interfaces/IDividendDistributor.sol";
+import {IModularCompliance} from "../../src/interfaces/IModularCompliance.sol";
+import {MaxHoldersModule} from "../../src/compliance/modules/MaxHoldersModule.sol";
+import {LockupModule} from "../../src/compliance/modules/LockupModule.sol";
 import {DividendDistributor} from "../../src/compliance/modules/DividendDistributor.sol";
 import {MockCurrency} from "../helpers/MockCurrency.sol";
 
@@ -358,5 +361,99 @@ contract RegressionsTest is Test, Deploy {
         vm.prank(alice);
         dist.claim(alice);
         assertEq(currency.balanceOf(alice), 900e6 - 1);
+    }
+
+    /*//////////////////////////////////////////////////////////////
+            STATEFUL MODULES ON A LIVE TOKEN: ATTACH RULES
+    //////////////////////////////////////////////////////////////*/
+
+    /// @dev A holder cap added once holders exist would start counting from zero, and the first
+    ///      existing holder to exit would underflow. The engine must refuse it.
+    function test_addModule_rejectsMaxHoldersOnceSupplyExists() public {
+        _onboard(alice);
+        d.token.mint(alice, AMOUNT);
+        MaxHoldersModule late = new MaxHoldersModule(address(d.compliance), address(d.token), issuer, agent, 10);
+
+        vm.expectRevert(abi.encodeWithSelector(IModularCompliance.ModuleCannotBind.selector, address(late)));
+        d.compliance.addModule(address(late));
+    }
+
+    /// @dev A lockup added once holders exist would have no clock for them. The engine must refuse
+    ///      it.
+    function test_addModule_rejectsLockupOnceSupplyExists() public {
+        _onboard(alice);
+        d.token.mint(alice, AMOUNT);
+        LockupModule late = new LockupModule(address(d.compliance), address(d.token), issuer, agent, 365 days);
+
+        vm.expectRevert(abi.encodeWithSelector(IModularCompliance.ModuleCannotBind.selector, address(late)));
+        d.compliance.addModule(address(late));
+    }
+
+    /// @dev A stateful module that was removed missed every move made while it was out. Adding it
+    ///      back must be refused, even before any supply exists.
+    function test_addModule_rejectsReattachingARemovedStatefulModule() public {
+        d.compliance.removeModule(address(d.lockup));
+        vm.expectRevert(abi.encodeWithSelector(IModularCompliance.ModuleCannotBind.selector, address(d.lockup)));
+        d.compliance.addModule(address(d.lockup));
+
+        d.compliance.removeModule(address(d.maxHolders));
+        vm.expectRevert(abi.encodeWithSelector(IModularCompliance.ModuleCannotBind.selector, address(d.maxHolders)));
+        d.compliance.addModule(address(d.maxHolders));
+    }
+
+    /// @dev Re-attaching a removed distributor used to pay holders who acquired while it was out
+    ///      for income they never held through.
+    function test_addModule_rejectsReattachingARemovedDistributor() public {
+        (DividendDistributor dist,) = _attachDistributor();
+        d.compliance.removeModule(address(dist));
+
+        vm.expectRevert(abi.encodeWithSelector(IModularCompliance.ModuleCannotBind.selector, address(dist)));
+        d.compliance.addModule(address(dist));
+    }
+
+    /// @dev A single late attach of the distributor is safe: balances that predate it simply earn
+    ///      from the first deposit it sees, split pro rata.
+    function test_distributor_lateAttachSplitsLaterDeposits() public {
+        _onboard(alice);
+        _onboard(bob);
+        d.token.mint(alice, AMOUNT);
+        d.token.mint(bob, AMOUNT * 3);
+
+        (DividendDistributor dist,) = _attachDistributor();
+        dist.deposit(800e6);
+
+        assertLe(dist.claimable(alice), 200e6);
+        assertGe(dist.claimable(alice) + 1, 200e6);
+        assertLe(dist.claimable(bob), 600e6);
+        assertGe(dist.claimable(bob) + 1, 600e6);
+    }
+
+    /// @dev Once removed, the distributor no longer sees transfers, so it must refuse new income;
+    ///      income it had already accrued stays claimable.
+    function test_distributor_afterRemoval_refusesDepositsAndPaysAccrued() public {
+        (DividendDistributor dist, MockCurrency currency) = _attachDistributor();
+        _onboard(alice);
+        d.token.mint(alice, AMOUNT);
+        dist.deposit(900e6);
+
+        d.compliance.removeModule(address(dist));
+
+        vm.expectRevert(IDividendDistributor.DistributorNotAttached.selector);
+        dist.deposit(900e6);
+
+        vm.prank(alice);
+        dist.claim(alice);
+        assertEq(currency.balanceOf(alice), 900e6 - 1);
+    }
+
+    /// @dev A stateless rule holds nothing that can go stale, so it can be removed and added back.
+    function test_addModule_statelessModuleCanBeReattached() public {
+        _onboard(alice);
+        d.token.mint(alice, AMOUNT);
+
+        d.compliance.removeModule(address(d.countryRestriction));
+        d.compliance.addModule(address(d.countryRestriction));
+
+        assertTrue(d.compliance.isModuleRegistered(address(d.countryRestriction)));
     }
 }

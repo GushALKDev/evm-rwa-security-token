@@ -23,6 +23,13 @@ abstract contract AbstractComplianceModule is IComplianceModule {
     /// @dev The compliance engine allowed to call the lifecycle hooks.
     address private immutable _compliance;
 
+    /// @dev Whether the engine currently has this module registered.
+    bool private _attached;
+
+    /// @dev Whether the engine has ever registered this module. A stateful module that was removed
+    ///      missed every movement made while it was out, so it can never be attached again.
+    bool private _everAttached;
+
     /*//////////////////////////////////////////////////////////////
                                 MODIFIERS
     //////////////////////////////////////////////////////////////*/
@@ -49,11 +56,58 @@ abstract contract AbstractComplianceModule is IComplianceModule {
     }
 
     /*//////////////////////////////////////////////////////////////
+                               ATTACHMENT
+    //////////////////////////////////////////////////////////////*/
+
+    /// @inheritdoc IComplianceModule
+    function bindCompliance(address compliance_) external onlyCompliance {
+        _attached = true;
+        _everAttached = true;
+
+        emit ComplianceBound(compliance_);
+    }
+
+    /// @inheritdoc IComplianceModule
+    function unbindCompliance(address compliance_) external onlyCompliance {
+        _attached = false;
+
+        emit ComplianceUnbound(compliance_);
+    }
+
+    /**
+     * @inheritdoc IComplianceModule
+     * @dev The base rule: only the engine this module was built for, and a module that is not
+     *      plug and play only if it was never attached before. Modules that infer state from
+     *      balances add a zero-supply requirement on top.
+     */
+    function canComplianceBind(address compliance_) public view virtual returns (bool) {
+        if (compliance_ != _compliance) return false;
+        return isPlugAndPlay() || !_everAttached;
+    }
+
+    /// @inheritdoc IComplianceModule
+    function isPlugAndPlay() public pure virtual returns (bool);
+
+    /*//////////////////////////////////////////////////////////////
                                   VIEWS
     //////////////////////////////////////////////////////////////*/
 
     /// @inheritdoc IComplianceModule
+    function isComplianceBound(address compliance_) external view returns (bool) {
+        return compliance_ == _compliance && _attached;
+    }
+
+    /// @inheritdoc IComplianceModule
     function compliance() external view returns (address) {
         return _compliance;
+    }
+
+    /*//////////////////////////////////////////////////////////////
+                                INTERNAL
+    //////////////////////////////////////////////////////////////*/
+
+    /// @dev Whether the engine currently has this module registered.
+    function _isAttached() internal view returns (bool) {
+        return _attached;
     }
 }

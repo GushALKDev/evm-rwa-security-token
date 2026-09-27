@@ -7,7 +7,7 @@ import {IAccessControl} from "@openzeppelin/contracts/access/IAccessControl.sol"
 import {ModularCompliance} from "../../src/compliance/ModularCompliance.sol";
 import {IModularCompliance} from "../../src/interfaces/IModularCompliance.sol";
 import {IComplianceModule} from "../../src/interfaces/IComplianceModule.sol";
-import {MockModule, WrongEngineModule} from "../helpers/MockModule.sol";
+import {MockModule, StatefulMockModule, WrongEngineModule} from "../helpers/MockModule.sol";
 
 contract ModularComplianceTest is Test {
     ModularCompliance internal engine;
@@ -122,6 +122,59 @@ contract ModularComplianceTest is Test {
         assertFalse(engine.isModuleRegistered(address(moduleA)));
         assertTrue(engine.isModuleRegistered(address(moduleB)));
         assertEq(engine.modules().length, 1);
+    }
+
+    /// @dev Registration and removal are mirrored on the module, so it knows whether it is live.
+    function test_addAndRemoveModule_bindAndUnbindTheModule() public {
+        vm.expectEmit(true, false, false, false, address(moduleA));
+        emit IComplianceModule.ComplianceBound(address(engine));
+        vm.prank(issuer);
+        engine.addModule(address(moduleA));
+        assertTrue(moduleA.isComplianceBound(address(engine)));
+
+        vm.expectEmit(true, false, false, false, address(moduleA));
+        emit IComplianceModule.ComplianceUnbound(address(engine));
+        vm.prank(issuer);
+        engine.removeModule(address(moduleA));
+        assertFalse(moduleA.isComplianceBound(address(engine)));
+    }
+
+    /// @dev A plug-and-play module can come back after a removal.
+    function test_addModule_plugAndPlayModuleCanReturn() public {
+        vm.startPrank(issuer);
+        engine.addModule(address(moduleA));
+        engine.removeModule(address(moduleA));
+        engine.addModule(address(moduleA));
+        vm.stopPrank();
+        assertTrue(engine.isModuleRegistered(address(moduleA)));
+    }
+
+    /// @dev A stateful module refuses to come back: it missed every move made while it was out.
+    function test_addModule_revertsWhenStatefulModuleReturns() public {
+        StatefulMockModule stateful = new StatefulMockModule(address(engine));
+        vm.startPrank(issuer);
+        engine.addModule(address(stateful));
+        engine.removeModule(address(stateful));
+        vm.expectRevert(abi.encodeWithSelector(IModularCompliance.ModuleCannotBind.selector, address(stateful)));
+        engine.addModule(address(stateful));
+        vm.stopPrank();
+    }
+
+    /// @dev A module answers only for the engine it was built for.
+    function test_canComplianceBind_falseForAnotherEngine() public view {
+        assertTrue(moduleA.canComplianceBind(address(engine)));
+        assertFalse(moduleA.canComplianceBind(stranger));
+        assertFalse(moduleA.isComplianceBound(stranger));
+    }
+
+    /// @dev Attachment is recorded only by the engine.
+    function test_bindAndUnbindCompliance_revertForNonEngine() public {
+        vm.startPrank(stranger);
+        vm.expectRevert(abi.encodeWithSelector(IComplianceModule.OnlyCompliance.selector, stranger, address(engine)));
+        moduleA.bindCompliance(address(engine));
+        vm.expectRevert(abi.encodeWithSelector(IComplianceModule.OnlyCompliance.selector, stranger, address(engine)));
+        moduleA.unbindCompliance(address(engine));
+        vm.stopPrank();
     }
 
     function test_removeModule_revertsForNonAdmin() public {

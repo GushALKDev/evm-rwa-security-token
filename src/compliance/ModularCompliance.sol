@@ -74,11 +74,20 @@ contract ModularCompliance is IModularCompliance, AccessControl {
     function addModule(address module) external onlyRole(DEFAULT_ADMIN_ROLE) {
         if (module == address(0)) revert ZeroAddress();
         // The module must already point at this engine, or its onlyCompliance hooks would reject
-        // every call this engine makes and its state would silently never update.
+        // every call this engine makes, reverting every mint, burn and transfer.
         if (IComplianceModule(module).compliance() != address(this)) revert ModuleNotBound(module);
-        if (!_modules.add(module)) revert ModuleAlreadyAdded(module);
+        if (_modules.contains(module)) revert ModuleAlreadyAdded(module);
+        // The module decides whether it can join now (the T-REX canComplianceBind shape). A module
+        // that infers state from balances refuses a token with supply, since it would start from
+        // empty state, and a stateful module refuses to come back after a removal, since it missed
+        // every movement made while it was out.
+        if (!IComplianceModule(module).canComplianceBind(address(this))) revert ModuleCannotBind(module);
+
+        _modules.add(module);
 
         emit ModuleAdded(module);
+
+        IComplianceModule(module).bindCompliance(address(this));
     }
 
     /// @inheritdoc IModularCompliance
@@ -86,6 +95,8 @@ contract ModularCompliance is IModularCompliance, AccessControl {
         if (!_modules.remove(module)) revert ModuleNotFound(module);
 
         emit ModuleRemoved(module);
+
+        IComplianceModule(module).unbindCompliance(address(this));
     }
 
     /// @inheritdoc IModularCompliance

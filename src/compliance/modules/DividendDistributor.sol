@@ -160,6 +160,9 @@ contract DividendDistributor is AbstractComplianceModule, IDividendDistributor, 
      *      rather than accepting funds no one can ever claim.
      */
     function deposit(uint256 amount) external onlyRole(Roles.AGENT_ROLE) nonReentrant {
+        // A detached distributor no longer sees transfers, so it could not split new income.
+        // Income accrued while attached stays claimable.
+        if (!_isAttached()) revert DistributorNotAttached();
         if (amount == 0) revert ZeroDeposit();
 
         uint256 supply = _token.totalSupply();
@@ -329,6 +332,16 @@ contract DividendDistributor is AbstractComplianceModule, IDividendDistributor, 
      */
     function token() external view returns (address) {
         return address(_token);
+    }
+
+    /**
+     * @inheritdoc IComplianceModule
+     * @dev Stateful, so it can be attached only once. Unlike the rule modules it may join a token
+     *      that already has supply: the accumulator starts at zero, so balances that predate it
+     *      simply earn from the first deposit it sees.
+     */
+    function isPlugAndPlay() public pure override returns (bool) {
+        return false;
     }
 
     /// @inheritdoc IComplianceModule
