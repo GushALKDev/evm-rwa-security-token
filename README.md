@@ -85,6 +85,13 @@ Compared against the interfaces in the [EIP text](https://eips.ethereum.org/EIPS
 
 The last row follows T-REX for the reason T-REX has it. A stateful module such as T-REX's `MaxBalanceModule` reports `isPlugAndPlay() == false`, and its `canComplianceBind` refuses a compliance whose token already has supply. Here `MaxHoldersModule` and `LockupModule` refuse a token with supply, and every stateful module refuses to be attached a second time (see [Architecture](#architecture)). T-REX also gates `recoveryAddress` to an agent, where this repository uses a separate `CUSTODIAN_ROLE`.
 
+The conformance suites in [`test/conformance/`](test/conformance/) pin the remaining differences, compared by event signature (topic0) against the EIP text, the T-REX interfaces and the ERC-1643 issue:
+
+- **Events that match:** `Paused`, `Unpaused`, `TokensFrozen`, `TokensUnfrozen`, `ModuleAdded`, `ModuleRemoved`, `ComplianceBound`, `ComplianceUnbound` and ERC-1643's `DocumentUpdated`.
+- **Events that differ:** `AddressFrozen(address,bool)` against the standard's `(address,bool,address)`, which also names the agent; `RecoverySuccess(address,address,uint256,uint256,bool)` against `(address,address,address)`, which names the ONCHAINID; `IdentityRegistered(address,uint16,bool,uint64,bytes32,bool)` and `IdentityRemoved(address)` against the forms carrying an `IIdentity`; `IdentityRegistrySet` and `ComplianceSet` against `IdentityRegistryAdded` and `ComplianceAdded`; `TokenBound(address)` has the same signature but an indexed argument; ERC-1643's `DocumentRemoved(bytes32)` against `(bytes32,string,bytes32)`.
+- **ERC-1643 behaviour:** the timestamp is a `uint64` (ABI-compatible with the issue's `uint256`), an empty hash or URI is refused although the issue calls the hash optional, and an unknown name reverts.
+- **ERC-20 behaviour:** a transfer the gate refuses reverts rather than returning false, which ERC-20 allows; as in OpenZeppelin v5, spending an allowance emits no `Approval` event and an allowance of `type(uint256).max` is never decreased. EIP-712 signing matches the standard; contract signers (EIP-1271) are not supported.
+
 ### The two registration paths
 
 The identity registry accepts records through two doors, which exist to make an argument about trust:
