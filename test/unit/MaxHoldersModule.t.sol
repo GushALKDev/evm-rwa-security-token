@@ -314,25 +314,42 @@ contract MaxHoldersModuleTest is Test {
                                   FUZZ
     //////////////////////////////////////////////////////////////*/
 
-    /// @dev Property: the incremental count matches a naive recount over the same population.
-    function testFuzz_countMatchesReality(uint8 holders) public {
-        uint256 n = bound(holders, 1, 20);
-
+    /// @dev Property: after any sequence of mints, transfers and burns over a small pool, the
+    ///      incremental count equals a recount of the wallets that actually hold a balance. Amounts
+    ///      are drawn by mode (zero, full balance, one wei, any), so self-transfers, zero amounts,
+    ///      full exits and swaps all occur, and the recount runs after every step.
+    function testFuzz_countMatchesReality(uint256 seed, uint8 steps) public {
         vm.prank(agent);
         module.setMaxHolders(type(uint256).max);
 
-        for (uint256 i; i < n; ++i) {
-            _mint(vm.addr(i + 1000), AMOUNT);
-        }
-        assertEq(module.holderCount(), n);
+        address[5] memory pool = [alice, bob, carol, vm.addr(1001), vm.addr(1002)];
+        uint256 n = bound(steps, 1, 40);
 
-        // Empty half of them out and the count must follow exactly.
-        uint256 removed;
-        for (uint256 i; i < n; i += 2) {
-            _burn(vm.addr(i + 1000), AMOUNT);
-            ++removed;
+        for (uint256 i; i < n; ++i) {
+            uint256 r = uint256(keccak256(abi.encode(seed, i)));
+            address a = pool[r % 5];
+            address b = pool[(r >> 8) % 5];
+            uint256 balance = token.balanceOf(a);
+            uint256 mode = (r >> 16) % 4;
+            uint256 amount = mode == 0 ? 0 : mode == 1 ? balance : mode == 2 ? 1 : (r >> 24) % (balance + 1);
+
+            uint256 op = (r >> 128) % 3;
+            if (op == 0) {
+                _mint(a, mode == 0 ? 0 : 1 + (r >> 24) % AMOUNT);
+            } else if (op == 1) {
+                if (amount > balance) amount = balance;
+                _transfer(a, b, amount);
+            } else {
+                if (amount > balance) amount = balance;
+                _burn(a, amount);
+            }
+
+            uint256 live;
+            for (uint256 k; k < pool.length; ++k) {
+                if (token.balanceOf(pool[k]) != 0) ++live;
+            }
+            assertEq(module.holderCount(), live, "count drifted from the real holders");
         }
-        assertEq(module.holderCount(), n - removed);
     }
 
     /// @dev Property: the count never exceeds the cap when every transfer is gated by the check.

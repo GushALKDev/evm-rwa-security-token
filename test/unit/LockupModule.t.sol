@@ -164,21 +164,22 @@ contract LockupModuleTest is Test {
      *      position for another full year, for the price of one dust transfer. It must not.
      */
     function test_griefing_oneWeiCannotRelockPosition() public {
+        _mint(griefer, 1);
         _mint(alice, AMOUNT);
         uint64 originalStart = module.lockStart(alice);
+        uint64 originalUnlock = module.unlocksAt(alice);
 
-        // The griefer acquires a position and waits out their own lockup.
-        _mint(griefer, 1);
-        vm.warp(block.timestamp + LOCKUP);
-
-        // Alice is free at this point.
-        assertTrue(module.moduleCheck(alice, bob, AMOUNT));
-
-        // The griefer dusts her.
+        // One second before alice's lockup expires, the griefer dusts her.
+        vm.warp(originalUnlock - 1);
+        assertFalse(module.moduleCheck(alice, bob, AMOUNT), "alice should still be locked");
         _transfer(griefer, alice, 1);
 
         assertEq(module.lockStart(alice), originalStart, "dust transfer must not move the clock");
-        assertTrue(module.moduleCheck(alice, bob, AMOUNT), "alice must stay free");
+        assertEq(module.unlocksAt(alice), originalUnlock, "dust transfer must not move the unlock time");
+
+        // She is released on the original schedule, one second later.
+        vm.warp(originalUnlock);
+        assertTrue(module.moduleCheck(alice, bob, AMOUNT), "alice must be free on schedule");
     }
 
     /// @dev The general form: no subsequent receipt resets an existing clock.
