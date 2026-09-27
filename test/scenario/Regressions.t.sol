@@ -1,7 +1,8 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.24;
 
-import {Test} from "forge-std/Test.sol";
+import {Test, Vm} from "forge-std/Test.sol";
+import {IERC20Errors} from "@openzeppelin/contracts/interfaces/draft-IERC6093.sol";
 import {MessageHashUtils} from "@openzeppelin/contracts/utils/cryptography/MessageHashUtils.sol";
 
 import {Deploy} from "../../script/Deploy.s.sol";
@@ -491,5 +492,23 @@ contract RegressionsTest is Test, Deploy {
             )
         );
         engine.bindToken(address(d.token));
+    }
+
+    /*//////////////////////////////////////////////////////////////
+                   OVER-BURN REVERTS WITH THE ERC-20 ERROR
+    //////////////////////////////////////////////////////////////*/
+
+    /// @dev Burning more than the balance used to underflow in the frozen-portion arithmetic when
+    ///      part of the balance was frozen, and revert with a bare arithmetic panic.
+    function test_burn_aboveBalance_revertsWithInsufficientBalance() public {
+        _onboard(alice);
+        d.token.mint(alice, AMOUNT);
+        vm.prank(agent);
+        d.token.freezePartialTokens(alice, 1);
+
+        vm.expectRevert(
+            abi.encodeWithSelector(IERC20Errors.ERC20InsufficientBalance.selector, alice, AMOUNT, AMOUNT + 1)
+        );
+        d.token.burn(alice, AMOUNT + 1);
     }
 }

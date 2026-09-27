@@ -111,8 +111,13 @@ contract SecurityToken is ISecurityToken, ERC20, AccessControl, Pausable, Reentr
         // Burn eats unfrozen balance first. If the burn is larger, the frozen portion is reduced
         // to cover the shortfall: the issuer retiring a position (a court order, a redemption)
         // outranks an operational freeze, so a freeze cannot shelter tokens from the issuer.
+        // Checked here, before the frozen-portion arithmetic below, so an over-burn reports the
+        // ERC-20 error instead of underflowing into an arithmetic panic.
+        uint256 balance = balanceOf(from);
+        if (amount > balance) revert ERC20InsufficientBalance(from, balance, amount);
+
         uint256 frozen = _frozenTokens[from];
-        uint256 free = balanceOf(from) - frozen;
+        uint256 free = balance - frozen;
         if (amount > free) {
             uint256 shortfall = amount - free;
             _frozenTokens[from] = frozen - shortfall;
