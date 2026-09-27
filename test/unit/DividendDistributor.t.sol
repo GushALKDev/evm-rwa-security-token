@@ -289,16 +289,46 @@ contract DividendDistributorTest is Test {
         _assertOwed(dist.accumulated(alice), INCOME * 2, "two deposits, one holder");
     }
 
-    /// @dev The remainder a deposit cannot represent is carried in scaled units, so the shortfall
-    ///      stays pinned at the single final truncation instead of growing with each deposit.
+    /// @dev The shortfall against the deposits stays at the single final floor in `accumulated`
+    ///      instead of growing with each deposit, and the carried remainder stays below one share.
+    ///      At this supply the remainder is worth far less than one wei, so this test does not
+    ///      depend on carrying it; the next test does.
     function test_deposit_carriesResidueSoTheShortfallDoesNotGrow() public {
         _mint(alice, SHARES);
 
         for (uint256 i = 1; i <= 8; ++i) {
             _deposit(INCOME);
-            assertEq(dist.claimable(alice), INCOME * i - 1, "shortfall drifted beyond one wei");
+            _assertOwed(dist.claimable(alice), INCOME * i, "shortfall drifted beyond one wei");
             assertLt(dist.residue(), token.totalSupply(), "residue must stay below one full share");
         }
+    }
+
+    /**
+     * @dev What `_residue` is for. Each deposit adds `amount * 2^128 / supply` to the scaled
+     *      accumulator and carries the division remainder into the next deposit. With a supply
+     *      above 2^128 base units, a deposit of one currency unit is smaller than one scaled unit
+     *      per share: on its own it moves the accumulator by zero, and only the carried remainder
+     *      lets three such deposits add up to a movement. Without the carry the holder would be
+     *      owed nothing however many deposits arrived.
+     *
+     *      Supply is 2^129 + 1 (odd, so no deposit divides evenly). Three deposits of one unit give
+     *      a scaled total of 3 * 2^128, which crosses the supply once, so the accumulator moves by
+     *      one and the sole holder is owed floor((2^129 + 1) / 2^128) = 2 of the 3 units.
+     */
+    function test_deposit_residueCarriesSubUnitRemainderIntoLaterDeposits() public {
+        uint256 supply = 2 ** 129 + 1;
+        _mint(alice, supply);
+        currency.mint(issuer, 3);
+
+        _deposit(1);
+        _deposit(1);
+        assertEq(dist.dividendsPerShare(), 0, "two unit deposits should not yet move the accumulator");
+        assertEq(dist.residue(), 2 ** 129, "the remainder of both deposits must be carried");
+
+        _deposit(1);
+        assertEq(dist.dividendsPerShare(), 1);
+        assertEq(dist.claimable(alice), 2);
+        assertLt(dist.residue(), supply);
     }
 
     /// @dev Regression: carrying the residue in currency units rounded the dust up every deposit,

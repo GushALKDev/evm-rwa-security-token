@@ -55,12 +55,15 @@ import {Roles} from "../../Roles.sol";
  *      realistic supply, so the accumulator is scaled by `_MAGNITUDE` (2**128) and descaled on
  *      read. Two roundings remain, and they are handled differently:
  *
- *      - The deposit's own truncation is carried, not lost. Whatever the accumulator cannot yet
- *        represent is held in `_residue` and folded into the next deposit, so repeated deposits
- *        do not bleed value into an unclaimable balance.
+ *      - The deposit's own truncation is carried, not lost. The remainder of
+ *        `amount * 2^128 / supply` is held in `_residue` and folded into the next deposit, so
+ *        repeated deposits do not bleed value into an unclaimable balance. Below a supply of
+ *        2^128 base units the remainder is worth less than one wei per deposit; it becomes
+ *        material only above that, where a small deposit can move the accumulator by zero.
  *      - Each holder's descaling in `accumulated` truncates down, at most one wei each. This is
  *        what keeps the contract solvent: the sum of claims is always at or below what was
- *        deposited, never above, so the last claimant is never left short.
+ *        deposited, never above, so the last claimant is never left short. The carry above
+ *        never adds value, it only defers a remainder, so it cannot push claims over the funds.
  *
  *      `deposit` requires a non-zero supply rather than silently accruing to nobody.
  *
@@ -123,8 +126,10 @@ contract DividendDistributor is AbstractComplianceModule, IDividendDistributor, 
     mapping(address account => uint256 amount) private _withdrawn;
 
     /// @dev Undistributed remainder of past deposits, in SCALED units (always < totalSupply).
-    ///      Folded into the next deposit so truncation is deferred rather than lost. Scaled, not
-    ///      currency, because rounding it into whole currency units compounds into insolvency.
+    ///      Folded into the next deposit so a remainder is deferred rather than lost. It is kept in
+    ///      scaled units because an earlier version carried it in currency units, which rounded
+    ///      the dust up on every deposit and over-distributed; solvency itself comes from the
+    ///      floor in `accumulated`, not from this carry.
     uint256 private _residue;
 
     /*//////////////////////////////////////////////////////////////
@@ -177,12 +182,11 @@ contract DividendDistributor is AbstractComplianceModule, IDividendDistributor, 
         // The undistributed remainder of past deposits is folded in here rather than left behind,
         // so truncation is deferred instead of quietly accruing into an unclaimable balance.
         //
-        // It is carried in SCALED units, and that detail is what keeps the carry sound. Carrying
-        // it in currency units instead (deposit minus what the accumulator pays out) rounds the
-        // dust UP each time and the error compounds: after a few deposits the sum of claims
-        // exceeds the sum of deposits and the last claimant cannot be paid. Keeping the raw
-        // modulus makes every deposit exact to within the single final truncation in
-        // `accumulated`, so the shortfall stays at one wei per holder and never inverts.
+        // It is carried in SCALED units. An earlier version carried it in currency units (deposit
+        // minus what the accumulator pays out), which rounded the dust up each time: after a few
+        // deposits the sum of claims exceeded the sum of deposits. Keeping the raw modulus only
+        // defers a remainder and never adds value; the per-holder floor in `accumulated` is what
+        // keeps the sum of claims at or below the funds received.
         uint256 scaled = amount * _MAGNITUDE + _residue;
 
         _dividendsPerShare += scaled / supply;
