@@ -12,20 +12,22 @@ import {ModularCompliance} from "../../src/compliance/ModularCompliance.sol";
 import {MaxHoldersModule} from "../../src/compliance/modules/MaxHoldersModule.sol";
 import {CountryRestrictionModule} from "../../src/compliance/modules/CountryRestrictionModule.sol";
 import {LockupModule} from "../../src/compliance/modules/LockupModule.sol";
+import {DividendDistributor} from "../../src/compliance/modules/DividendDistributor.sol";
 import {Roles} from "../../src/Roles.sol";
+import {MockCurrency} from "../helpers/MockCurrency.sol";
 
 /**
  * @title InvariantsTest
  * @notice The properties that must hold for any sequence of calls, not just the hand-picked ones.
  * @dev The unit and scenario suites assert these at points. This suite asserts them across
- *      arbitrary interleavings of mint, burn, transfer, both freeze pairs, pause, recovery,
- *      identity withdrawal and the passage of time, which is where an ordering bug lives.
+ *      arbitrary interleavings of mint, burn, transfer, approve and transferFrom, both freeze
+ *      pairs, pause, recovery, identity withdrawal, the country block, dividend deposits and
+ *      claims, and the passage of time, which is where an ordering bug lives.
  *
- *      The system is wired by hand rather than by inheriting `Deploy`, for one reason: the lockup
- *      is set to 7 days instead of the deployed 365. With a year-long lockup almost every transfer
- *      in a run would be rejected by the same rule, and the suite would explore one branch deeply
- *      and everything else not at all. A short period means sequences cross the boundary in both
- *      directions. Everything else matches the real deployment.
+ *      The system is wired by hand rather than by inheriting `Deploy`, for two reasons: the lockup
+ *      is 7 days instead of the deployed 365, so sequences cross the boundary in both directions,
+ *      and the holder cap is 4 instead of 499, so it is reachable within a run. The distributor is
+ *      attached before the first mint. Everything else matches the real deployment.
  */
 contract InvariantsTest is StdInvariant, Test {
     SecurityToken internal token;
@@ -34,18 +36,19 @@ contract InvariantsTest is StdInvariant, Test {
     MaxHoldersModule internal maxHolders;
     CountryRestrictionModule internal countryRestriction;
     LockupModule internal lockup;
-
+    DividendDistributor internal distributor;
+    MockCurrency internal currency;
     Handler internal handler;
 
     address internal issuer = address(this);
     address internal agent = makeAddr("agent");
     address internal custodian = makeAddr("custodian");
+    address internal outsider = makeAddr("outsider");
 
-    /// @dev Deliberately small, so the cap is actually reachable within a run and the enforcement
-    ///      branch is exercised rather than sitting permanently far from the limit.
     uint256 internal constant MAX_HOLDERS = 4;
     uint64 internal constant LOCKUP_PERIOD = 7 days;
     uint16 internal constant ES = 724;
+    uint16 internal constant FR = 250;
 
     address[6] internal actors;
 
@@ -57,41 +60,52 @@ contract InvariantsTest is StdInvariant, Test {
         maxHolders = new MaxHoldersModule(address(compliance), address(token), issuer, agent, MAX_HOLDERS);
         countryRestriction = new CountryRestrictionModule(address(compliance), address(registry), issuer, agent);
         lockup = new LockupModule(address(compliance), address(token), issuer, agent, LOCKUP_PERIOD);
+        currency = new MockCurrency();
+        distributor = new DividendDistributor(address(compliance), address(token), address(currency), issuer);
 
         compliance.addModule(address(maxHolders));
         compliance.addModule(address(countryRestriction));
         compliance.addModule(address(lockup));
+        compliance.addModule(address(distributor));
         compliance.bindToken(address(token));
 
         registry.grantRole(Roles.AGENT_ROLE, address(token));
         token.grantRole(Roles.AGENT_ROLE, agent);
         token.grantRole(Roles.CUSTODIAN_ROLE, custodian);
 
-        // Two investors hold two wallets each, so recovery has valid destinations to find; the
-        // last two are their own investors, so recoveries involving them must be rejected.
-        bytes32 idA = keccak256("investor-a");
-        bytes32 idB = keccak256("investor-b");
+        currency.mint(issuer, type(uint128).max);
+        currency.approve(address(distributor), type(uint256).max);
+
+        // Three investors, two wallets each; the third investor's wallets sit in the jurisdiction
+        // the country toggle can block.
         bytes32[6] memory ids;
+        uint16[6] memory countries;
         for (uint256 i; i < 6; ++i) {
             actors[i] = makeAddr(string.concat("actor", vm.toString(i)));
+            ids[i] = keccak256(abi.encode("investor", i / 2));
+            countries[i] = i < 4 ? ES : FR;
         }
-        ids[0] = idA;
-        ids[1] = idA;
-        ids[2] = idB;
-        ids[3] = idB;
-        ids[4] = keccak256("investor-c");
-        ids[5] = keccak256("investor-d");
 
         vm.startPrank(agent);
         for (uint256 i; i < 6; ++i) {
-            registry.registerIdentity(actors[i], ES, true, uint64(block.timestamp + 365 days), ids[i]);
+            registry.registerIdentity(actors[i], countries[i], true, uint64(block.timestamp + 3650 days), ids[i]);
         }
         vm.stopPrank();
 
-        handler = new Handler(token, registry, maxHolders, lockup, issuer, agent, custodian, actors, ids);
-
-        // The issuer's powers are exercised through the handler, which pranks them.
-        token.grantRole(token.DEFAULT_ADMIN_ROLE(), address(handler));
+        handler = new Handler(
+            token,
+            registry,
+            countryRestriction,
+            distributor,
+            lockup,
+            currency,
+            [issuer, agent, custodian],
+            actors,
+            ids,
+            countries,
+            FR,
+            outsider
+        );
 
         targetContract(address(handler));
     }
@@ -101,12 +115,12 @@ contract InvariantsTest is StdInvariant, Test {
     //////////////////////////////////////////////////////////////*/
 
     /**
-     * @dev Balances across the whole reachable address space sum to total supply. The pool is
-     *      closed: only these six addresses can ever hold, because every other address fails the
-     *      identity check, so this really is the complete sum and not a sample of it.
+     * @dev Balances across the whole reachable address space sum to total supply. Only the six
+     *      actors can ever hold: every other address fails the identity check, the outsider
+     *      included, so this is the complete sum and not a sample of it.
      */
     function invariant_balancesSumToTotalSupply() public view {
-        uint256 sum;
+        uint256 sum = token.balanceOf(outsider);
         for (uint256 i; i < actors.length; ++i) {
             sum += token.balanceOf(actors[i]);
         }
@@ -115,8 +129,7 @@ contract InvariantsTest is StdInvariant, Test {
 
     /**
      * @dev Supply moves only through issuance and retirement. Transfers, freezes, recoveries and
-     *      identity changes must all be supply-neutral, which is the property that would break if
-     *      recovery ever minted instead of reassigning.
+     *      identity changes must all be supply-neutral.
      */
     function invariant_supplyMatchesMintsMinusBurns() public view {
         assertEq(token.totalSupply(), handler.ghostMinted() - handler.ghostBurned(), "supply != minted - burned");
@@ -127,15 +140,13 @@ contract InvariantsTest is StdInvariant, Test {
     //////////////////////////////////////////////////////////////*/
 
     /**
-     * @dev The frozen portion never exceeds the balance. If it could, the gate's `balance - frozen`
-     *      would underflow and the wallet would become permanently unable to transact, a lock
-     *      nobody chose and nobody can clear. Burn is the interesting path here: it may consume
-     *      frozen tokens, so it has to reconcile the figure downward as it goes.
+     * @dev The frozen portion never exceeds the balance, or the gate's `balance - frozen` would
+     *      underflow and the wallet could never transact again. Burn and recovery are the paths
+     *      that have to reconcile the figure as they go.
      */
     function invariant_frozenNeverExceedsBalance() public view {
         for (uint256 i; i < actors.length; ++i) {
-            address who = actors[i];
-            assertLe(token.frozenTokens(who), token.balanceOf(who), "frozen > balance");
+            assertLe(token.frozenTokens(actors[i]), token.balanceOf(actors[i]), "frozen > balance");
         }
     }
 
@@ -145,8 +156,8 @@ contract InvariantsTest is StdInvariant, Test {
 
     /**
      * @dev The module's cached count equals the number of addresses actually holding a balance.
-     *      The count is maintained incrementally in the lifecycle hooks and never by enumeration,
-     *      so this compares the cache against the enumeration the contract cannot afford.
+     *      Zero-amount transfers, `transferFrom` and zero burns are in the action set, so the
+     *      inference is checked on the inputs that broke it.
      */
     function invariant_holderCountMatchesReality() public view {
         uint256 live;
@@ -157,12 +168,38 @@ contract InvariantsTest is StdInvariant, Test {
     }
 
     /**
-     * @dev The cap is never exceeded. Forced recovery bypasses the compliance gate entirely, so
-     *      this is not implied by the gate: it holds because a recovery always empties the lost
-     *      wallet in the same movement that fills the new one, and so can never add a holder.
+     * @dev The cap is never exceeded. Forced recovery bypasses the gate, so this is not implied by
+     *      it: it holds because a recovery always empties the lost wallet in the same movement.
      */
     function invariant_holderCountNeverExceedsCap() public view {
         assertLe(maxHolders.holderCount(), maxHolders.maxHolders(), "holderCount > cap");
+    }
+
+    /*//////////////////////////////////////////////////////////////
+                                 LOCKUP
+    //////////////////////////////////////////////////////////////*/
+
+    /**
+     * @dev A clock runs exactly while a position exists. It starts on the zero to positive
+     *      transition, is cleared on the way back to zero, ignores zero amounts, and moves with the
+     *      position on a forced recovery. The module is attached before the first mint, so no
+     *      position predates it.
+     */
+    function invariant_lockupClockMatchesPosition() public view {
+        for (uint256 i; i < actors.length; ++i) {
+            address a = actors[i];
+            assertEq(lockup.lockStart(a) != 0, token.balanceOf(a) != 0, "clock and position disagree");
+        }
+    }
+
+    /**
+     * @dev Forced recovery moves a lockup clock rather than restarting it: after every successful
+     *      recovery the destination holds the earlier of the two starts and the lost wallet none.
+     *      Checked by the handler at the moment of each recovery, since a later state no longer
+     *      shows what the starts were.
+     */
+    function invariant_recoveryKeepsLockupStart() public view {
+        assertEq(handler.ghostRecoveryClockViolations(), 0, "recovery moved a lockup start");
     }
 
     /*//////////////////////////////////////////////////////////////
@@ -170,134 +207,136 @@ contract InvariantsTest is StdInvariant, Test {
     //////////////////////////////////////////////////////////////*/
 
     /**
-     * @dev Recovery always leaves the wallet it evicted empty.
-     *
-     *      Recorded at the instant the eviction completed rather than checked later, because a
-     *      later state says nothing about recovery. An evicted wallet is removed from the registry
-     *      and so cannot receive, but compliance may deliberately re-onboard it, after which it
-     *      may hold again legitimately. An earlier version of this invariant asserted "an evicted
-     *      wallet that is currently unverified holds nothing" and the fuzzer disproved it with an
-     *      entirely correct sequence: evict, re-register, receive a transfer, withdraw the
-     *      identity again. The property that actually belongs to recovery is this one.
+     * @dev No unverified wallet's balance grows. Withdrawing an identity suspends a position, so an
+     *      unverified wallet may keep a balance, and the issuer may burn it or the custodian
+     *      recover it, but a mint, a transfer or a recovery into it are all refused. The handler
+     *      records each actor's balance at the moment it stops being verified (a removal, a
+     *      recovery, or a KYC expiring during a warp).
      */
-    function invariant_recoveryLeavesEvictedWalletEmpty() public view {
-        uint256 n = handler.recoveredCount();
-        for (uint256 i; i < n; ++i) {
-            assertEq(handler.ghostBalanceAtEviction(handler.ghostRecovered(i)), 0, "recovery left a balance behind");
+    function invariant_unverifiedBalanceNeverGrows() public view {
+        for (uint256 i; i < actors.length; ++i) {
+            address a = actors[i];
+            if (!handler.ghostUnverified(a)) continue;
+            assertLe(token.balanceOf(a), handler.ghostBalanceWhenUnverified(a), "unverified balance grew");
         }
     }
 
-    /**
-     * @dev No unverified address can *increase* its balance.
-     *
-     *      Deliberately not "no unverified address holds a balance", which is false by design:
-     *      `removeIdentity` suspends a live position rather than confiscating it, so an unverified
-     *      wallet keeps whatever it had. What the gate guarantees is that the balance cannot grow,
-     *      since both mint and transfer check the recipient. Asserting the stronger form would be
-     *      asserting a property the system deliberately does not have.
-     *
-     *      Checked here as: an unverified wallet's frozen figure still cannot exceed its balance,
-     *      and its balance is whatever it was when suspended. The growth half is enforced by the
-     *      gate and covered by the unit suite; what the sequence adds is that no interleaving of
-     *      recovery, burn and re-registration produces a state where the two disagree.
-     */
-    function invariant_unverifiedHoldersAreConsistent() public view {
+    /*//////////////////////////////////////////////////////////////
+                               DIVIDENDS
+    //////////////////////////////////////////////////////////////*/
+
+    function _sumClaimable() internal view returns (uint256 sum) {
         for (uint256 i; i < actors.length; ++i) {
-            address who = actors[i];
-            if (registry.isVerified(who)) continue;
-            assertLe(token.frozenTokens(who), token.balanceOf(who), "unverified wallet has frozen > balance");
-            assertFalse(token.canTransfer(who, actors[0], 1), "unverified wallet reports a movable balance");
+            sum += distributor.claimable(actors[i]);
         }
+    }
+
+    /// @dev The distributor always holds enough currency to pay everything it reports as owed.
+    function invariant_dividendsSolvent() public view {
+        assertGe(currency.balanceOf(address(distributor)), _sumClaimable(), "owes more than it holds");
+    }
+
+    /**
+     * @dev Claimed plus claimable never exceeds what was deposited, and falls short of it by at
+     *      most seven wei. The shortfall comes only from truncation: each account's entitlement is
+     *      descaled with a floor, losing under one wei per account (six actors can hold), and the
+     *      deposit remainder carried in `residue` is below one whole unit. Transfers, burns and
+     *      recoveries move corrections equal and opposite, so they add no further loss.
+     */
+    function invariant_dividendsConserved() public view {
+        uint256 paidOrOwed = handler.ghostClaimed() + _sumClaimable();
+        uint256 deposited = handler.ghostDeposited();
+        assertLe(paidOrOwed, deposited, "paid or owed more than deposited");
+        assertGe(paidOrOwed + actors.length + 1, deposited, "lost more than the rounding allowance");
+    }
+
+    /// @dev A fully frozen or unverified holder is never paid. The entitlement is kept and counted
+    ///      by the conservation invariant above; only the payout waits.
+    function invariant_blockedHoldersAreNeverPaid() public view {
+        assertEq(handler.ghostBlockedClaimsPaid(), 0, "a frozen or unverified holder was paid");
+    }
+
+    /*//////////////////////////////////////////////////////////////
+                           REVERT CLASSIFICATION
+    //////////////////////////////////////////////////////////////*/
+
+    /**
+     * @dev Every revert the handler caught was one its action may legitimately produce. The suite
+     *      runs with `fail_on_revert = false` because many actions must be allowed to revert; this
+     *      is what stops a panic or a wrong error from passing unseen.
+     */
+    function invariant_noUnexpectedReverts() public view {
+        assertEq(handler.unexpectedReverts(), 0, handler.lastUnexpectedAction());
     }
 
     /*//////////////////////////////////////////////////////////////
                              CALL COVERAGE
     //////////////////////////////////////////////////////////////*/
 
-    /**
-     * @dev Prints what a run exercised, under `-vv`. A readout, not an assertion.
-     *
-     *      The counters were originally asserted here, which does not work: `afterInvariant` does
-     *      not observe the handler state the sequence accumulated, so the assertions read zero and
-     *      failed every run while the sequences were demonstrably doing work. The coverage
-     *      guarantee therefore lives in `test_handlerExercisesEveryAction` below, which is
-     *      deterministic and does not depend on how forge scopes state around this hook.
-     */
-    function afterInvariant() public view {
+    /// @dev Prints what the last run exercised, under `-vv`: per action, the calls that reached
+    ///      the target, the successes, and the expected reverts by selector. A readout, not an
+    ///      assertion. Virtual so a diagnostic harness can aggregate across runs.
+    function afterInvariant() public virtual {
         _logCallSummary();
     }
 
-    /**
-     * @dev Every handler action is reachable, and this is load-bearing rather than a nicety.
-     *
-     *      The suite runs with `fail_on_revert = false`, which is necessary (a locked-up transfer
-     *      must be allowed to revert) and dangerous: if every call reverted, every invariant above
-     *      would hold vacuously and the run would still be green. A bad bound, a missing role or a
-     *      guard that silently rejects every draw would all produce exactly that.
-     *
-     *      This drives each action against a known-good state and asserts its counter moved, so
-     *      the failure mode is caught deterministically instead of hiding behind a green run.
-     */
-    function test_handlerExercisesEveryAction() public {
-        handler.mint(0, 1_000e18);
-        assertGt(handler.callsMint(), 0, "mint unreachable");
-
-        handler.freezePartialTokens(0, 100e18);
-        assertGt(handler.callsFreezePartial(), 0, "freezePartialTokens unreachable");
-
-        handler.unfreezePartialTokens(0, 50e18);
-        assertGt(handler.callsUnfreezePartial(), 0, "unfreezePartialTokens unreachable");
-
-        handler.burn(0, 10e18);
-        assertGt(handler.callsBurn(), 0, "burn unreachable");
-
-        handler.warp(8 days);
-        assertGt(handler.callsWarp(), 0, "warp unreachable");
-
-        // Past the lockup now, so a transfer between two verified wallets settles.
-        handler.transfer(0, 2, 1e18);
-        assertGt(handler.callsTransfer(), 0, "transfer unreachable");
-
-        // Actors 0 and 1 share an investor id, which is what recovery requires.
-        handler.forcedRecovery(0, 1);
-        assertGt(handler.callsRecover(), 0, "forcedRecovery unreachable");
-
-        handler.setAddressFrozen(2, true);
-        assertGt(handler.callsFreezeAddress(), 0, "setAddressFrozen(true) unreachable");
-
-        handler.setAddressFrozen(2, false);
-        assertGt(handler.callsUnfreezeAddress(), 0, "setAddressFrozen(false) unreachable");
-
-        handler.togglePause(0);
-        assertGt(handler.callsPause(), 0, "pause unreachable");
-
-        handler.togglePause(0);
-        assertGt(handler.callsUnpause(), 0, "unpause unreachable");
-
-        // Actor 4 is untouched by the steps above, so it is verified here. Seed 0 clears the
-        // withdrawal throttle; the restore on the next call is never throttled.
-        handler.toggleIdentity(4, 0, ES, true);
-        assertGt(handler.callsRemoveIdentity(), 0, "removeIdentity unreachable");
-
-        handler.toggleIdentity(4, 0, ES, true);
-        assertGt(handler.callsRegisterIdentity(), 0, "registerIdentity unreachable");
+    function _logCallSummary() internal view {
+        uint256 n = handler.actionCount();
+        for (uint256 i; i < n; ++i) {
+            string memory action = handler.actionName(i);
+            console.log(action, handler.attemptsOf(action), handler.successesOf(action));
+            bytes4[] memory seen = handler.seenSelectors(action);
+            for (uint256 j; j < seen.length; ++j) {
+                console.logBytes4(seen[j]);
+                console.log("   reverts", handler.revertsOf(action, seen[j]));
+            }
+        }
+        console.log("unexpected reverts", handler.unexpectedReverts());
+        if (handler.unexpectedReverts() != 0) console.logBytes(handler.lastUnexpected());
     }
 
-    /// @dev Prints what the run actually exercised. Not an assertion: a readout under `-vv`, so a
-    ///      green suite can be inspected rather than trusted.
-    function _logCallSummary() internal view {
-        console.log("mint              ", handler.callsMint());
-        console.log("burn              ", handler.callsBurn());
-        console.log("transfer          ", handler.callsTransfer());
-        console.log("freezeAddress     ", handler.callsFreezeAddress());
-        console.log("unfreezeAddress   ", handler.callsUnfreezeAddress());
-        console.log("freezePartial     ", handler.callsFreezePartial());
-        console.log("unfreezePartial   ", handler.callsUnfreezePartial());
-        console.log("pause             ", handler.callsPause());
-        console.log("unpause           ", handler.callsUnpause());
-        console.log("forcedRecovery    ", handler.callsRecover());
-        console.log("removeIdentity    ", handler.callsRemoveIdentity());
-        console.log("registerIdentity  ", handler.callsRegisterIdentity());
-        console.log("warp              ", handler.callsWarp());
+    /**
+     * @dev Every action is reachable and succeeds against a known-good state, including the
+     *      paths the metrics once showed as missing: zero amounts, a full-balance exit, a spender
+     *      that is not verified, recovery between two wallets of one investor, the country block
+     *      and a dividend claim. It also shows the classification at work: a transfer refused by
+     *      the lockup is counted as an expected revert, not an unexpected one.
+     */
+    function test_handlerExercisesEveryAction() public {
+        handler.mint(0, 1, 0); // full mode: 1,000,000 tokens to actor 0
+        handler.mint(2, 3, 500e18); // any mode: actor 2
+        handler.transfer(3, 2, 0, 0); // zero amount from a wallet holding nothing
+        handler.transfer(0, 2, 2, 0); // one wei, refused by the lockup
+        assertEq(handler.revertsOf("transfer", bytes4(keccak256("ComplianceCheckFailed(address,address,uint256)"))), 1);
+
+        handler.warp(8 days);
+        handler.transfer(0, 2, 2, 0); // one wei, now past the lockup
+        handler.approve(0, actors.length, 0, 0); // unlimited allowance to the outsider
+        handler.transferFrom(actors.length, 0, 2, 2, 0); // the outsider spends it
+        handler.transfer(2, 0, 1, 0); // actor 2 exits in full to an existing holder
+
+        handler.freezePartialTokens(0, 2, 0);
+        handler.unfreezePartialTokens(0, 1, 0);
+        handler.setAddressFrozen(1, 0);
+        handler.setAddressFrozen(1, 0);
+        handler.togglePause(0);
+        handler.togglePause(0);
+
+        handler.deposit(900e6);
+        handler.claim(0, 0);
+        handler.forcedRecovery(0, 0, 1); // actor 0 to its partner, actor 1
+        handler.toggleIdentity(0, 0); // actor 0 was de-registered by the recovery: restore it
+        handler.toggleIdentity(0, 0); // and withdraw it again
+        handler.toggleCountry(0);
+        handler.toggleCountry(0);
+        handler.burn(1, 2, 0);
+
+        uint256 n = handler.actionCount();
+        for (uint256 i; i < n; ++i) {
+            string memory action = handler.actionName(i);
+            assertGt(handler.successesOf(action), 0, action);
+        }
+        assertEq(handler.unexpectedReverts(), 0);
+        assertTrue(handler.ghostUnverified(actors[0]), "suspension not tracked");
     }
 }

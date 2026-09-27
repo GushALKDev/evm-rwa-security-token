@@ -4,35 +4,47 @@ pragma solidity ^0.8.24;
 import {CommonBase} from "forge-std/Base.sol";
 import {StdCheats} from "forge-std/StdCheats.sol";
 import {StdUtils} from "forge-std/StdUtils.sol";
+import {IERC20Errors} from "@openzeppelin/contracts/interfaces/draft-IERC6093.sol";
+import {Pausable} from "@openzeppelin/contracts/utils/Pausable.sol";
 
 import {SecurityToken} from "../../src/SecurityToken.sol";
 import {IdentityRegistry} from "../../src/identity/IdentityRegistry.sol";
-import {MaxHoldersModule} from "../../src/compliance/modules/MaxHoldersModule.sol";
+import {CountryRestrictionModule} from "../../src/compliance/modules/CountryRestrictionModule.sol";
+import {DividendDistributor} from "../../src/compliance/modules/DividendDistributor.sol";
 import {LockupModule} from "../../src/compliance/modules/LockupModule.sol";
+import {ISecurityToken} from "../../src/interfaces/ISecurityToken.sol";
+import {IDividendDistributor} from "../../src/interfaces/IDividendDistributor.sol";
+import {MockCurrency} from "../helpers/MockCurrency.sol";
 
 /**
  * @title Handler
- * @notice Drives the security token through bounded random sequences for the invariant suite.
- * @dev Three decisions shape this handler, and each is load-bearing.
+ * @notice Drives the security token, its modules and the dividend distributor through bounded
+ *         random sequences for the invariant suite.
+ * @dev Four decisions shape this handler.
  *
- *      **A fixed wallet pool.** Actors are drawn from a small fixed set rather than from fuzzed
- *      addresses. With free addresses almost every transfer would find an empty sender and revert,
- *      so the fuzzer would spend its budget rediscovering that strangers hold nothing instead of
- *      exploring the interactions between freeze, lockup, recovery and the holder cap.
+ *      **A fixed wallet pool, two wallets per investor.** Six actors belong to three investors, two
+ *      wallets each, so a forced recovery has a valid destination whenever it picks the partner
+ *      wallet. The last investor's two wallets are registered in a jurisdiction the country rule
+ *      can block. A seventh address, the outsider, is never registered: it only ever acts as a
+ *      `transferFrom` spender, to exercise the gate's documented blind spot for spenders.
  *
- *      **Everything is bounded to reachable values.** Amounts are bound against the actual balance
- *      and recipients against the pool, so a call has a real chance of succeeding. The suite runs
- *      with `fail_on_revert = false` because many actions must legitimately revert (a locked-up
- *      transfer, a frozen sender), but that setting is also how an invariant suite silently tests
- *      nothing: if every call reverted, every invariant would hold vacuously.
+ *      **Amounts are drawn by mode, not only by range.** Zero, the full balance and one wei are the
+ *      amounts where the modules infer transitions, and a uniform draw almost never hits the first
+ *      two. Each amount-taking action picks one of four modes (zero, full, dust, any) first.
  *
- *      **Hence the counters.** Each action increments a counter only when the call actually
- *      succeeded, and the suite asserts the important ones are non-zero. They are part of the
- *      deliverable, not diagnostics: without them a green run is not evidence of anything.
+ *      **Every revert is classified.** Each action lists the custom errors it may legitimately
+ *      revert with (a locked-up transfer, a frozen sender, a paused token). An expected revert is
+ *      counted per action and per selector; anything else (a panic, an empty revert, an error the
+ *      action cannot legitimately produce) increments `unexpectedReverts` and is kept in
+ *      `lastUnexpected`, and the suite asserts that counter stays at zero. With `fail_on_revert`
+ *      off, this is what keeps a broken path from hiding behind a green run.
  *
- *      Ghost state tracks what the system does not expose. `ghostMinted`/`ghostBurned` give an
- *      independent expectation for total supply, and `ghostRecovered` records wallets evicted by
- *      recovery so the suite can assert they never hold again.
+ *      **Absorbing states are toggles with a throttle.** Pausing, freezing a wallet, withdrawing an
+ *      identity and blocking the jurisdiction are entered on a fraction of the draws and left on
+ *      every draw that finds them set, so they stay reachable without swallowing the run.
+ *
+ *      Ghost state records what the system does not expose: minted, burned, deposited and claimed
+ *      totals, and for each unverified actor the balance it held when it stopped being verified.
  */
 contract Handler is CommonBase, StdCheats, StdUtils {
     /*//////////////////////////////////////////////////////////////
@@ -41,25 +53,31 @@ contract Handler is CommonBase, StdCheats, StdUtils {
 
     SecurityToken internal immutable token;
     IdentityRegistry internal immutable registry;
-    MaxHoldersModule internal immutable maxHolders;
+    CountryRestrictionModule internal immutable countryRule;
+    DividendDistributor internal immutable distributor;
     LockupModule internal immutable lockup;
+    MockCurrency internal immutable currency;
 
     address internal immutable issuer;
     address internal immutable agent;
     address internal immutable custodian;
 
+    /// @dev The jurisdiction the last investor's wallets are registered in, and the one the
+    ///      country toggle blocks and unblocks.
+    uint16 public immutable blockableCountry;
+
     /*//////////////////////////////////////////////////////////////
                                  ACTORS
     //////////////////////////////////////////////////////////////*/
 
-    /// @dev The wallet pool. Held as a fixed array so the invariant contract can sum balances
-    ///      across exactly the addresses that can ever hold a balance.
+    /// @dev Six wallets, three investors: wallets 2k and 2k+1 share an investor id.
     address[6] public actors;
 
-    /// @dev Investor id shared by actors 0 and 1, and by 2 and 3, so recovery has valid
-    ///      destinations to find. Actors 4 and 5 are their own investors, so a recovery between
-    ///      them and anyone else must be rejected.
+    /// @dev Never registered, never holds; only ever a `transferFrom` spender.
+    address public immutable outsider;
+
     mapping(address actor => bytes32 id) public investorIdOf;
+    mapping(address actor => uint16 code) public countryOf;
 
     /*//////////////////////////////////////////////////////////////
                                GHOST STATE
@@ -67,32 +85,37 @@ contract Handler is CommonBase, StdCheats, StdUtils {
 
     uint256 public ghostMinted;
     uint256 public ghostBurned;
+    uint256 public ghostDeposited;
+    uint256 public ghostClaimed;
 
-    /// @dev Wallets evicted by a recovery, in insertion order.
-    address[] public ghostRecovered;
-    mapping(address wallet => bool evicted) public ghostIsRecovered;
+    /// @dev Successful recoveries after which the destination's lockup start was not the earlier
+    ///      of the two wallets' starts, or the lost wallet kept a clock. Must stay zero.
+    uint256 public ghostRecoveryClockViolations;
 
-    /// @dev Balance of an evicted wallet at the instant recovery completed. Recovery must always
-    ///      leave it at zero; a later re-onboarding may legitimately give it a balance again.
-    mapping(address wallet => uint256 balance) public ghostBalanceAtEviction;
+    /// @dev Successful claims by a holder that was fully frozen or unverified at the time. Must
+    ///      stay zero.
+    uint256 public ghostBlockedClaimsPaid;
+
+    /// @dev Whether the actor was unverified at the end of the last action, and its balance at the
+    ///      moment it became so. An unverified wallet can be burned from or recovered out of, but
+    ///      nothing can add to it.
+    mapping(address actor => bool) public ghostUnverified;
+    mapping(address actor => uint256) public ghostBalanceWhenUnverified;
 
     /*//////////////////////////////////////////////////////////////
-                                COUNTERS
+                         CALL AND REVERT ACCOUNTING
     //////////////////////////////////////////////////////////////*/
 
-    uint256 public callsMint;
-    uint256 public callsBurn;
-    uint256 public callsTransfer;
-    uint256 public callsFreezeAddress;
-    uint256 public callsUnfreezeAddress;
-    uint256 public callsFreezePartial;
-    uint256 public callsUnfreezePartial;
-    uint256 public callsPause;
-    uint256 public callsUnpause;
-    uint256 public callsRecover;
-    uint256 public callsRemoveIdentity;
-    uint256 public callsRegisterIdentity;
-    uint256 public callsWarp;
+    string[] internal _actionNames;
+    mapping(bytes32 action => uint256) public attempts;
+    mapping(bytes32 action => uint256) public successes;
+    mapping(bytes32 action => mapping(bytes4 selector => bool)) internal _expected;
+    mapping(bytes32 action => mapping(bytes4 selector => uint256)) public revertsBySelector;
+    mapping(bytes32 action => bytes4[]) internal _seenSelectors;
+
+    uint256 public unexpectedReverts;
+    bytes public lastUnexpected;
+    string public lastUnexpectedAction;
 
     /*//////////////////////////////////////////////////////////////
                               CONSTRUCTOR
@@ -101,234 +124,479 @@ contract Handler is CommonBase, StdCheats, StdUtils {
     constructor(
         SecurityToken token_,
         IdentityRegistry registry_,
-        MaxHoldersModule maxHolders_,
+        CountryRestrictionModule countryRule_,
+        DividendDistributor distributor_,
         LockupModule lockup_,
-        address issuer_,
-        address agent_,
-        address custodian_,
+        MockCurrency currency_,
+        address[3] memory operators, // issuer, agent, custodian
         address[6] memory actors_,
-        bytes32[6] memory ids_
+        bytes32[6] memory ids_,
+        uint16[6] memory countries_,
+        uint16 blockableCountry_,
+        address outsider_
     ) {
         token = token_;
         registry = registry_;
-        maxHolders = maxHolders_;
+        countryRule = countryRule_;
+        distributor = distributor_;
         lockup = lockup_;
-        issuer = issuer_;
-        agent = agent_;
-        custodian = custodian_;
+        currency = currency_;
+        issuer = operators[0];
+        agent = operators[1];
+        custodian = operators[2];
+        blockableCountry = blockableCountry_;
+        outsider = outsider_;
         actors = actors_;
-
         for (uint256 i; i < actors_.length; ++i) {
             investorIdOf[actors_[i]] = ids_[i];
+            countryOf[actors_[i]] = countries_[i];
         }
+
+        bytes4[7] memory gate = [
+            ISecurityToken.RecipientNotVerified.selector,
+            ISecurityToken.SenderNotVerified.selector,
+            ISecurityToken.RecipientAddressFrozen.selector,
+            ISecurityToken.SenderAddressFrozen.selector,
+            ISecurityToken.InsufficientUnfrozenBalance.selector,
+            ISecurityToken.ComplianceCheckFailed.selector,
+            Pausable.EnforcedPause.selector
+        ];
+
+        _register("mint");
+        _expect("mint", ISecurityToken.RecipientNotVerified.selector);
+        _expect("mint", ISecurityToken.RecipientAddressFrozen.selector);
+        _expect("mint", ISecurityToken.ComplianceCheckFailed.selector);
+        _expect("mint", Pausable.EnforcedPause.selector);
+
+        _register("burn");
+        _expect("burn", Pausable.EnforcedPause.selector);
+
+        _register("transfer");
+        _register("transferFrom");
+        for (uint256 i; i < gate.length; ++i) {
+            _expect("transfer", gate[i]);
+            _expect("transferFrom", gate[i]);
+        }
+        _expect("transferFrom", IERC20Errors.ERC20InsufficientAllowance.selector);
+
+        _register("approve");
+        _register("setAddressFrozen");
+        _register("freezePartialTokens");
+        _register("unfreezePartialTokens");
+        _register("togglePause");
+
+        _register("forcedRecovery");
+        _expect("forcedRecovery", ISecurityToken.RecoveryToSameWallet.selector);
+        _expect("forcedRecovery", ISecurityToken.NewWalletNotVerified.selector);
+        _expect("forcedRecovery", ISecurityToken.RecoveryAcrossInvestors.selector);
+        _expect("forcedRecovery", ISecurityToken.NothingToRecover.selector);
+
+        _register("toggleIdentity");
+        _register("toggleCountry");
+
+        _register("deposit");
+        _expect("deposit", IDividendDistributor.NoSupply.selector);
+
+        _register("claim");
+        _expect("claim", IDividendDistributor.NothingToClaim.selector);
+        _expect("claim", IDividendDistributor.ClaimantFrozen.selector);
+        _expect("claim", IDividendDistributor.ClaimantNotVerified.selector);
+
+        _register("warp");
     }
 
     /*//////////////////////////////////////////////////////////////
                                 HELPERS
     //////////////////////////////////////////////////////////////*/
 
+    function _register(string memory action) internal {
+        _actionNames.push(action);
+    }
+
+    function _expect(string memory action, bytes4 selector) internal {
+        _expected[keccak256(bytes(action))][selector] = true;
+    }
+
+    function _attempt(string memory action) internal {
+        ++attempts[keccak256(bytes(action))];
+    }
+
+    function _succeeded(string memory action) internal {
+        ++successes[keccak256(bytes(action))];
+    }
+
+    /// @dev Classifies a caught revert: counted under its selector if the action may produce it,
+    ///      otherwise recorded as unexpected.
+    function _reverted(string memory action, bytes memory err) internal {
+        bytes32 key = keccak256(bytes(action));
+        bytes4 selector = err.length >= 4 ? bytes4(err) : bytes4(0);
+        if (!_expected[key][selector]) {
+            _unexpected(action, err);
+            return;
+        }
+        if (revertsBySelector[key][selector] == 0) _seenSelectors[key].push(selector);
+        ++revertsBySelector[key][selector];
+    }
+
+    function _unexpected(string memory action, bytes memory err) internal {
+        ++unexpectedReverts;
+        lastUnexpected = err;
+        lastUnexpectedAction = action;
+    }
+
     function _actor(uint256 seed) internal view returns (address) {
         return actors[bound(seed, 0, actors.length - 1)];
     }
+
+    /// @dev The first actor at or after `start` (wrapping) holding a balance, or `start` if none.
+    function _firstHolderFrom(uint256 start) internal view returns (uint256) {
+        for (uint256 k; k < actors.length; ++k) {
+            uint256 i = (start + k) % actors.length;
+            if (token.balanceOf(actors[i]) != 0) return i;
+        }
+        return start;
+    }
+
+    /// @dev The first actor at or after `start` (wrapping) with a claimable amount, or `start`.
+    function _firstClaimantFrom(uint256 start) internal view returns (uint256) {
+        for (uint256 k; k < actors.length; ++k) {
+            uint256 i = (start + k) % actors.length;
+            if (distributor.claimable(actors[i]) != 0) return i;
+        }
+        return start;
+    }
+
+    /// @dev Picks an amount by mode: zero, the whole of `max`, one wei, or anything up to `max`.
+    function _amount(uint256 mode, uint256 raw, uint256 max) internal pure returns (uint256) {
+        uint256 m = mode % 4;
+        if (m == 0 || max == 0) return 0;
+        if (m == 1) return max;
+        if (m == 2) return 1;
+        return raw % (max + 1);
+    }
+
+    /// @dev Records the balance of every actor at the moment it stops being verified, and forgets
+    ///      it once the actor is verified again. Runs after every action, so a silent transition
+    ///      (a KYC expiring during a warp) is captured before the next action can move tokens.
+    function _trackVerification() internal {
+        for (uint256 i; i < actors.length; ++i) {
+            address a = actors[i];
+            bool verified = registry.isVerified(a);
+            if (!verified && !ghostUnverified[a]) {
+                ghostUnverified[a] = true;
+                ghostBalanceWhenUnverified[a] = token.balanceOf(a);
+            } else if (verified && ghostUnverified[a]) {
+                ghostUnverified[a] = false;
+            }
+        }
+    }
+
+    modifier tracked() {
+        _;
+        _trackVerification();
+    }
+
+    /*//////////////////////////////////////////////////////////////
+                            TOKEN MOVEMENTS
+    //////////////////////////////////////////////////////////////*/
+
+    function mint(uint256 toSeed, uint256 mode, uint256 raw) external tracked {
+        address to = _actor(toSeed);
+        uint256 amount = _amount(mode, raw, 1_000_000e18);
+        _attempt("mint");
+        vm.prank(issuer);
+        try token.mint(to, amount) {
+            ghostMinted += amount;
+            _succeeded("mint");
+        } catch (bytes memory err) {
+            _reverted("mint", err);
+        }
+    }
+
+    /// @dev The issuer may burn through a freeze, and may burn zero from a wallet holding nothing.
+    function burn(uint256 fromSeed, uint256 mode, uint256 raw) external tracked {
+        address from = _actor(fromSeed);
+        uint256 amount = _amount(mode, raw, token.balanceOf(from));
+        _attempt("burn");
+        vm.prank(issuer);
+        try token.burn(from, amount) {
+            ghostBurned += amount;
+            _succeeded("burn");
+        } catch (bytes memory err) {
+            _reverted("burn", err);
+        }
+    }
+
+    function transfer(uint256 fromSeed, uint256 toSeed, uint256 mode, uint256 raw) external tracked {
+        address from = _actor(fromSeed);
+        address to = _actor(toSeed);
+        uint256 amount = _amount(mode, raw, token.balanceOf(from));
+        _attempt("transfer");
+        vm.prank(from);
+        try token.transfer(to, amount) {
+            _succeeded("transfer");
+        } catch (bytes memory err) {
+            _reverted("transfer", err);
+        }
+    }
+
+    /// @dev The spender is any actor or the unregistered outsider. Allowances are unbounded
+    ///      in size, so an allowance shortfall arises only when the owner re-approved a smaller one.
+    function approve(uint256 ownerSeed, uint256 spenderSeed, uint256 mode, uint256 raw) external tracked {
+        address owner = _actor(ownerSeed);
+        address spender = bound(spenderSeed, 0, actors.length) == actors.length ? outsider : _actor(spenderSeed);
+        uint256 amount = mode % 2 == 0 ? type(uint256).max : raw % 1_000_000e18;
+        _attempt("approve");
+        vm.prank(owner);
+        try token.approve(spender, amount) {
+            _succeeded("approve");
+        } catch (bytes memory err) {
+            _reverted("approve", err);
+        }
+    }
+
+    function transferFrom(uint256 spenderSeed, uint256 fromSeed, uint256 toSeed, uint256 mode, uint256 raw)
+        external
+        tracked
+    {
+        address spender = bound(spenderSeed, 0, actors.length) == actors.length ? outsider : _actor(spenderSeed);
+        address from = _actor(fromSeed);
+        address to = _actor(toSeed);
+        uint256 amount = _amount(mode, raw, token.balanceOf(from));
+        _attempt("transferFrom");
+        vm.prank(spender);
+        try token.transferFrom(from, to, amount) {
+            _succeeded("transferFrom");
+        } catch (bytes memory err) {
+            _reverted("transferFrom", err);
+        }
+    }
+
+    /*//////////////////////////////////////////////////////////////
+                            FREEZE CONTROLS
+    //////////////////////////////////////////////////////////////*/
+
+    /// @dev Freezing is throttled to one draw in four; unfreezing a frozen wallet is not.
+    function setAddressFrozen(uint256 whoSeed, uint256 throttleSeed) external tracked {
+        address who = _actor(whoSeed);
+        bool freeze = !token.isFrozen(who);
+        if (freeze && bound(throttleSeed, 0, 3) != 0) return;
+        _attempt("setAddressFrozen");
+        vm.prank(agent);
+        try token.setAddressFrozen(who, freeze) {
+            _succeeded("setAddressFrozen");
+        } catch (bytes memory err) {
+            _reverted("setAddressFrozen", err);
+        }
+    }
+
+    function freezePartialTokens(uint256 whoSeed, uint256 mode, uint256 raw) external tracked {
+        address who = _actor(whoSeed);
+        uint256 amount = _amount(mode, raw, token.balanceOf(who) - token.frozenTokens(who));
+        _attempt("freezePartialTokens");
+        vm.prank(agent);
+        try token.freezePartialTokens(who, amount) {
+            _succeeded("freezePartialTokens");
+        } catch (bytes memory err) {
+            _reverted("freezePartialTokens", err);
+        }
+    }
+
+    function unfreezePartialTokens(uint256 whoSeed, uint256 mode, uint256 raw) external tracked {
+        address who = _actor(whoSeed);
+        uint256 amount = _amount(mode, raw, token.frozenTokens(who));
+        _attempt("unfreezePartialTokens");
+        vm.prank(agent);
+        try token.unfreezePartialTokens(who, amount) {
+            _succeeded("unfreezePartialTokens");
+        } catch (bytes memory err) {
+            _reverted("unfreezePartialTokens", err);
+        }
+    }
+
+    /// @dev Entering a pause is throttled to one draw in ten; leaving one never is. As two
+    ///      independent actions the run would spend most of its depth paused.
+    function togglePause(uint256 seed) external tracked {
+        bool isPaused = token.paused();
+        if (!isPaused && bound(seed, 0, 9) != 0) return;
+        _attempt("togglePause");
+        vm.prank(agent);
+        if (isPaused) {
+            try token.unpause() {
+                _succeeded("togglePause");
+            } catch (bytes memory err) {
+                _reverted("togglePause", err);
+            }
+        } else {
+            try token.pause() {
+                _succeeded("togglePause");
+            } catch (bytes memory err) {
+                _reverted("togglePause", err);
+            }
+        }
+    }
+
+    /*//////////////////////////////////////////////////////////////
+                                RECOVERY
+    //////////////////////////////////////////////////////////////*/
+
+    /// @dev Three draws in four are aimed: the lost wallet is the first actor from the seed that
+    ///      holds a balance, and the destination is its partner (the same investor), which is the
+    ///      case recovery exists for. The rest pick both wallets at random, so the rejections
+    ///      (empty wallet, same wallet, another investor, unverified destination) stay exercised.
+    function forcedRecovery(uint256 lostSeed, uint256 newSeed, uint256 aimSeed) external tracked {
+        bool aimed = bound(aimSeed, 0, 3) != 0;
+        uint256 lostIndex = bound(lostSeed, 0, actors.length - 1);
+        if (aimed) lostIndex = _firstHolderFrom(lostIndex);
+        address lost = actors[lostIndex];
+        address replacement = aimed ? actors[lostIndex ^ 1] : _actor(newSeed);
+        uint64 lostStart = lockup.lockStart(lost);
+        uint64 destStart = lockup.lockStart(replacement);
+        uint64 expected = destStart != 0 && destStart < lostStart ? destStart : lostStart;
+        _attempt("forcedRecovery");
+        vm.prank(custodian);
+        try token.forcedRecovery(lost, replacement) {
+            // Recovery relocates a position: it must not restart, shorten or extend its lockup.
+            if (lockup.lockStart(replacement) != expected || lockup.lockStart(lost) != 0) {
+                ++ghostRecoveryClockViolations;
+            }
+            _succeeded("forcedRecovery");
+        } catch (bytes memory err) {
+            // Two wallets of one investor always share an investor id, removed or not, so this
+            // error is only legitimate across investors.
+            bool sameInvestor = investorIdOf[lost] == investorIdOf[replacement];
+            if (sameInvestor && bytes4(err) == ISecurityToken.RecoveryAcrossInvestors.selector) {
+                _unexpected("forcedRecovery", err);
+            } else {
+                _reverted("forcedRecovery", err);
+            }
+        }
+    }
+
+    /*//////////////////////////////////////////////////////////////
+                           IDENTITY AND RULES
+    //////////////////////////////////////////////////////////////*/
+
+    /**
+     * @dev Withdrawing an identity (throttled to one draw in five) and restoring it (never
+     *      throttled). The restored record carries the actor's original investor id and country,
+     *      so recovery destinations and the jurisdiction split survive a withdrawal. A wallet
+     *      whose KYC expired is restored the same way.
+     */
+    function toggleIdentity(uint256 whoSeed, uint256 throttleSeed) external tracked {
+        address who = _actor(whoSeed);
+        bool verified = registry.isVerified(who);
+        if (verified && bound(throttleSeed, 0, 4) != 0) return;
+        _attempt("toggleIdentity");
+        vm.startPrank(agent);
+        if (verified) {
+            try registry.removeIdentity(who) {
+                _succeeded("toggleIdentity");
+            } catch (bytes memory err) {
+                _reverted("toggleIdentity", err);
+            }
+        } else {
+            try registry.registerIdentity(
+                who, countryOf[who], true, uint64(block.timestamp + 3650 days), investorIdOf[who]
+            ) {
+                _succeeded("toggleIdentity");
+            } catch (bytes memory err) {
+                _reverted("toggleIdentity", err);
+            }
+        }
+        vm.stopPrank();
+    }
+
+    /// @dev Blocking the jurisdiction is throttled to one draw in five; unblocking never is.
+    function toggleCountry(uint256 throttleSeed) external tracked {
+        bool restricted = countryRule.isRestricted(blockableCountry);
+        if (!restricted && bound(throttleSeed, 0, 4) != 0) return;
+        _attempt("toggleCountry");
+        vm.prank(agent);
+        try countryRule.setCountryRestricted(blockableCountry, !restricted) {
+            _succeeded("toggleCountry");
+        } catch (bytes memory err) {
+            _reverted("toggleCountry", err);
+        }
+    }
+
+    /*//////////////////////////////////////////////////////////////
+                               DIVIDENDS
+    //////////////////////////////////////////////////////////////*/
+
+    /// @dev Income in a 6-decimal currency, from one unit up to a thousand whole units.
+    function deposit(uint256 raw) external tracked {
+        uint256 amount = bound(raw, 1, 1_000e6);
+        _attempt("deposit");
+        vm.prank(issuer);
+        try distributor.deposit(amount) {
+            ghostDeposited += amount;
+            _succeeded("deposit");
+        } catch (bytes memory err) {
+            _reverted("deposit", err);
+        }
+    }
+
+    /// @dev Any actor claims, including frozen and unverified ones, which must be refused. Three
+    ///      draws in four start from the seed and take the first actor with something to claim,
+    ///      so paid claims are not drowned by empty ones; the rest keep the seed's actor as drawn.
+    function claim(uint256 whoSeed, uint256 aimSeed) external tracked {
+        uint256 index = bound(whoSeed, 0, actors.length - 1);
+        if (bound(aimSeed, 0, 3) != 0) index = _firstClaimantFrom(index);
+        address who = actors[index];
+        uint256 before = currency.balanceOf(who);
+        bool blocked = token.isFrozen(who) || !registry.isVerified(who);
+        _attempt("claim");
+        vm.prank(who);
+        try distributor.claim(who) {
+            if (blocked) ++ghostBlockedClaimsPaid;
+            ghostClaimed += currency.balanceOf(who) - before;
+            _succeeded("claim");
+        } catch (bytes memory err) {
+            _reverted("claim", err);
+        }
+    }
+
+    /*//////////////////////////////////////////////////////////////
+                                  TIME
+    //////////////////////////////////////////////////////////////*/
+
+    /// @dev Time passes, so lockups expire and, occasionally, a KYC attestation does.
+    function warp(uint256 secondsAhead) external tracked {
+        _attempt("warp");
+        vm.warp(block.timestamp + bound(secondsAhead, 1 hours, 30 days));
+        _succeeded("warp");
+    }
+
+    /*//////////////////////////////////////////////////////////////
+                                 VIEWS
+    //////////////////////////////////////////////////////////////*/
 
     function actorCount() external view returns (uint256) {
         return actors.length;
     }
 
-    function recoveredCount() external view returns (uint256) {
-        return ghostRecovered.length;
+    function actionCount() external view returns (uint256) {
+        return _actionNames.length;
     }
 
-    /*//////////////////////////////////////////////////////////////
-                                ACTIONS
-    //////////////////////////////////////////////////////////////*/
-
-    /// @dev Issuance. Bounded well below the holder cap's reach so supply stays legible.
-    function mint(uint256 toSeed, uint256 amount) external {
-        address to = _actor(toSeed);
-        amount = bound(amount, 1, 1_000_000e18);
-
-        vm.prank(issuer);
-        try token.mint(to, amount) {
-            ghostMinted += amount;
-            ++callsMint;
-        } catch {}
+    function actionName(uint256 i) external view returns (string memory) {
+        return _actionNames[i];
     }
 
-    /// @dev Retirement. The issuer may burn through a freeze, which is what makes the frozen
-    ///      reconciliation worth asserting as an invariant.
-    function burn(uint256 fromSeed, uint256 amount) external {
-        address from = _actor(fromSeed);
-        uint256 balance = token.balanceOf(from);
-        if (balance == 0) return;
-        amount = bound(amount, 1, balance);
-
-        vm.prank(issuer);
-        try token.burn(from, amount) {
-            ghostBurned += amount;
-            ++callsBurn;
-        } catch {}
+    function seenSelectors(string memory action) external view returns (bytes4[] memory) {
+        return _seenSelectors[keccak256(bytes(action))];
     }
 
-    function transfer(uint256 fromSeed, uint256 toSeed, uint256 amount) external {
-        address from = _actor(fromSeed);
-        address to = _actor(toSeed);
-        uint256 balance = token.balanceOf(from);
-        if (balance == 0) return;
-        amount = bound(amount, 1, balance);
-
-        vm.prank(from);
-        try token.transfer(to, amount) {
-            ++callsTransfer;
-        } catch {}
+    function attemptsOf(string memory action) external view returns (uint256) {
+        return attempts[keccak256(bytes(action))];
     }
 
-    function setAddressFrozen(uint256 whoSeed, bool freeze) external {
-        address who = _actor(whoSeed);
-
-        vm.prank(agent);
-        try token.setAddressFrozen(who, freeze) {
-            if (freeze) ++callsFreezeAddress;
-            else ++callsUnfreezeAddress;
-        } catch {}
+    function successesOf(string memory action) external view returns (uint256) {
+        return successes[keccak256(bytes(action))];
     }
 
-    function freezePartialTokens(uint256 whoSeed, uint256 amount) external {
-        address who = _actor(whoSeed);
-        uint256 balance = token.balanceOf(who);
-        uint256 frozen = token.frozenTokens(who);
-        if (balance <= frozen) return;
-        amount = bound(amount, 1, balance - frozen);
-
-        vm.prank(agent);
-        try token.freezePartialTokens(who, amount) {
-            ++callsFreezePartial;
-        } catch {}
-    }
-
-    function unfreezePartialTokens(uint256 whoSeed, uint256 amount) external {
-        address who = _actor(whoSeed);
-        uint256 frozen = token.frozenTokens(who);
-        if (frozen == 0) return;
-        amount = bound(amount, 1, frozen);
-
-        vm.prank(agent);
-        try token.unfreezePartialTokens(who, amount) {
-            ++callsUnfreezePartial;
-        } catch {}
-    }
-
-    /**
-     * @dev Pause and unpause as a single toggling action rather than two independent ones.
-     *
-     *      As two actions the fuzzer reaches a paused state and then, on most subsequent draws,
-     *      picks something other than unpause: the run spends the rest of its depth with every
-     *      balance-moving call reverting on the pause, and the invariants hold over a system that
-     *      did nothing. Toggling keeps both states reachable while guaranteeing the paused stretch
-     *      ends. The exemption recovery enjoys while paused is still exercised, since recovery
-     *      draws land inside those stretches.
-     */
-    /**
-     * @dev The `seed` parameter exists only to make pausing rare.
-     *
-     *      Forge draws each handler action with roughly equal probability, so an unconditional
-     *      toggle would leave the token paused for about half of every run, and half the sequence
-     *      would be spent watching balance-moving calls revert on the pause rather than exploring
-     *      the interactions between them. Entering a pause on a fraction of the draws keeps the
-     *      paused state (and recovery's exemption from it) reachable while leaving most of the
-     *      depth for the paths that actually move balances. Leaving one is never throttled, so a
-     *      paused stretch stays short.
-     */
-    function togglePause(uint256 seed) external {
-        // The prank must sit immediately before the state-changing call: it applies to the next
-        // call only, and reading `paused()` first would consume it.
-        bool isPaused = token.paused();
-        if (!isPaused && bound(seed, 0, 9) != 0) return;
-
-        if (isPaused) {
-            vm.prank(agent);
-            try token.unpause() {
-                ++callsUnpause;
-            } catch {}
-        } else {
-            vm.prank(agent);
-            try token.pause() {
-                ++callsPause;
-            } catch {}
-        }
-    }
-
-    /**
-     * @dev Recovery between two pool wallets. Most draws are rejected because the two actors do
-     *      not share an investor id, which is intended: the rejection path is as much a part of
-     *      the property as the success path.
-     */
-    function forcedRecovery(uint256 lostSeed, uint256 newSeed) external {
-        address lost = _actor(lostSeed);
-        address replacement = _actor(newSeed);
-
-        vm.prank(custodian);
-        try token.forcedRecovery(lost, replacement) {
-            ++callsRecover;
-            // Record the balance the instant the eviction completed. A wallet may legitimately be
-            // re-onboarded later and hold again, so the property worth asserting is that recovery
-            // left it empty at the time, not that it stays empty forever.
-            ghostBalanceAtEviction[lost] = token.balanceOf(lost);
-            if (!ghostIsRecovered[lost]) {
-                ghostIsRecovered[lost] = true;
-                ghostRecovered.push(lost);
-            }
-        } catch {}
-    }
-
-    /**
-     * @dev Withdrawing an identity and restoring it, as one toggling action.
-     *
-     *      Withdrawal is the action that creates the state the "verified holders only" invariant
-     *      had to be reformulated around: a wallet keeps its balance while unverified, and cannot
-     *      move it. That state must be reachable, which is why the action exists at all.
-     *
-     *      It toggles for the same reason pause does, only more sharply. As a standalone action,
-     *      withdrawal accumulates: within a few draws the whole pool is unverified, and from there
-     *      every mint and every transfer reverts on the identity check for the rest of the run.
-     *      Restoring on the next draw of the same actor keeps the suspended state frequent and
-     *      short-lived instead of terminal.
-     *
-     *      The restored record always carries the actor's original investor id, so recovery
-     *      destinations stay valid across a withdrawal.
-     */
-    function toggleIdentity(uint256 whoSeed, uint256 throttleSeed, uint16 country, bool accredited) external {
-        address who = _actor(whoSeed);
-
-        // Throttled for the same reason as the pause: withdrawal blocks the wallet on both sides
-        // of a transfer, so withdrawing on every draw would starve the paths worth exploring.
-        // Restoring is never throttled, so a suspension stays short. The throttle reads its own
-        // parameter rather than reusing `country`, which is bound to a non-zero range just below.
-        bool verified = registry.isVerified(who);
-        if (verified && bound(throttleSeed, 0, 4) != 0) return;
-
-        country = uint16(bound(country, 1, 999));
-
-        vm.startPrank(agent);
-        if (verified) {
-            try registry.removeIdentity(who) {
-                ++callsRemoveIdentity;
-            } catch {}
-        } else {
-            try registry.registerIdentity(
-                who, country, accredited, uint64(block.timestamp + 365 days), investorIdOf[who]
-            ) {
-                ++callsRegisterIdentity;
-            } catch {}
-        }
-        vm.stopPrank();
-    }
-
-    /// @dev Time passes. Without this the lockup would block every transfer for the whole run and
-    ///      the suite would explore only the rejected side of the rule.
-    function warp(uint256 secondsAhead) external {
-        secondsAhead = bound(secondsAhead, 1 hours, 30 days);
-        vm.warp(block.timestamp + secondsAhead);
-        ++callsWarp;
+    function revertsOf(string memory action, bytes4 selector) external view returns (uint256) {
+        return revertsBySelector[keccak256(bytes(action))][selector];
     }
 }
