@@ -3,6 +3,7 @@ pragma solidity ^0.8.24;
 
 import {Test, Vm} from "forge-std/Test.sol";
 import {IERC20Errors} from "@openzeppelin/contracts/interfaces/draft-IERC6093.sol";
+import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import {MessageHashUtils} from "@openzeppelin/contracts/utils/cryptography/MessageHashUtils.sol";
 
 import {Deploy} from "../../script/Deploy.s.sol";
@@ -572,5 +573,89 @@ contract RegressionsTest is Test, Deploy {
             ++seen;
         }
         revert("no such token log");
+    }
+
+    /*//////////////////////////////////////////////////////////////
+          MODULES JUDGE VALUE MOVEMENTS: A ZERO AMOUNT PASSES THEM
+    //////////////////////////////////////////////////////////////*/
+
+    /// @dev A zero-amount transfer moves no value, so no module rule applies to it. The lockup
+    ///      used to refuse it from a sender still in lockup, although nothing was disposed of.
+    function test_zeroAmountTransfer_fromSenderInLockup_succeeds() public {
+        _onboard(alice);
+        _onboard(bob);
+        d.token.mint(alice, AMOUNT);
+        d.token.mint(bob, AMOUNT);
+        assertFalse(d.lockup.moduleCheck(alice, bob, 1), "alice should be locked");
+        uint64 start = d.lockup.lockStart(alice);
+
+        vm.prank(alice);
+        d.token.transfer(bob, 0);
+
+        assertEq(d.lockup.lockStart(alice), start);
+        assertEq(d.token.balanceOf(alice), AMOUNT);
+    }
+
+    /// @dev With the holder cap full, a zero-amount transfer to a wallet holding nothing adds no
+    ///      holder. The cap used to refuse it; the count must not move either way.
+    function test_zeroAmountTransfer_toNonHolderAtCap_succeedsWithoutCounting() public {
+        _onboard(alice);
+        _onboard(bob);
+        _onboard(carol);
+        d.token.mint(alice, AMOUNT);
+        d.token.mint(bob, AMOUNT);
+        vm.prank(agent);
+        d.maxHolders.setMaxHolders(2);
+        vm.warp(block.timestamp + LOCKUP_PERIOD + 1);
+
+        vm.prank(alice);
+        d.token.transfer(carol, 0);
+
+        assertEq(d.maxHolders.holderCount(), 2);
+        assertEq(d.token.balanceOf(carol), 0);
+    }
+
+    /// @dev A recipient in a blocked jurisdiction receives nothing from a zero-amount transfer, so
+    ///      the country rule has nothing to refuse. The recipient must still be verified.
+    function test_zeroAmountTransfer_toBlockedCountry_succeeds() public {
+        uint16 fr = 250;
+        _onboard(alice);
+        vm.prank(agent);
+        d.identityRegistry.registerIdentity(bob, fr, true, uint64(block.timestamp + KYC_WINDOW));
+        d.token.mint(alice, AMOUNT);
+        vm.prank(agent);
+        d.countryRestriction.setCountryRestricted(fr, true);
+        vm.warp(block.timestamp + LOCKUP_PERIOD + 1);
+
+        vm.prank(alice);
+        d.token.transfer(bob, 0);
+
+        vm.expectRevert(abi.encodeWithSelector(ISecurityToken.ComplianceCheckFailed.selector, alice, bob, 1));
+        vm.prank(alice);
+        d.token.transfer(bob, 1);
+    }
+
+    /// @dev `transferFrom` with a zero amount needs no allowance. Between two verified holders it
+    ///      now settles and emits a Transfer event whoever calls it, as for any ERC-20; the
+    ///      token-level checks still apply, so it cannot reach an unverified or frozen wallet.
+    function test_zeroAmountTransferFrom_passesModulesButNotTheGate() public {
+        _onboard(alice);
+        _onboard(bob);
+        d.token.mint(alice, AMOUNT);
+
+        vm.expectEmit(true, true, false, true, address(d.token));
+        emit IERC20.Transfer(alice, bob, 0);
+        vm.prank(stranger);
+        d.token.transferFrom(alice, bob, 0);
+
+        vm.prank(agent);
+        d.token.setAddressFrozen(bob, true);
+        vm.expectRevert(abi.encodeWithSelector(ISecurityToken.RecipientAddressFrozen.selector, bob));
+        vm.prank(stranger);
+        d.token.transferFrom(alice, bob, 0);
+
+        vm.expectRevert(abi.encodeWithSelector(ISecurityToken.RecipientNotVerified.selector, carol));
+        vm.prank(stranger);
+        d.token.transferFrom(alice, carol, 0);
     }
 }

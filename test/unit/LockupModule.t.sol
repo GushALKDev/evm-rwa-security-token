@@ -77,6 +77,13 @@ contract LockupModuleTest is Test {
         assertFalse(module.canComplianceBind(engine), "a removed stateful module must not return");
     }
 
+    /// @dev A zero amount disposes of nothing, so a sender still in lockup may send it.
+    function test_moduleCheck_zeroAmountPassesDuringLockup() public {
+        _mint(alice, AMOUNT);
+        assertFalse(module.moduleCheck(alice, bob, 1));
+        assertTrue(module.moduleCheck(alice, bob, 0));
+    }
+
     function test_constructor_setsState() public view {
         assertEq(module.compliance(), engine);
         assertEq(module.token(), address(token));

@@ -76,6 +76,16 @@ contract MaxHoldersModuleTest is Test {
         assertFalse(module.canComplianceBind(engine), "a removed stateful module must not return");
     }
 
+    /// @dev A zero amount adds no holder, so the cap does not judge it, even when full.
+    function test_moduleCheck_zeroAmountPassesAtFullCap() public {
+        for (uint256 i; i < CAP; ++i) {
+            _mint(vm.addr(i + 500), AMOUNT);
+        }
+        assertFalse(module.moduleCheck(alice, bob, 1), "a new holder should be refused at the cap");
+        assertTrue(module.moduleCheck(alice, bob, 0));
+        assertTrue(module.moduleCheck(address(0), bob, 0));
+    }
+
     function test_constructor_setsState() public view {
         assertEq(module.compliance(), engine);
         assertEq(module.token(), address(token));

@@ -93,7 +93,10 @@ contract CountryRestrictionModule is AbstractComplianceModule, AccessControl {
     //////////////////////////////////////////////////////////////*/
 
     /// @inheritdoc IComplianceModule
-    function moduleCheck(address, address to, uint256) external view returns (bool) {
+    function moduleCheck(address, address to, uint256 amount) external view returns (bool) {
+        // A zero amount places nothing with the recipient. Modules judge value movements only; the
+        // token-level checks (identity, freeze, pause) still apply to a zero-amount transfer.
+        if (amount == 0) return true;
         // A burn has no recipient to place in a jurisdiction.
         if (to == address(0)) return true;
 

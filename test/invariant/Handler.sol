@@ -241,6 +241,17 @@ contract Handler is CommonBase, StdCheats, StdUtils {
         ++revertsBySelector[key][selector];
     }
 
+    /// @dev As `_reverted`, for an action that moves `amount`. Modules judge value movements only,
+    ///      so a zero amount can be refused by the token-level checks (identity, freeze, pause) but
+    ///      never by a module: `ComplianceCheckFailed` on a zero amount is unexpected.
+    function _revertedMove(string memory action, bytes memory err, uint256 amount) internal {
+        if (amount == 0 && bytes4(err) == ISecurityToken.ComplianceCheckFailed.selector) {
+            _unexpected(action, err);
+            return;
+        }
+        _reverted(action, err);
+    }
+
     function _unexpected(string memory action, bytes memory err) internal {
         ++unexpectedReverts;
         lastUnexpected = err;
@@ -312,7 +323,7 @@ contract Handler is CommonBase, StdCheats, StdUtils {
             ghostMinted += amount;
             _succeeded("mint");
         } catch (bytes memory err) {
-            _reverted("mint", err);
+            _revertedMove("mint", err, amount);
         }
     }
 
@@ -339,7 +350,7 @@ contract Handler is CommonBase, StdCheats, StdUtils {
         try token.transfer(to, amount) {
             _succeeded("transfer");
         } catch (bytes memory err) {
-            _reverted("transfer", err);
+            _revertedMove("transfer", err, amount);
         }
     }
 
@@ -371,7 +382,7 @@ contract Handler is CommonBase, StdCheats, StdUtils {
         try token.transferFrom(from, to, amount) {
             _succeeded("transferFrom");
         } catch (bytes memory err) {
-            _reverted("transferFrom", err);
+            _revertedMove("transferFrom", err, amount);
         }
     }
 

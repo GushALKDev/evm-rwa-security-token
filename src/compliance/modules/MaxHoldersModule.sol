@@ -121,6 +121,9 @@ contract MaxHoldersModule is AbstractComplianceModule, AccessControl {
 
     /// @inheritdoc IComplianceModule
     function moduleCheck(address from, address to, uint256 amount) external view returns (bool) {
+        // A zero amount moves no value and adds no holder. Modules judge value movements only;
+        // the token-level checks (identity, freeze, pause) still apply to a zero-amount transfer.
+        if (amount == 0) return true;
         // A burn removes supply and can only reduce the holder count.
         if (to == address(0)) return true;
 

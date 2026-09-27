@@ -54,6 +54,15 @@ contract CountryRestrictionModuleTest is Test {
         assertTrue(module.canComplianceBind(engine));
     }
 
+    /// @dev A zero amount places nothing with the recipient, so a blocked jurisdiction does not
+    ///      refuse it.
+    function test_moduleCheck_zeroAmountPassesForBlockedRecipient() public {
+        vm.prank(agent);
+        module.setCountryRestricted(FR, true);
+        assertFalse(module.moduleCheck(alice, bob, 1));
+        assertTrue(module.moduleCheck(alice, bob, 0));
+    }
+
     function test_constructor_setsState() public view {
         assertEq(module.compliance(), engine);
         assertEq(module.identityRegistry(), address(registry));

@@ -122,7 +122,10 @@ contract LockupModule is AbstractComplianceModule, AccessControl {
     //////////////////////////////////////////////////////////////*/
 
     /// @inheritdoc IComplianceModule
-    function moduleCheck(address from, address, uint256) external view returns (bool) {
+    function moduleCheck(address from, address, uint256 amount) external view returns (bool) {
+        // A zero amount disposes of nothing. Modules judge value movements only; the token-level
+        // checks (identity, freeze, pause) still apply to a zero-amount transfer.
+        if (amount == 0) return true;
         // A mint is an acquisition, not a disposal: nothing to lock.
         if (from == address(0)) return true;
 
