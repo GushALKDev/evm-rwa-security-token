@@ -68,7 +68,7 @@ These are **accepted design positions**, not gaps. They are listed here because 
 | :--- | :------- |
 | **Issuer authority is centralised** | The issuer holds `DEFAULT_ADMIN_ROLE` and can self-grant `AGENT` and `CUSTODIAN`. Faithful to ERC-3643 and to the regulatory reality it encodes. Mitigation path (multisig + timelock) is governance infrastructure, orthogonal to the architecture |
 | **A custodian key plus an agent key can collude** | An agent can link an attacker-controlled wallet to a victim's `investorId`; a custodian can then recover into it. Neither key alone suffices. Contained by role separation and by the audit trail, not prevented |
-| **Recovery bypasses the rule set** | Deliberate, and tested as such ([`test_forcedRecovery_succeedsWhenComplianceRejects`](../../test/unit/SecurityToken.t.sol#L646)). The consequence is that modules offer no secondary containment against a compromised custodian key: the `investorId` check and the event trail are the containment |
+| **Recovery bypasses the rule set** | Deliberate, and tested as such ([`test_forcedRecovery_succeedsWhenComplianceRejects`](../../test/unit/SecurityToken.t.sol#L751)). The consequence is that modules offer no secondary containment against a compromised custodian key: the `investorId` check and the event trail are the containment |
 | **A withdrawn identity leaves a suspended balance** | An unverified address can still *hold*, just not move. This is why the coverage map phrases the property as "no unverified address can increase its balance". Confiscation is the issuer's burn or the custodian's recovery, both deliberate acts |
 
 Full treatment of each in [Guide 4: Trade-offs](../04-tradeoffs.md) and the [README threat model](../../README.md#threat-model).

@@ -24,7 +24,7 @@ The lifecycle hooks infer transitions from post-transfer balances: `balanceOf(to
 
 **Why the other layers missed it.** Nobody writes a unit test for sending tokens to yourself, because it does nothing. The scenario suite walks realistic operator sequences, and a self-transfer is not one. Only random sequencing over a bounded actor pool produced `from == to`, and only then because the pool is small enough for the fuzzer to draw the same actor twice.
 
-The fix discards the case at the top of `moduleTransferred`, and two regression tests now pin it: [`test_transfer_selfTransferKeepsCountFlat`](../../test/unit/MaxHoldersModule.t.sol#L133) and [`test_transfer_partialSelfTransferKeepsCountFlat`](../../test/unit/MaxHoldersModule.t.sol#L143). `LockupModule` uses the same inference and was checked for the same flaw: it is immune, because its `_lockStart[to] != 0` guard prevents restarting an existing clock.
+The fix discards the case at the top of `moduleTransferred`, and two regression tests now pin it: [`test_transfer_selfTransferKeepsCountFlat`](../../test/unit/MaxHoldersModule.t.sol#L153) and [`test_transfer_partialSelfTransferKeepsCountFlat`](../../test/unit/MaxHoldersModule.t.sol#L163). `LockupModule` uses the same inference and was checked for the same flaw: it is immune, because its `_lockStart[to] != 0` guard prevents restarting an existing clock.
 
 ---
 
@@ -32,13 +32,13 @@ The fix discards the case at the top of `moduleTransferred`, and two regression 
 
 | Invariant | Statement |
 | :--- | :--- |
-| [`invariant_balancesSumToTotalSupply`](../../test/invariant/Invariants.t.sol#L108) | Balances across the whole reachable address space sum to `totalSupply` |
-| [`invariant_supplyMatchesMintsMinusBurns`](../../test/invariant/Invariants.t.sol#L121) | Supply moves **only** through issuance and retirement, tracked against ghost counters |
-| [`invariant_frozenNeverExceedsBalance`](../../test/invariant/Invariants.t.sol#L135) | `frozenTokens[a] <= balanceOf(a)` for every actor |
-| [`invariant_holderCountMatchesReality`](../../test/invariant/Invariants.t.sol#L151) | The module's cached count equals the addresses actually holding a balance |
-| [`invariant_holderCountNeverExceedsCap`](../../test/invariant/Invariants.t.sol#L164) | The count never exceeds `maxHolders` |
-| [`invariant_recoveryLeavesEvictedWalletEmpty`](../../test/invariant/Invariants.t.sol#L183) | Recovery always leaves the wallet it evicted empty, measured at the instant of eviction |
-| [`invariant_unverifiedHoldersAreConsistent`](../../test/invariant/Invariants.t.sol#L204) | An unverified wallet has no movable balance and a coherent frozen figure |
+| [`invariant_balancesSumToTotalSupply`](../../test/invariant/Invariants.t.sol#L126) | Balances across the whole reachable address space sum to `totalSupply` |
+| [`invariant_supplyMatchesMintsMinusBurns`](../../test/invariant/Invariants.t.sol#L138) | Supply moves **only** through issuance and retirement, tracked against ghost counters |
+| [`invariant_frozenNeverExceedsBalance`](../../test/invariant/Invariants.t.sol#L151) | `frozenTokens[a] <= balanceOf(a)` for every actor |
+| [`invariant_holderCountMatchesReality`](../../test/invariant/Invariants.t.sol#L166) | The module's cached count equals the addresses actually holding a balance |
+| [`invariant_holderCountNeverExceedsCap`](../../test/invariant/Invariants.t.sol#L178) | The count never exceeds `maxHolders` |
+| `invariant_recoveryLeavesEvictedWalletEmpty` | Removed in round 2 of the review: it recorded the lost wallet's balance right after a full-balance move, so it could not fail. Round 3 rewrites this catalogue |
+| [`invariant_unverifiedBalanceNeverGrows`](../../test/invariant/Invariants.t.sol#L220) | Replaces `invariant_unverifiedHoldersAreConsistent` (round 2): an unverified wallet's balance never exceeds what it held when it stopped being verified |
 
 Three deserve their reasoning stated.
 
@@ -58,14 +58,14 @@ Three deserve their reasoning stated.
 
 | Action | Notes |
 | :--- | :--- |
-| [`mint`](../../test/invariant/Handler.sol#L147) / [`burn`](../../test/invariant/Handler.sol#L160) | Issuance and retirement, tracked in ghost counters |
-| [`transfer`](../../test/invariant/Handler.sol#L173) | Amount bound against the sender's real balance |
-| [`setAddressFrozen`](../../test/invariant/Handler.sol#L186) | Full freeze, both directions |
-| [`freezePartialTokens`](../../test/invariant/Handler.sol#L196) / [`unfreezePartialTokens`](../../test/invariant/Handler.sol#L209) | Bound against the free and frozen portions respectively |
-| [`togglePause`](../../test/invariant/Handler.sol#L242) | Throttled, see below |
-| [`forcedRecovery`](../../test/invariant/Handler.sol#L266) | Most draws are correctly rejected: the two actors rarely share an investor id |
-| [`toggleIdentity`](../../test/invariant/Handler.sol#L300) | Withdrawal and restoration, throttled |
-| [`warp`](../../test/invariant/Handler.sol#L329) | Time passes, so the lockup boundary is crossed in both directions |
+| [`mint`](../../test/invariant/Handler.sol#L306) / [`burn`](../../test/invariant/Handler.sol#L320) | Issuance and retirement, tracked in ghost counters |
+| [`transfer`](../../test/invariant/Handler.sol#L333) | Amount bound against the sender's real balance |
+| [`setAddressFrozen`](../../test/invariant/Handler.sol#L383) | Full freeze, both directions |
+| [`freezePartialTokens`](../../test/invariant/Handler.sol#L396) / [`unfreezePartialTokens`](../../test/invariant/Handler.sol#L408) | Bound against the free and frozen portions respectively |
+| [`togglePause`](../../test/invariant/Handler.sol#L422) | Throttled, see below |
+| [`forcedRecovery`](../../test/invariant/Handler.sol#L450) | Most draws are correctly rejected: the two actors rarely share an investor id |
+| [`toggleIdentity`](../../test/invariant/Handler.sol#L489) | Withdrawal and restoration, throttled |
+| [`warp`](../../test/invariant/Handler.sol#L568) | Time passes, so the lockup boundary is crossed in both directions |
 
 ### Why the pool is fixed
 
@@ -85,9 +85,9 @@ Both are therefore toggles that enter their blocking state on a fraction of draw
 
 The suite runs with `fail_on_revert = false`. This is necessary (a locked-up transfer *must* be allowed to revert), and it is exactly how an invariant suite silently tests nothing: if every call reverted, every invariant would hold vacuously and the run would still be green.
 
-Each action increments a counter only on success, and [`test_handlerExercisesEveryAction`](../../test/invariant/Invariants.t.sol#L241) drives every action against a known-good state and asserts its counter moved. It is not a nicety: it caught two real defects in the handler during development, one where a `vm.prank` was consumed by a state-reading call before reaching the call it was meant to authorise, and one where a throttle read an already-bounded parameter and so **never withdrew an identity at all**.
+Each action increments a counter only on success, and [`test_handlerExercisesEveryAction`](../../test/invariant/Invariants.t.sol#L309) drives every action against a known-good state and asserts its counter moved. It is not a nicety: it caught two real defects in the handler during development, one where a `vm.prank` was consumed by a state-reading call before reaching the call it was meant to authorise, and one where a throttle read an already-bounded parameter and so **never withdrew an identity at all**.
 
-**Note on placement.** The counters cannot be asserted in `afterInvariant`, which does not observe the state a sequence accumulated and reads zero regardless. The reachability check lives in the deterministic test instead. [`afterInvariant`](../../test/invariant/Invariants.t.sol#L226) is kept purely as a `-vv` readout of what a run exercised.
+**Note on placement.** The counters cannot be asserted in `afterInvariant`, which does not observe the state a sequence accumulated and reads zero regardless. The reachability check lives in the deterministic test instead. [`afterInvariant`](../../test/invariant/Invariants.t.sol#L283) is kept purely as a `-vv` readout of what a run exercised.
 
 ---
 

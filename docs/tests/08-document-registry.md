@@ -45,7 +45,7 @@ The three empty-value guards exist because each failure mode is silent. A zero h
 | [`test_removeDocument_emitsRemoved`](../../test/unit/DocumentRegistry.t.sol#L138) | `DocumentRemoved` fires |
 | [`test_removeDocument_revertsWhenNotFound`](../../test/unit/DocumentRegistry.t.sol#L148) | Removing an unanchored name reverts `DocumentNotFound` rather than succeeding silently |
 | [`test_removeDocument_revertsForNonIssuer`](../../test/unit/DocumentRegistry.t.sol#L155) | Removal is issuer-gated |
-| [`test_removeThenSet_reindexes`](../../test/unit/DocumentRegistry.t.sol#L168) | A name removed and re-anchored is indexed correctly again, with no stale entry |
+| [`test_removeThenSet_reindexes`](../../test/unit/DocumentRegistry.t.sol#L170) | A name removed and re-anchored is indexed correctly again, with no stale entry |
 
 `setDocument` deliberately ignores whether the name was already present (both cases are valid), while `removeDocument` checks it and reverts. The asymmetry is intentional: re-anchoring an existing document is the normal amendment flow, whereas removing something that was never there means the caller is operating on a mistaken assumption and should hear about it.
 
@@ -57,9 +57,9 @@ The reindex test covers the state-machine edge of the underlying `EnumerableSet`
 
 | Test | Asserts |
 | :--- | :------ |
-| [`test_getDocument_revertsWhenNotFound`](../../test/unit/DocumentRegistry.t.sol#L184) | Reading an unanchored name reverts rather than returning an empty record that could be mistaken for a real anchor |
-| [`test_getAllDocuments_enumeratesMultiple`](../../test/unit/DocumentRegistry.t.sol#L189) | Several anchored documents all appear in the enumeration |
-| [`test_getAllDocuments_emptyByDefault`](../../test/unit/DocumentRegistry.t.sol#L199) | A fresh registry enumerates empty |
+| [`test_getDocument_revertsWhenNotFound`](../../test/unit/DocumentRegistry.t.sol#L202) | Reading an unanchored name reverts rather than returning an empty record that could be mistaken for a real anchor |
+| [`test_getAllDocuments_enumeratesMultiple`](../../test/unit/DocumentRegistry.t.sol#L207) | Several anchored documents all appear in the enumeration |
+| [`test_getAllDocuments_emptyByDefault`](../../test/unit/DocumentRegistry.t.sol#L217) | A fresh registry enumerates empty |
 
 Reverting on a missing document matters more than it looks. A zero-valued `Document` struct would compare equal to a real one whose fields happen to be unset, so a caller checking "is this document anchored" by reading the hash could be told yes by a record that does not exist.
 
@@ -69,8 +69,8 @@ Reverting on a missing document matters more than it looks. A zero-valued `Docum
 
 | Test | Property |
 | :--- | :------- |
-| [`testFuzz_setThenGetRoundtrips`](../../test/unit/DocumentRegistry.t.sol#L208) | Any valid `(name, uri, hash)` written reads back identical |
-| [`testFuzz_indexCountsDistinctNames`](../../test/unit/DocumentRegistry.t.sol#L223) | The index size always equals the number of **distinct** names anchored, regardless of how many times each was re-anchored |
+| [`testFuzz_setThenGetRoundtrips`](../../test/unit/DocumentRegistry.t.sol#L226) | Any valid `(name, uri, hash)` written reads back identical |
+| [`testFuzz_indexCountsDistinctNames`](../../test/unit/DocumentRegistry.t.sol#L241) | The index size always equals the number of **distinct** names anchored, regardless of how many times each was re-anchored |
 
 The second is the upsert property stated over arbitrary sequences: no matter how the issuer interleaves new anchors and amendments, enumeration reflects distinct documents rather than write operations.
 
@@ -80,4 +80,4 @@ The second is the upsert property stated over arbitrary sequences: no matter how
 
 Names are `bytes32` **labels**, not hashes: `bytes32("TERMS")`, not `keccak256("TERMS")`. A label under 32 bytes is reversible, so anything reading the chain can decode `getAllDocuments()` into human-readable names without a lookup table. A hashed name would be irreversible, forcing every consumer to already know the string it was looking for.
 
-The content hash is a real `keccak256` of the document body: the two serve different purposes and only one of them is meant to hide anything, which is neither. This convention is what [`test_anchor_nameIsReadableLabel`](../../test/unit/Deploy.t.sol#L220) pins at the deployment level.
+The content hash is a real `keccak256` of the document body: the two serve different purposes and only one of them is meant to hide anything, which is neither. This convention is what [`test_anchor_nameIsReadableLabel`](../../test/unit/Deploy.t.sol#L264) pins at the deployment level.

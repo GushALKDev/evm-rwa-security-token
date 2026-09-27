@@ -71,7 +71,7 @@ A distribution restriction governs who the instrument may be **placed with**. Tr
 
 | Test | Asserts |
 | :--- | :------ |
-| [`test_scenario_everyRuleMustPassIndependently`](../../test/scenario/Lifecycle.t.sol#L371) | Three blockers are stacked on one transfer and lifted one at a time, asserting a **different rejection at each step** and success only after the last is cleared |
+| [`test_scenario_everyRuleMustPassIndependently`](../../test/scenario/Lifecycle.t.sol#L376) | Three blockers are stacked on one transfer and lifted one at a time, asserting a **different rejection at each step** and success only after the last is cleared |
 
 The single most useful test in the suite. It stacks a partial freeze, an unexpired lockup and a closed jurisdiction on the same transfer, then removes them in sequence: freeze released (still blocked, now by the lockup), lockup elapsed (still blocked, now by the country rule), jurisdiction reopened (settles).
 

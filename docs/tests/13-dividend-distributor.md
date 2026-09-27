@@ -23,11 +23,11 @@ where `correction` absorbs the error in pricing an account's *current* balance a
 
 | Test | Asserts |
 | :--- | :------ |
-| [`test_constructor_setsState`](../../test/unit/DividendDistributor.t.sol#L86) | Engine, token, currency and both roles are set, and the accumulator starts at zero |
-| [`test_constructor_revertsOnZeroToken`](../../test/unit/DividendDistributor.t.sol#L96) | A zero token is refused: balances define the split |
-| [`test_constructor_revertsOnZeroCurrency`](../../test/unit/DividendDistributor.t.sol#L101) | A zero settlement currency is refused |
-| [`test_constructor_revertsOnZeroIssuer`](../../test/unit/DividendDistributor.t.sol#L106) | A zero issuer is refused, which would leave the deposit path permanently unreachable |
-| [`test_constructor_revertsOnZeroCompliance`](../../test/unit/DividendDistributor.t.sol#L111) | A zero engine is refused by the shared `AbstractComplianceModule` binding |
+| [`test_constructor_setsState`](../../test/unit/DividendDistributor.t.sol#L97) | Engine, token, currency and both roles are set, and the accumulator starts at zero |
+| [`test_constructor_revertsOnZeroToken`](../../test/unit/DividendDistributor.t.sol#L107) | A zero token is refused: balances define the split |
+| [`test_constructor_revertsOnZeroCurrency`](../../test/unit/DividendDistributor.t.sol#L112) | A zero settlement currency is refused |
+| [`test_constructor_revertsOnZeroIssuer`](../../test/unit/DividendDistributor.t.sol#L117) | A zero issuer is refused, which would leave the deposit path permanently unreachable |
+| [`test_constructor_revertsOnZeroCompliance`](../../test/unit/DividendDistributor.t.sol#L122) | A zero engine is refused by the shared `AbstractComplianceModule` binding |
 
 ---
 
@@ -35,10 +35,10 @@ where `correction` absorbs the error in pricing an account's *current* balance a
 
 | Test | Asserts |
 | :--- | :------ |
-| [`test_deposit_pullsFundsAndRaisesAccumulator`](../../test/unit/DividendDistributor.t.sol#L120) | The currency is pulled from the depositor and `dividendsPerShare` rises |
-| [`test_deposit_revertsOnZeroAmount`](../../test/unit/DividendDistributor.t.sol#L131) | A zero deposit is refused rather than emitting a misleading event |
-| [`test_deposit_revertsOnZeroSupply`](../../test/unit/DividendDistributor.t.sol#L140) | **Depositing against zero supply is refused**, since there is no one to credit and the funds would be stranded permanently |
-| [`test_deposit_revertsForNonAgent`](../../test/unit/DividendDistributor.t.sol#L146) | Deposits are AGENT-gated: an open deposit lets anyone perturb the accumulator |
+| [`test_deposit_pullsFundsAndRaisesAccumulator`](../../test/unit/DividendDistributor.t.sol#L131) | The currency is pulled from the depositor and `dividendsPerShare` rises |
+| [`test_deposit_revertsOnZeroAmount`](../../test/unit/DividendDistributor.t.sol#L142) | A zero deposit is refused rather than emitting a misleading event |
+| [`test_deposit_revertsOnZeroSupply`](../../test/unit/DividendDistributor.t.sol#L151) | **Depositing against zero supply is refused**, since there is no one to credit and the funds would be stranded permanently |
+| [`test_deposit_revertsForNonAgent`](../../test/unit/DividendDistributor.t.sol#L157) | Deposits are AGENT-gated: an open deposit lets anyone perturb the accumulator |
 
 The zero-supply guard is the non-obvious one. Dividing by a zero supply would revert anyway, but the custom error states the actual condition, and the alternative design (accepting the funds and holding them for future holders) silently changes who the money belongs to.
 
@@ -48,14 +48,14 @@ The zero-supply guard is the non-obvious one. Dividing by a zero supply would re
 
 | Test | Asserts |
 | :--- | :------ |
-| [`test_claim_paysSoleHolderTheWholeDeposit`](../../test/unit/DividendDistributor.t.sol#L160) | A sole holder receives the deposit, less the one-wei descaling truncation |
-| [`test_claim_splitsProRata`](../../test/unit/DividendDistributor.t.sol#L177) | Two holders at a 1:2 ratio receive a 1:2 split |
-| [`test_claim_canPayADifferentAddress`](../../test/unit/DividendDistributor.t.sol#L186) | A holder may direct payment elsewhere, without the entitlement following the recipient |
-| [`test_claim_revertsOnZeroRecipient`](../../test/unit/DividendDistributor.t.sol#L199) | Paying the zero address is refused |
-| [`test_claim_revertsWhenNothingAccrued`](../../test/unit/DividendDistributor.t.sol#L208) | A non-holder cannot claim |
-| [`test_claim_revertsOnSecondClaimWithoutNewIncome`](../../test/unit/DividendDistributor.t.sol#L217) | A second claim without new income is refused, not silently paid zero |
-| [`test_claim_accruesAgainAfterASecondDeposit`](../../test/unit/DividendDistributor.t.sol#L228) | Claiming does not detach the account from future income |
-| [`test_claim_isReentrancyGuarded`](../../test/unit/DividendDistributor.t.sol#L486) | **A malicious settlement currency reentering `claim` from inside its own `transfer` is rejected by the guard** |
+| [`test_claim_paysSoleHolderTheWholeDeposit`](../../test/unit/DividendDistributor.t.sol#L171) | A sole holder receives the deposit, less the one-wei descaling truncation |
+| [`test_claim_splitsProRata`](../../test/unit/DividendDistributor.t.sol#L188) | Two holders at a 1:2 ratio receive a 1:2 split |
+| [`test_claim_canPayADifferentAddress`](../../test/unit/DividendDistributor.t.sol#L197) | A holder may direct payment elsewhere, without the entitlement following the recipient |
+| [`test_claim_revertsOnZeroRecipient`](../../test/unit/DividendDistributor.t.sol#L210) | Paying the zero address is refused |
+| [`test_claim_revertsWhenNothingAccrued`](../../test/unit/DividendDistributor.t.sol#L260) | A non-holder cannot claim |
+| [`test_claim_revertsOnSecondClaimWithoutNewIncome`](../../test/unit/DividendDistributor.t.sol#L269) | A second claim without new income is refused, not silently paid zero |
+| [`test_claim_accruesAgainAfterASecondDeposit`](../../test/unit/DividendDistributor.t.sol#L280) | Claiming does not detach the account from future income |
+| [`test_claim_isReentrancyGuarded`](../../test/unit/DividendDistributor.t.sol#L563) | **A malicious settlement currency reentering `claim` from inside its own `transfer` is rejected by the guard** |
 
 The reentrancy test uses a currency contract that calls back into `claim` mid-transfer. This is the realistic hostile shape for a pull-payment contract: the currency is external code that gets control after the withdrawal is recorded. The withdrawal record is written before the transfer (CEI), so the guard is the second line rather than the only one, but a token with a transfer callback makes it load-bearing.
 
@@ -67,15 +67,15 @@ The property the whole design rests on: a transfer moves shares, never entitleme
 
 | Test | Asserts |
 | :--- | :------ |
-| [`test_transfer_doesNotMoveAlreadyAccruedDividends`](../../test/unit/DividendDistributor.t.sol#L278) | **The seller keeps income earned while holding; the buyer is not paid for it** |
-| [`test_transfer_shiftsFutureIncomeToTheBuyer`](../../test/unit/DividendDistributor.t.sol#L289) | The next deposit accrues entirely to the buyer |
-| [`test_transfer_partialBalanceSplitsFutureIncome`](../../test/unit/DividendDistributor.t.sol#L299) | A half-balance transfer splits future income in half |
-| [`test_transfer_afterClaimLeavesNothingToDoubleClaim`](../../test/unit/DividendDistributor.t.sol#L309) | Claiming and then selling leaves neither party able to claim the same income twice |
-| [`test_transfer_selfTransferDoesNotChangeEntitlement`](../../test/unit/DividendDistributor.t.sol#L325) | **A self-transfer is inert**, the same inference that produced a live bug in `MaxHoldersModule` |
-| [`test_transfer_selfTransferBeforeIncomeIsInert`](../../test/unit/DividendDistributor.t.sol#L334) | The same before any income exists, which trips a different branch |
-| [`test_mint_afterIncomeGrantsNoBackpay`](../../test/unit/DividendDistributor.t.sol#L343) | A late arrival is not retroactively paid for earlier deposits |
-| [`test_burn_preservesAccruedDividends`](../../test/unit/DividendDistributor.t.sol#L354) | **Burning shares does not burn the income they already earned** |
-| [`test_burn_stopsFutureAccrual`](../../test/unit/DividendDistributor.t.sol#L368) | After a burn, the remaining holder takes the whole of the next deposit |
+| [`test_transfer_doesNotMoveAlreadyAccruedDividends`](../../test/unit/DividendDistributor.t.sol#L330) | **The seller keeps income earned while holding; the buyer is not paid for it** |
+| [`test_transfer_shiftsFutureIncomeToTheBuyer`](../../test/unit/DividendDistributor.t.sol#L341) | The next deposit accrues entirely to the buyer |
+| [`test_transfer_partialBalanceSplitsFutureIncome`](../../test/unit/DividendDistributor.t.sol#L351) | A half-balance transfer splits future income in half |
+| [`test_transfer_afterClaimLeavesNothingToDoubleClaim`](../../test/unit/DividendDistributor.t.sol#L361) | Claiming and then selling leaves neither party able to claim the same income twice |
+| [`test_transfer_selfTransferDoesNotChangeEntitlement`](../../test/unit/DividendDistributor.t.sol#L377) | **A self-transfer is inert**, the same inference that produced a live bug in `MaxHoldersModule` |
+| [`test_transfer_selfTransferBeforeIncomeIsInert`](../../test/unit/DividendDistributor.t.sol#L386) | The same before any income exists, which trips a different branch |
+| [`test_mint_afterIncomeGrantsNoBackpay`](../../test/unit/DividendDistributor.t.sol#L395) | A late arrival is not retroactively paid for earlier deposits |
+| [`test_burn_preservesAccruedDividends`](../../test/unit/DividendDistributor.t.sol#L406) | **Burning shares does not burn the income they already earned** |
+| [`test_burn_stopsFutureAccrual`](../../test/unit/DividendDistributor.t.sol#L420) | After a burn, the remaining holder takes the whole of the next deposit |
 
 The correction is what makes double-claiming across a transfer structurally impossible rather than merely unlikely: on any balance move the sender's correction falls by exactly what the recipient's rises, so the sum of `accumulated` over all accounts is untouched. Only a deposit ever raises it. Mint and burn are the one-sided cases of the same rule, which is why they need their own tests rather than being treated as transfers with a zero counterparty.
 
@@ -89,8 +89,8 @@ This group exists because of a bug found here, and it is the most important sect
 
 | Test | Asserts |
 | :--- | :------ |
-| [`test_deposit_carriesResidueSoTheShortfallDoesNotGrow`](../../test/unit/DividendDistributor.t.sol#L242) | Across eight consecutive deposits the shortfall stays at one wei and does not accumulate |
-| [`test_deposit_claimsNeverExceedFundsAcrossManyDeposits`](../../test/unit/DividendDistributor.t.sol#L255) | **Regression: the sum of entitlements never exceeds the funds deposited, at any depth** |
+| [`test_deposit_carriesResidueSoTheShortfallDoesNotGrow`](../../test/unit/DividendDistributor.t.sol#L294) | Across eight consecutive deposits the shortfall stays at one wei and does not accumulate |
+| [`test_deposit_claimsNeverExceedFundsAcrossManyDeposits`](../../test/unit/DividendDistributor.t.sol#L307) | **Regression: the sum of entitlements never exceeds the funds deposited, at any depth** |
 
 **The bug.** The residue left by each deposit's truncated division was first carried in *currency* units, as "deposited minus what the accumulator will pay out". That rounds the dust **up** every deposit and the error compounds: by the third deposit the sum of claims already exceeded the sum of deposits, and the gap grew by one wei per deposit thereafter. The contract would have become unable to pay its last claimant, with no bound on how far short it fell.
 
@@ -104,10 +104,10 @@ This is why payout assertions in this suite use a deliberately one-sided helper 
 
 | Test | Asserts |
 | :--- | :------ |
-| [`test_recovery_carriesEntitlementToTheNewWallet`](../../test/unit/DividendDistributor.t.sol#L384) | **Recovery relocates the position whole: unclaimed income follows the balance** |
-| [`test_recovery_lostWalletCannotClaimAfterwards`](../../test/unit/DividendDistributor.t.sol#L401) | The compromised wallet is left owed exactly nothing |
-| [`test_recovery_carriesTheWithdrawalRecord`](../../test/unit/DividendDistributor.t.sol#L416) | The `withdrawn` record moves too, so recovery cannot re-open a settled claim |
-| [`test_recovery_newWalletAccruesFutureIncome`](../../test/unit/DividendDistributor.t.sol#L434) | The recovered wallet accrues normally afterwards, as the position's only owner |
+| [`test_recovery_carriesEntitlementToTheNewWallet`](../../test/unit/DividendDistributor.t.sol#L436) | **Recovery relocates the position whole: unclaimed income follows the balance** |
+| [`test_recovery_lostWalletCannotClaimAfterwards`](../../test/unit/DividendDistributor.t.sol#L453) | The compromised wallet is left owed exactly nothing |
+| [`test_recovery_carriesTheWithdrawalRecord`](../../test/unit/DividendDistributor.t.sol#L468) | The `withdrawn` record moves too, so recovery cannot re-open a settled claim |
+| [`test_recovery_newWalletAccruesFutureIncome`](../../test/unit/DividendDistributor.t.sol#L486) | The recovered wallet accrues normally afterwards, as the position's only owner |
 
 **The second bug, and the more serious one.** Settling a recovery like an ordinary sale leaves the unclaimed income on the lost wallet, precisely the wallet the investor no longer controls. This was verified end to end before it was fixed: after a successful `forcedRecovery`, the compromised address still drained the full deposit. The tokens were rescued and the money was not.
 
@@ -121,10 +121,10 @@ This is the one place the distributor depends on the token being a `SecurityToke
 
 | Test | Asserts |
 | :--- | :------ |
-| [`test_moduleCheck_alwaysPermits`](../../test/unit/DividendDistributor.t.sol#L452) | **The distributor never blocks a transfer**, for any argument shape including mints and burns |
-| [`test_moduleTransferred_revertsForNonCompliance`](../../test/unit/DividendDistributor.t.sol#L463) | Only the bound engine may drive `moduleTransferred` |
-| [`test_moduleCreated_revertsForNonCompliance`](../../test/unit/DividendDistributor.t.sol#L469) | Only the bound engine may drive `moduleCreated` |
-| [`test_moduleDestroyed_revertsForNonCompliance`](../../test/unit/DividendDistributor.t.sol#L475) | Only the bound engine may drive `moduleDestroyed` |
+| [`test_moduleCheck_alwaysPermits`](../../test/unit/DividendDistributor.t.sol#L504) | **The distributor never blocks a transfer**, for any argument shape including mints and burns |
+| [`test_moduleTransferred_revertsForNonCompliance`](../../test/unit/DividendDistributor.t.sol#L515) | Only the bound engine may drive `moduleTransferred` |
+| [`test_moduleCreated_revertsForNonCompliance`](../../test/unit/DividendDistributor.t.sol#L521) | Only the bound engine may drive `moduleCreated` |
+| [`test_moduleDestroyed_revertsForNonCompliance`](../../test/unit/DividendDistributor.t.sol#L527) | Only the bound engine may drive `moduleDestroyed` |
 
 `moduleCheck` returning an unconditional `true` is a design statement, not a stub: the distributor is an observer that keeps accounts, not a rule that expresses a restriction. Withholding income from a sanctioned holder is a matter for the token's freeze controls, not for the transfer gate. The test pins that so a future change cannot quietly turn income accounting into a transfer restriction.
 
@@ -136,11 +136,11 @@ The hook gating is not ceremonial here. An ungated `moduleTransferred` would let
 
 | Test | Property |
 | :--- | :------- |
-| [`testFuzz_conservation_claimsNeverExceedDeposits`](../../test/unit/DividendDistributor.t.sol#L515) | Across arbitrary balances and deposit sizes, total entitlement never exceeds the amount deposited |
-| [`testFuzz_roundingDustIsBounded`](../../test/unit/DividendDistributor.t.sol#L533) | The shortfall is at most one wei per holder, not an unbounded leak |
-| [`testFuzz_transferPreservesTotalEntitlement`](../../test/unit/DividendDistributor.t.sol#L549) | A transfer of any size leaves the sum of entitlements exactly unchanged |
-| [`testFuzz_solventAcrossRepeatedDeposits`](../../test/unit/DividendDistributor.t.sol#L567) | **Over up to twenty deposits, the contract always holds at least what it says is owed** |
-| [`testFuzz_claimIsAlwaysSolvent`](../../test/unit/DividendDistributor.t.sol#L588) | Every claim the contract reports as owed can actually be paid out |
+| [`testFuzz_conservation_claimsNeverExceedDeposits`](../../test/unit/DividendDistributor.t.sol#L610) | Across arbitrary balances and deposit sizes, total entitlement never exceeds the amount deposited |
+| [`testFuzz_roundingDustIsBounded`](../../test/unit/DividendDistributor.t.sol#L628) | The shortfall is at most one wei per holder, not an unbounded leak |
+| [`testFuzz_transferPreservesTotalEntitlement`](../../test/unit/DividendDistributor.t.sol#L644) | A transfer of any size leaves the sum of entitlements exactly unchanged |
+| [`testFuzz_solventAcrossRepeatedDeposits`](../../test/unit/DividendDistributor.t.sol#L663) | **Over up to twenty deposits, the contract always holds at least what it says is owed** |
+| [`testFuzz_claimIsAlwaysSolvent`](../../test/unit/DividendDistributor.t.sol#L694) | Every claim the contract reports as owed can actually be paid out |
 
 `testFuzz_solventAcrossRepeatedDeposits` is the one that would have caught the compounding-residue bug, and it is deliberately multi-deposit: the single-deposit properties all passed while the contract was insolvent, because the error only appears once a second deposit is folded in. Depth, not breadth, was what mattered.
 
@@ -154,10 +154,10 @@ The unit suite drives the hooks from a mocked engine address, which proves the a
 
 | Test | Asserts |
 | :--- | :------ |
-| [`test_scenario_incomeAccruesToTheHolderAtTheTimeOfDeposit`](../../test/scenario/Dividends.t.sol#L69) | The full cycle: subscribe, receive income, sell after the lockup, and see entitlement split at the moment of sale |
-| [`test_scenario_recoveryCarriesUnclaimedIncome`](../../test/scenario/Dividends.t.sol#L106) | **Through the real `forcedRecovery`**, income follows the position to the new wallet |
-| [`test_scenario_distributorDoesNotGateTransfers`](../../test/scenario/Dividends.t.sol#L132) | Registering the distributor does not turn it into a transfer restriction |
-| [`test_scenario_multiHolderDistributionStaysSolvent`](../../test/scenario/Dividends.t.sol#L151) | Five deposits across a real holder set stay within the funds received |
+| [`test_scenario_incomeAccruesToTheHolderAtTheTimeOfDeposit`](../../test/scenario/Dividends.t.sol#L77) | The full cycle: subscribe, receive income, sell after the lockup, and see entitlement split at the moment of sale |
+| [`test_scenario_recoveryCarriesUnclaimedIncome`](../../test/scenario/Dividends.t.sol#L117) | **Through the real `forcedRecovery`**, income follows the position to the new wallet |
+| [`test_scenario_distributorDoesNotGateTransfers`](../../test/scenario/Dividends.t.sol#L143) | Registering the distributor does not turn it into a transfer restriction |
+| [`test_scenario_multiHolderDistributionStaysSolvent`](../../test/scenario/Dividends.t.sol#L162) | Five deposits across a real holder set stay within the funds received |
 
 The suite registers the distributor with `addModule` **after** `_deploy` has already closed the graph. That is the point rather than a convenience: it demonstrates that a new capability is added to a live system without redeploying anything and without touching the token, which is the claim the module architecture makes. `removeModule` reverses it just as cleanly.
 

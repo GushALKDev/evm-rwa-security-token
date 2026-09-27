@@ -13,11 +13,11 @@
 
 | Test | Asserts |
 | :--- | :------ |
-| [`test_wiring_tokenIsBoundToEngine`](../../test/unit/Deploy.t.sol#L71) | The engine is bound to the token, without which every mint would revert on the lifecycle hook |
-| [`test_wiring_allThreeModulesRegistered`](../../test/unit/Deploy.t.sol#L75) | All three rule modules are registered and enumerable |
-| [`test_wiring_tokenHoldsAgentOnRegistry`](../../test/unit/Deploy.t.sol#L84) | **The token itself holds `AGENT_ROLE` on the registry** |
-| [`test_wiring_operatorRolesGranted`](../../test/unit/Deploy.t.sol#L88) | Agent, custodian and issuer hold the roles the running system needs |
-| [`test_wiring_agentCannotRecover`](../../test/unit/Deploy.t.sol#L97) | **The AGENT/CUSTODIAN split survived deployment**: the compliance desk cannot seize a position |
+| [`test_wiring_tokenIsBoundToEngine`](../../test/unit/Deploy.t.sol#L74) | The engine is bound to the token, without which every mint would revert on the lifecycle hook |
+| [`test_wiring_allThreeModulesRegistered`](../../test/unit/Deploy.t.sol#L78) | All three rule modules are registered and enumerable |
+| [`test_wiring_tokenHoldsAgentOnRegistry`](../../test/unit/Deploy.t.sol#L87) | **The token itself holds `AGENT_ROLE` on the registry** |
+| [`test_wiring_operatorRolesGranted`](../../test/unit/Deploy.t.sol#L91) | Agent, custodian and issuer hold the roles the running system needs |
+| [`test_wiring_agentCannotRecover`](../../test/unit/Deploy.t.sol#L100) | **The AGENT/CUSTODIAN split survived deployment**: the compliance desk cannot seize a position |
 
 The registry grant is the least visible step in the whole deployment. `forcedRecovery` evicts the lost wallet by calling `removeIdentity`, which is agent-gated, so the *contract* must hold `AGENT_ROLE`: a role held by code rather than by a person. Omit it and everything looks correct: the token deploys, transfers work, freezes work, and recovery fails at the last line of the one operation you need during an incident.
 
@@ -31,12 +31,12 @@ Wiring assertions prove the graph is connected. These prove it carries traffic.
 
 | Test | Asserts |
 | :--- | :------ |
-| [`test_live_mintReachesComplianceModules`](../../test/unit/Deploy.t.sol#L116) | A mint reaches the engine, which fans out to the modules, and the holder count actually moves |
-| [`test_live_transferToUnverifiedReverts`](../../test/unit/Deploy.t.sol#L126) | The gate is wired to the real registry: an unverified recipient is refused |
-| [`test_live_lockupBlocksEarlyTransfer`](../../test/unit/Deploy.t.sol#L137) | The lockup module is not merely registered but enforcing, at the deployed 365-day period |
-| [`test_live_transferSucceedsAfterLockup`](../../test/unit/Deploy.t.sol#L149) | And clears once the period elapses, proving the block above came from the lockup clock rather than some other rule |
-| [`test_live_countryRestrictionBlocksRecipient`](../../test/unit/Deploy.t.sol#L164) | The country module reads the registry the script wired into it |
-| [`test_live_forcedRecoveryEvictsLostWallet`](../../test/unit/Deploy.t.sol#L184) | Recovery completes end to end, which only succeeds because the registry grant above is real |
+| [`test_live_mintReachesComplianceModules`](../../test/unit/Deploy.t.sol#L119) | A mint reaches the engine, which fans out to the modules, and the holder count actually moves |
+| [`test_live_transferToUnverifiedReverts`](../../test/unit/Deploy.t.sol#L129) | The gate is wired to the real registry: an unverified recipient is refused |
+| [`test_live_lockupBlocksEarlyTransfer`](../../test/unit/Deploy.t.sol#L140) | The lockup module is not merely registered but enforcing, at the deployed 365-day period |
+| [`test_live_transferSucceedsAfterLockup`](../../test/unit/Deploy.t.sol#L152) | And clears once the period elapses, proving the block above came from the lockup clock rather than some other rule |
+| [`test_live_countryRestrictionBlocksRecipient`](../../test/unit/Deploy.t.sol#L167) | The country module reads the registry the script wired into it |
+| [`test_live_forcedRecoveryEvictsLostWallet`](../../test/unit/Deploy.t.sol#L187) | Recovery completes end to end, which only succeeds because the registry grant above is real |
 
 The pairing of `lockupBlocksEarlyTransfer` with `transferSucceedsAfterLockup` is deliberate. A blocked transfer alone proves only that *something* rejected it: a mis-wired module rejecting everything would pass that test just as happily. Showing the same transfer succeed after the exact configured period is what identifies the lockup as the cause.
 
@@ -48,10 +48,10 @@ The pairing of `lockupBlocksEarlyTransfer` with `transferSucceedsAfterLockup` is
 
 | Test | Asserts |
 | :--- | :------ |
-| [`test_anchor_matchesFileOnDisk`](../../test/unit/Deploy.t.sol#L205) | The anchored hash equals `keccak256` of the terms file read from disk at test time |
-| [`test_anchor_storesUriAndTimestamp`](../../test/unit/Deploy.t.sol#L212) | The published URI and the anchoring timestamp are recorded |
-| [`test_anchor_nameIsReadableLabel`](../../test/unit/Deploy.t.sol#L220) | The document is anchored under `bytes32("TERMS")`, a decodable label rather than an opaque hash |
-| [`test_anchor_detectsDriftedDocument`](../../test/unit/Deploy.t.sol#L229) | **The failure the anchor exists to catch**: altered content produces a hash that no longer matches the anchor |
+| [`test_anchor_matchesFileOnDisk`](../../test/unit/Deploy.t.sol#L249) | The anchored hash equals `keccak256` of the terms file read from disk at test time |
+| [`test_anchor_storesUriAndTimestamp`](../../test/unit/Deploy.t.sol#L256) | The published URI and the anchoring timestamp are recorded |
+| [`test_anchor_nameIsReadableLabel`](../../test/unit/Deploy.t.sol#L264) | The document is anchored under `bytes32("TERMS")`, a decodable label rather than an opaque hash |
+| [`test_anchor_detectsDriftedDocument`](../../test/unit/Deploy.t.sol#L292) | **The failure the anchor exists to catch**: altered content produces a hash that no longer matches the anchor |
 
 The script computes the hash with `vm.readFile` rather than accepting it as a parameter or a constant, and these tests recompute it independently. A hardcoded hash would drift silently the first time anyone edits the terms document: the anchor would still be *an* anchor, just to a version that no longer exists anywhere.
 

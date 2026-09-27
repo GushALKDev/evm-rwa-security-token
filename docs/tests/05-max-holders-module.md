@@ -11,9 +11,9 @@
 
 | Test | Asserts |
 | :--- | :------ |
-| [`test_constructor_setsState`](../../test/unit/MaxHoldersModule.t.sol#L59) | Engine, token, cap and roles are set, and the initial `MaxHoldersUpdated` fires |
-| [`test_constructor_revertsOnZeroCap`](../../test/unit/MaxHoldersModule.t.sol#L67) | A zero cap is refused: it would block every mint and make the token unusable |
-| [`test_constructor_revertsOnZeroToken`](../../test/unit/MaxHoldersModule.t.sol#L72) | A zero token is refused, since the rule reads balances to detect transitions |
+| [`test_constructor_setsState`](../../test/unit/MaxHoldersModule.t.sol#L79) | Engine, token, cap and roles are set, and the initial `MaxHoldersUpdated` fires |
+| [`test_constructor_revertsOnZeroCap`](../../test/unit/MaxHoldersModule.t.sol#L87) | A zero cap is refused: it would block every mint and make the token unusable |
+| [`test_constructor_revertsOnZeroToken`](../../test/unit/MaxHoldersModule.t.sol#L92) | A zero token is refused, since the rule reads balances to detect transitions |
 
 ---
 
@@ -23,17 +23,17 @@ The count changes only on a true transition. Every shape of balance movement has
 
 | Test | Asserts |
 | :--- | :------ |
-| [`test_mint_incrementsCount`](../../test/unit/MaxHoldersModule.t.sol#L81) | A mint to a fresh wallet adds a holder |
-| [`test_mint_toExistingHolderDoesNotIncrement`](../../test/unit/MaxHoldersModule.t.sol#L90) | A mint to someone who already holds does not double-count them |
-| [`test_transfer_toNewHolderIncrements`](../../test/unit/MaxHoldersModule.t.sol#L97) | A partial transfer to a fresh wallet adds a holder |
-| [`test_transfer_betweenExistingHoldersKeepsCountFlat`](../../test/unit/MaxHoldersModule.t.sol#L114) | Moving between two existing holders changes nothing |
-| [`test_transfer_selfTransferKeepsCountFlat`](../../test/unit/MaxHoldersModule.t.sol#L133) | **A self-transfer of the full balance changes nothing.** Regression test for a live bug, see below |
-| [`test_transfer_partialSelfTransferKeepsCountFlat`](../../test/unit/MaxHoldersModule.t.sol#L143) | The same for a partial self-transfer, which trips a different branch of the inference |
-| [`test_transfer_senderEmptyingDecrements`](../../test/unit/MaxHoldersModule.t.sol#L151) | A sender emptying out to an existing holder removes one |
-| [`test_transfer_fullBalanceKeepsCountFlat`](../../test/unit/MaxHoldersModule.t.sol#L105) | **The replacement case**: one wallet empties while another fills, so the count is unchanged |
-| [`test_burn_toZeroDecrements`](../../test/unit/MaxHoldersModule.t.sol#L161) | A burn that empties a wallet removes a holder |
-| [`test_burn_partialDoesNotDecrement`](../../test/unit/MaxHoldersModule.t.sol#L168) | A partial burn leaves the holder counted |
-| [`test_holderCount_emitsOnChange`](../../test/unit/MaxHoldersModule.t.sol#L175) | `HolderCountUpdated` fires only when the count actually moves, not on every hook |
+| [`test_mint_incrementsCount`](../../test/unit/MaxHoldersModule.t.sol#L101) | A mint to a fresh wallet adds a holder |
+| [`test_mint_toExistingHolderDoesNotIncrement`](../../test/unit/MaxHoldersModule.t.sol#L110) | A mint to someone who already holds does not double-count them |
+| [`test_transfer_toNewHolderIncrements`](../../test/unit/MaxHoldersModule.t.sol#L117) | A partial transfer to a fresh wallet adds a holder |
+| [`test_transfer_betweenExistingHoldersKeepsCountFlat`](../../test/unit/MaxHoldersModule.t.sol#L134) | Moving between two existing holders changes nothing |
+| [`test_transfer_selfTransferKeepsCountFlat`](../../test/unit/MaxHoldersModule.t.sol#L153) | **A self-transfer of the full balance changes nothing.** Regression test for a live bug, see below |
+| [`test_transfer_partialSelfTransferKeepsCountFlat`](../../test/unit/MaxHoldersModule.t.sol#L163) | The same for a partial self-transfer, which trips a different branch of the inference |
+| [`test_transfer_senderEmptyingDecrements`](../../test/unit/MaxHoldersModule.t.sol#L171) | A sender emptying out to an existing holder removes one |
+| [`test_transfer_fullBalanceKeepsCountFlat`](../../test/unit/MaxHoldersModule.t.sol#L125) | **The replacement case**: one wallet empties while another fills, so the count is unchanged |
+| [`test_burn_toZeroDecrements`](../../test/unit/MaxHoldersModule.t.sol#L181) | A burn that empties a wallet removes a holder |
+| [`test_burn_partialDoesNotDecrement`](../../test/unit/MaxHoldersModule.t.sol#L188) | A partial burn leaves the holder counted |
+| [`test_holderCount_emitsOnChange`](../../test/unit/MaxHoldersModule.t.sol#L195) | `HolderCountUpdated` fires only when the count actually moves, not on every hook |
 
 The hooks run *after* balances settle, which is what makes the transition detectable at all: `balanceOf(to) == amount` means "this wallet came from zero", and `balanceOf(from) == 0` means "this wallet just left". Reading pre-transfer balances would require the module to reconstruct the delta itself.
 
@@ -47,11 +47,11 @@ The replacement case is the one a naive implementation gets wrong. Handling "rec
 
 | Test | Asserts |
 | :--- | :------ |
-| [`test_moduleCheck_allowsBelowCap`](../../test/unit/MaxHoldersModule.t.sol#L189) | Below the cap, a new holder is admitted |
-| [`test_moduleCheck_blocksNewHolderAtCap`](../../test/unit/MaxHoldersModule.t.sol#L196) | At the cap, a new holder is refused |
-| [`test_moduleCheck_allowsExistingHolderAtCap`](../../test/unit/MaxHoldersModule.t.sol#L207) | At the cap, an existing holder may still receive more: the cap counts holders, not transfers |
-| [`test_moduleCheck_allowsReplacementAtCap`](../../test/unit/MaxHoldersModule.t.sol#L220) | **At the cap, a replacement is allowed**: if the sender empties in the same transfer, one holder swaps for another and the count never exceeds the cap |
-| [`test_moduleCheck_allowsBurn`](../../test/unit/MaxHoldersModule.t.sol#L233) | A burn is always allowed, since it can only reduce the count |
+| [`test_moduleCheck_allowsBelowCap`](../../test/unit/MaxHoldersModule.t.sol#L209) | Below the cap, a new holder is admitted |
+| [`test_moduleCheck_blocksNewHolderAtCap`](../../test/unit/MaxHoldersModule.t.sol#L216) | At the cap, a new holder is refused |
+| [`test_moduleCheck_allowsExistingHolderAtCap`](../../test/unit/MaxHoldersModule.t.sol#L227) | At the cap, an existing holder may still receive more: the cap counts holders, not transfers |
+| [`test_moduleCheck_allowsReplacementAtCap`](../../test/unit/MaxHoldersModule.t.sol#L240) | **At the cap, a replacement is allowed**: if the sender empties in the same transfer, one holder swaps for another and the count never exceeds the cap |
+| [`test_moduleCheck_allowsBurn`](../../test/unit/MaxHoldersModule.t.sol#L253) | A burn is always allowed, since it can only reduce the count |
 
 Allowing the replacement is the difference between a cap that limits **concurrent holders** and one that limits participation over time. Refusing it would mean a full placement is frozen: no new investor can ever enter, even as others exit completely, because every candidate is evaluated as "one more holder" without regard to the seat being vacated in the same movement. The scenario suite walks this end to end in [`test_scenario_replacementAtCapIsAllowed`](../../test/scenario/Lifecycle.t.sol#L305).
 
@@ -61,9 +61,9 @@ Allowing the replacement is the difference between a cap that limits **concurren
 
 | Test | Asserts |
 | :--- | :------ |
-| [`test_moduleCreated_revertsForNonCompliance`](../../test/unit/MaxHoldersModule.t.sol#L245) | Only the bound engine may drive `moduleCreated` |
-| [`test_moduleTransferred_revertsForNonCompliance`](../../test/unit/MaxHoldersModule.t.sol#L251) | Only the bound engine may drive `moduleTransferred` |
-| [`test_moduleDestroyed_revertsForNonCompliance`](../../test/unit/MaxHoldersModule.t.sol#L257) | Only the bound engine may drive `moduleDestroyed` |
+| [`test_moduleCreated_revertsForNonCompliance`](../../test/unit/MaxHoldersModule.t.sol#L265) | Only the bound engine may drive `moduleCreated` |
+| [`test_moduleTransferred_revertsForNonCompliance`](../../test/unit/MaxHoldersModule.t.sol#L271) | Only the bound engine may drive `moduleTransferred` |
+| [`test_moduleDestroyed_revertsForNonCompliance`](../../test/unit/MaxHoldersModule.t.sol#L277) | Only the bound engine may drive `moduleDestroyed` |
 
 An ungated hook here is a direct attack on the cap: anyone could call `moduleDestroyed` repeatedly to drive the count to zero, and then the placement admits unlimited holders while the module still reports itself as enforcing a limit.
 
@@ -73,11 +73,11 @@ An ungated hook here is a direct attack on the cap: anyone could call `moduleDes
 
 | Test | Asserts |
 | :--- | :------ |
-| [`test_setMaxHolders_updatesAndEmits`](../../test/unit/MaxHoldersModule.t.sol#L267) | The agent raises or lowers the cap and `MaxHoldersUpdated` fires |
-| [`test_setMaxHolders_revertsForNonAgent`](../../test/unit/MaxHoldersModule.t.sol#L278) | The cap is agent-gated |
-| [`test_setMaxHolders_revertsOnZero`](../../test/unit/MaxHoldersModule.t.sol#L286) | A zero cap is refused after construction too |
-| [`test_setMaxHolders_revertsBelowCurrentCount`](../../test/unit/MaxHoldersModule.t.sol#L294) | **The cap cannot be set below the live count**, which would put the system in a state its own rule says is illegal |
-| [`test_setMaxHolders_allowsEqualToCurrentCount`](../../test/unit/MaxHoldersModule.t.sol#L303) | Setting it exactly at the current count is allowed: the placement is simply full |
+| [`test_setMaxHolders_updatesAndEmits`](../../test/unit/MaxHoldersModule.t.sol#L287) | The agent raises or lowers the cap and `MaxHoldersUpdated` fires |
+| [`test_setMaxHolders_revertsForNonAgent`](../../test/unit/MaxHoldersModule.t.sol#L298) | The cap is agent-gated |
+| [`test_setMaxHolders_revertsOnZero`](../../test/unit/MaxHoldersModule.t.sol#L306) | A zero cap is refused after construction too |
+| [`test_setMaxHolders_revertsBelowCurrentCount`](../../test/unit/MaxHoldersModule.t.sol#L314) | **The cap cannot be set below the live count**, which would put the system in a state its own rule says is illegal |
+| [`test_setMaxHolders_allowsEqualToCurrentCount`](../../test/unit/MaxHoldersModule.t.sol#L323) | Setting it exactly at the current count is allowed: the placement is simply full |
 
 Refusing a cap below the current count keeps the invariant `holderCount <= maxHolders` true at all times rather than only after transfers. Allowing it would create a state that no transfer caused and no transfer can repair (existing holders cannot be evicted by a rule module), so the system would sit permanently in violation of its own constraint.
 
@@ -87,7 +87,7 @@ Refusing a cap below the current count keeps the invariant `holderCount <= maxHo
 
 | Test | Property |
 | :--- | :------- |
-| [`testFuzz_countMatchesReality`](../../test/unit/MaxHoldersModule.t.sol#L318) | After an arbitrary sequence of holder movements, the module's count equals the number of addresses actually holding a positive balance |
-| [`testFuzz_countNeverExceedsCap`](../../test/unit/MaxHoldersModule.t.sol#L339) | Across arbitrary admission attempts, the count never exceeds the cap |
+| [`testFuzz_countMatchesReality`](../../test/unit/MaxHoldersModule.t.sol#L341) | After an arbitrary sequence of holder movements, the module's count equals the number of addresses actually holding a positive balance |
+| [`testFuzz_countNeverExceedsCap`](../../test/unit/MaxHoldersModule.t.sol#L376) | Across arbitrary admission attempts, the count never exceeds the cap |
 
 The first is the test that justifies the whole incremental design. The count is a cached derivative of state the module never enumerates, so the only meaningful assurance is to compare it against the enumeration the contract cannot afford, which a test *can* afford. It is the closest thing in this suite to a stateful invariant, and it is why the pending handler suite ([Gaps](./12-gaps-and-roadmap.md)) is a smaller gap here than for the token.
