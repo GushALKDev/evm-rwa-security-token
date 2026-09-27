@@ -167,6 +167,19 @@ contract ModularComplianceTest is Test {
         assertFalse(moduleA.isComplianceBound(stranger));
     }
 
+    /// @dev The attachment events name the bound engine even if the engine passed another address.
+    function test_bindCompliance_eventNamesTheBoundEngine() public {
+        vm.expectEmit(true, false, false, false, address(moduleA));
+        emit IComplianceModule.ComplianceBound(address(engine));
+        vm.prank(address(engine));
+        moduleA.bindCompliance(stranger);
+
+        vm.expectEmit(true, false, false, false, address(moduleA));
+        emit IComplianceModule.ComplianceUnbound(address(engine));
+        vm.prank(address(engine));
+        moduleA.unbindCompliance(stranger);
+    }
+
     /// @dev Attachment is recorded only by the engine.
     function test_bindAndUnbindCompliance_revertForNonEngine() public {
         vm.startPrank(stranger);

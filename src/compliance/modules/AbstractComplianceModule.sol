@@ -61,19 +61,24 @@ abstract contract AbstractComplianceModule is IComplianceModule {
                                ATTACHMENT
     //////////////////////////////////////////////////////////////*/
 
-    /// @inheritdoc IComplianceModule
-    function bindCompliance(address compliance_) external onlyCompliance {
+    /**
+     * @inheritdoc IComplianceModule
+     * @dev The argument mirrors the T-REX signature. `onlyCompliance` already pins the caller to
+     *      the one engine, so the event names that engine rather than whatever was passed.
+     */
+    function bindCompliance(address) external onlyCompliance {
         _attached = true;
         _everAttached = true;
 
-        emit ComplianceBound(compliance_);
+        emit ComplianceBound(_compliance);
     }
 
     /// @inheritdoc IComplianceModule
-    function unbindCompliance(address compliance_) external onlyCompliance {
+    /// @dev As `bindCompliance`, the event names the bound engine, not the argument.
+    function unbindCompliance(address) external onlyCompliance {
         _attached = false;
 
-        emit ComplianceUnbound(compliance_);
+        emit ComplianceUnbound(_compliance);
     }
 
     /**
