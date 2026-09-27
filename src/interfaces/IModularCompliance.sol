@@ -66,6 +66,9 @@ interface IModularCompliance {
     ///         its rule would be evaluated against the wrong balances.
     error ModuleTokenMismatch(address module, address moduleToken, address boundToken);
 
+    /// @notice Thrown when adding a module would exceed the module cap.
+    error ModuleLimitReached(uint256 limit);
+
     /*//////////////////////////////////////////////////////////////
                               MODULE ADMIN
     //////////////////////////////////////////////////////////////*/

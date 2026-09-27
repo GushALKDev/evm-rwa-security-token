@@ -190,6 +190,27 @@ contract ModularComplianceTest is Test {
         vm.stopPrank();
     }
 
+    /// @dev The engine accepts up to MAX_MODULES modules, as T-REX does, which bounds the loops
+    ///      every transfer runs; the next one is refused, and a removal frees a slot.
+    function test_addModule_capsTheModuleCount() public {
+        uint256 cap = engine.MAX_MODULES();
+        assertEq(cap, 25);
+        vm.startPrank(issuer);
+        for (uint256 i; i < cap; ++i) {
+            engine.addModule(address(new MockModule(address(engine), "Filler")));
+        }
+        assertEq(engine.modules().length, cap);
+
+        MockModule extra = new MockModule(address(engine), "Extra");
+        vm.expectRevert(abi.encodeWithSelector(IModularCompliance.ModuleLimitReached.selector, cap));
+        engine.addModule(address(extra));
+
+        engine.removeModule(engine.modules()[0]);
+        engine.addModule(address(extra));
+        vm.stopPrank();
+        assertEq(engine.modules().length, cap);
+    }
+
     function test_removeModule_revertsForNonAdmin() public {
         _addBoth();
         bytes32 adminRole = engine.DEFAULT_ADMIN_ROLE();

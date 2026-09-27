@@ -36,6 +36,10 @@ contract ModularCompliance is IModularCompliance, AccessControl {
     ///      impossible, while modules() can still enumerate for tooling and the hooks.
     EnumerableSet.AddressSet private _modules;
 
+    /// @dev The most modules the engine accepts, as in T-REX. Every transfer iterates the modules
+    ///      in `canTransfer` and again in the hook fan-out, so the cap bounds that gas.
+    uint256 public constant MAX_MODULES = 25;
+
     /// @dev The token whose lifecycle hooks this engine accepts. Set once by bindToken.
     address private _token;
 
@@ -79,6 +83,7 @@ contract ModularCompliance is IModularCompliance, AccessControl {
         // every call this engine makes, reverting every mint, burn and transfer.
         if (IComplianceModule(module).compliance() != address(this)) revert ModuleNotBound(module);
         if (_modules.contains(module)) revert ModuleAlreadyAdded(module);
+        if (_modules.length() >= MAX_MODULES) revert ModuleLimitReached(MAX_MODULES);
         // The module decides whether it can join now (the T-REX canComplianceBind shape). A module
         // that infers state from balances refuses a token with supply, since it would start from
         // empty state, and a stateful module refuses to come back after a removal, since it missed
