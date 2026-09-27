@@ -5,9 +5,11 @@ import {IComplianceModule} from "../../interfaces/IComplianceModule.sol";
 
 /**
  * @title AbstractComplianceModule
- * @notice Shared plumbing for compliance rule modules: the engine binding and the hook gate.
- * @dev Holds no rule logic. Its only job is to guarantee that every module answers to exactly one
- *      compliance engine, and that lifecycle hooks cannot be called by anyone else. A module
+ * @notice Shared plumbing for compliance rule modules: the engine binding, the attachment
+ *         record and the hook gate.
+ * @dev Holds no rule logic. Its jobs are to bind every module to exactly one compliance
+ *      engine, to record whether that engine currently has it attached, and to reject lifecycle
+ *      hooks from anyone else. A module
  *      whose hooks are callable by arbitrary accounts has no integrity: an attacker could
  *      desynchronize its state from the token's and walk through the rule afterwards.
  *

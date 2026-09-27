@@ -58,7 +58,9 @@ contract ModularCompliance is IModularCompliance, AccessControl {
     /**
      * @notice Deploys the engine.
      * @dev The engine must exist before its modules: each module binds to an engine address at
-     *      construction, so the deployment order is engine first, then modules, then addModule.
+     *      construction. The token also takes the engine in its constructor, and the modules that
+     *      read balances take the token, so the deployment order is engine, registry, token, then
+     *      the modules, then addModule and bindToken (see script/Deploy.s.sol).
      * @param issuer The account receiving DEFAULT_ADMIN_ROLE.
      */
     constructor(address issuer) {

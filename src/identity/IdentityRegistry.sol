@@ -160,9 +160,10 @@ contract IdentityRegistry is IIdentityRegistry, AccessControl, EIP712 {
 
     /// @inheritdoc IIdentityRegistry
     function isVerified(address investor) external view returns (bool) {
-        // A storage pointer reads only the fields used, both in slot 0. Copying the record to
-        // memory would also load the investor id from slot 1, on a path that runs twice per
-        // transfer.
+        // Both fields live in slot 0. Reading them through a storage pointer into locals costs one
+        // SLOAD; copying the record to memory would also load the investor id from slot 1, and
+        // reading the fields inline in the return expression loads slot 0 twice. This runs twice
+        // per transfer.
         Identity storage record = _identities[investor];
 
         bool verified = record.verified;

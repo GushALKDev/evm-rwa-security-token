@@ -563,7 +563,7 @@ contract SecurityTokenTest is Test {
         assertEq(token.totalSupply(), AMOUNT); // supply conserved
     }
 
-    /// @dev Recovery evicts the lost wallet from the registry so it can never hold again.
+    /// @dev Recovery removes the lost wallet's verification, so it can no longer send or receive.
     function test_forcedRecovery_retiresLostWallet() public {
         _mint(alice, AMOUNT);
 

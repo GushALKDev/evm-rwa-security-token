@@ -185,8 +185,8 @@ contract SecurityToken is ISecurityToken, ERC20, AccessControl, Pausable, Reentr
         if (!_identityRegistry.isVerified(newWallet)) revert NewWalletNotVerified(newWallet);
 
         // Both wallets must belong to the same investor. Without this, a custodian could recover
-        // into any verified wallet, handing a third party the balance and — via the freeze state
-        // carried over below — freezing whatever that third party already held. Mirrors the
+        // into any verified wallet, handing a third party the balance and (via the freeze state
+        // carried over below) freezing whatever that third party already held. Mirrors the
         // ERC-3643 check that the new wallet is a management key of the investor's ONCHAINID.
         bytes32 lostInvestorId = _identityRegistry.investorId(lostWallet);
         bytes32 newInvestorId = _identityRegistry.investorId(newWallet);
@@ -201,9 +201,9 @@ contract SecurityToken is ISecurityToken, ERC20, AccessControl, Pausable, Reentr
         uint256 frozenAmount = _frozenTokens[lostWallet];
         bool wasFullyFrozen = _frozen[lostWallet];
 
-        // Retire the lost wallet: zero its frozen state and evict it from the registry so it can
-        // never hold the token again. Done before the move so the recovery transfer sees a clean
-        // sender, and so the partial-freeze gate cannot block the custodian's own move.
+        // Retire the lost wallet: zero its frozen state and remove its verification, so it can no
+        // longer send or receive. The agent can register it again later. Done before the move so
+        // the recovery transfer sees a clean sender.
         // The clearing is announced like any other unfreeze, so a freeze state rebuilt from events
         // does not keep the retired wallet frozen.
         if (frozenAmount != 0) {
@@ -234,9 +234,9 @@ contract SecurityToken is ISecurityToken, ERC20, AccessControl, Pausable, Reentr
         //
         // The two states carry over asymmetrically. A partial freeze is additive, so a pre-existing
         // balance on newWallet keeps its own frozen/unfrozen split. A full freeze is a property of
-        // the investor, not of a lot, so it applies to the whole destination wallet — including
-        // tokens already there. That is intended: the identity check above guarantees newWallet
-        // belongs to the same investor, so a blocked subject stays blocked across all their wallets.
+        // the investor, not of a lot, so it applies to the whole destination wallet, including
+        // tokens already there. That is intended: the identity check above requires newWallet to
+        // belong to the same investor, so a blocked subject stays blocked across all their wallets.
         if (frozenAmount != 0) {
             _frozenTokens[newWallet] += frozenAmount;
             emit TokensFrozen(newWallet, frozenAmount);
@@ -289,7 +289,7 @@ contract SecurityToken is ISecurityToken, ERC20, AccessControl, Pausable, Reentr
             _compliance.destroyed(from, amount);
         } else if (_recovering) {
             // Recovery: the gate is skipped entirely, not merely relaxed. Every check it performs
-            // is either already guaranteed by forcedRecovery or is the wrong question to ask here.
+            // is either already checked by forcedRecovery or is the wrong question to ask here.
             // The destination is verified and belongs to the same investor (checked there), the
             // sender's freeze state was cleared before the move, and the balance is exactly the
             // full amount. What remains are the modular rules, and those must not apply: a lockup
