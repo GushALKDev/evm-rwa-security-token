@@ -83,7 +83,7 @@ The chosen path trades a little subtlety (the four-case transition table, the de
 
 ### 3.2 Nonce consumed before signature verification
 
-The nonce is post-incremented *before* the digest is built, so a replay recovers a different address and fails the signer check. The alternative (check the signature, then bump the nonce) is equally safe here, because no external call sits between the two; incrementing first keeps the effect ahead of the check as a matter of CEI style. The nonce advances only on the signed path: `registerIdentity` and `removeIdentity` do not touch it. See [Guide 2 §3](./02-mathematics.md#3-replay-the-three-axes-and-what-closes-each).
+The nonce is post-incremented *before* the digest is built, so a replay recovers a different address and fails the signer check. The alternative (check the signature, then bump the nonce) is equally safe here, because no external call sits between the two; incrementing first keeps the effect ahead of the check as a matter of CEI style. The nonce advances on every write to the record (a signed registration, an agent registration and a removal), so no attestation issued before the latest write can be submitted after it. See [Guide 2 §3](./02-mathematics.md#3-replay-the-three-axes-and-what-closes-each).
 
 ### 3.3 Lockup period applies to existing clocks
 
@@ -119,7 +119,7 @@ Full treatment: [README threat model §4.2](../README.md#42-issuer-level-authori
 
 `forcedRecovery` can only target a destination that is already verified **and registered under the same `investorId` as the lost wallet**, so a custodian cannot move a balance to an unrelated third party. What a compromised key can still do is move a victim's position between that victim's own wallets, and, if the attacker can get a wallet of their own linked to the victim's `investorId` by the agent or through an attestation from the claim signer, out of the victim's control entirely. What it **cannot** do is hide: every recovery emits `RecoverySuccess` naming both wallets, the destination is a KYC-identified investor, and total supply is unchanged.
 
-Recovery also bypasses the pause and the transfer gate, so no compliance rule limits it: a lockup still running or a frozen destination will not stop a custodian. That is deliberate, since the alternative is a compromised position stranded on a wallet the investor no longer controls, but it does mean the modular rule set is not a second line of defence against this key. Because the lifecycle hook still fires, a recovery into an empty wallet also starts a new lockup clock on that wallet.
+Recovery also bypasses the pause and the transfer gate, so no compliance rule limits it: a lockup still running or a frozen destination will not stop a custodian. That is deliberate, since the alternative is a compromised position stranded on a wallet the investor no longer controls, but it does mean the modular rule set is not a second line of defence against this key. The lifecycle hook still fires, and `LockupModule` carries the lockup start across rather than starting a new clock, so recovery neither extends nor shortens the holding period.
 
 - **The mitigation is auditability, not prevention.** This is why `CUSTODIAN_ROLE` deserves the highest key-management standard, not the lowest because it is rarely used. Blast radius, not frequency, sets the standard. Full treatment: [README threat model §4.1](../README.md#41-operational-key-compromise-defended).
 

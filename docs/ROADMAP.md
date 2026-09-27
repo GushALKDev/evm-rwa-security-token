@@ -91,7 +91,7 @@ The build order is a dependency order, not a preference. Each unit is one contra
 
 **Deliverables:**
 
-- A rule set that changes by governance action (add/remove a module), never by redeploying the token. The holder cap and the lockup have to be registered before the first balance they track, and no stateful module (those two and the dividend distributor) can be removed and added back while tokens move, or its state no longer matches balances.
+- A rule set that changes by governance action (add/remove a module), never by redeploying the token. A stateful module has to be in place before the balances it tracks; `addModule` enforces it through `canComplianceBind`.
 - Stateful rules (holder count, lockup clocks) whose state can only be mutated by the bound token, through the engine.
 
 **Reference:** [02-mathematics.md](./02-mathematics.md) (holder-count transitions, lockup clock), [04-tradeoffs.md](./04-tradeoffs.md) (lockup model choice)
@@ -221,7 +221,7 @@ The build order is a dependency order, not a preference. Each unit is one contra
 1. **Compounding insolvency.** Carrying each deposit's rounding residue in currency units rounds the dust up every time and the error compounds, so by the third deposit the sum of claims exceeded the sum of deposits. Fixed by carrying the raw modulus in scaled units, which pins the shortfall at one wei per holder and always errs toward solvency.
 2. **Recovery left the money behind.** After `forcedRecovery` the unclaimed income stayed claimable by the compromised wallet, verified end to end. The hook cannot distinguish a recovery from a sale on its arguments alone, so `SecurityToken` gained a `recovering()` view (a getter over the existing flag, no logic change) and the distributor now carries both the correction and the withdrawal record to the new wallet.
 
-**Note on item 8.2:** the roadmap originally said "the token's transfer hook". The correction is applied in the *module's* hook, driven by the engine's fan-out. The token itself was not given a dividend hook, which is the stronger outcome: the capability can be registered on a live system with `addModule`. Registering it late is safe (existing balances earn from the next deposit), but removing it and adding it back while tokens move desynchronizes the corrections, so removal is not supported on a live system.
+**Note on item 8.2:** the roadmap originally said "the token's transfer hook". The correction is applied in the *module's* hook, driven by the engine's fan-out. The token itself was not given a dividend hook, which is the stronger outcome: the capability can be registered on a live system with `addModule`. Registering it late is safe (existing balances earn from the next deposit). Once removed it refuses deposits and cannot be attached again, since it would have missed the movements made while it was out; income accrued before the removal stays claimable.
 
 **Deliberately not done:** the distributor is not wired into `script/Deploy.s.sol`, since Phase 8 is a stretch and adding it would change the documented deployment. The scenario suite registers it after `_deploy` returns instead. See [Gaps](./tests/12-gaps-and-roadmap.md).
 

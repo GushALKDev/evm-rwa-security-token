@@ -32,7 +32,7 @@ The flat registry collapses ONCHAINID, `IdentityRegistryStorage`, `TrustedIssuer
 - **`TrustedIssuersRegistry`** so more than one KYC provider can attest, each scoped to the claim topics they are trusted for.
 - **`ClaimTopicsRegistry`** so the required claim set is configurable per token.
 
-**Cost:** four contracts and a resolution step on every identity read, versus one registry call (two storage reads) today. Justified only once the single-token / single-issuer assumption breaks. The trust model is already preserved (see [Guide 4 §2.1](./04-tradeoffs.md#21-onchainid-collapsed-into-a-flat-registry)), so this is a scaling change, not a security fix.
+**Cost:** four contracts and a resolution step on every identity read, versus one registry call (one storage read) today. Justified only once the single-token / single-issuer assumption breaks. The trust model is already preserved (see [Guide 4 §2.1](./04-tradeoffs.md#21-onchainid-collapsed-into-a-flat-registry)), so this is a scaling change, not a security fix.
 
 ---
 

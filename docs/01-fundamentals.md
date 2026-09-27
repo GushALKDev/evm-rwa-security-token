@@ -112,7 +112,7 @@ The system has four cooperating parts (identity, compliance, documents and the t
 | **DocumentRegistry** | Which exact terms document is in force? | Built |
 | **SecurityToken** | Compose all of the above into a gated ERC-20 | Built |
 
-The key structural choice: **the token references the engine, never the individual modules.** Changing the rule set is a governance action (add or remove a module) rather than a token redeploy. The holder cap and the lockup have to be registered before the first balance they track, and no stateful module (those two and the dividend distributor) can be removed and added back while tokens move, or its state no longer matches balances. See [Guide 3](./03-architecture.md) for how this seam is wired.
+The key structural choice: **the token references the engine, never the individual modules.** Changing the rule set is a governance action (add or remove a module) rather than a token redeploy. A stateful module has to be in place before the balances it tracks. The engine enforces this: `addModule` asks each module `canComplianceBind` and refuses the holder cap and the lockup once the token has supply, and any stateful module (those two and the dividend distributor) the second time it is offered. See [Guide 3](./03-architecture.md) for how this seam is wired.
 
 ---
 

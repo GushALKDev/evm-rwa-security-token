@@ -40,7 +40,7 @@ src/
 └── SecurityToken.sol                  the gated ERC-20                 [built]
 ```
 
-As of the current state: **303 tests passing (274 concrete, 22 fuzz, 7 stateful invariants; `forge test`), 100% line/statement/branch/function coverage on every `src/` contract (`forge coverage --report summary`).**
+As of the current state: **365 tests passing** (331 concrete, 22 fuzz, 12 stateful invariants; `forge test`), with 100% of branches and functions on every `src/` contract, and 100% of lines except one constant `return` line in each of the four modules (`forge coverage --report summary`, see the [README](../README.md#project-progress)).
 
 ---
 
@@ -141,11 +141,11 @@ function _startClockIfNew(address to, uint256 amount) private {
 The project runs a strict review-gated per-unit loop: implement one contract, test it to green with full coverage, then stop for review before committing. The tests reflect a few firm rules:
 
 - **Negative tests assert the specific selector.** Anything touching signatures or access control gets a bad-signature, wrong-role, reused-nonce, and expired-attestation test, each asserting the specific custom error. One test still uses a bare `vm.expectRevert()` (`test/unit/IdentityRegistry.t.sol:190`). Where a parameter is unpredictable or irrelevant (a recovered signer address, a role hash, a compliance-failure tuple), `expectPartialRevert` matches the selector without the parameters.
-- **Claims are verified, not asserted.** Storage packing is checked with `forge inspect storageLayout`; revert reasons are probed before being trusted; the anchored document hash is recomputed after any edit to the terms file.
+- **Claims are verified, not asserted.** Storage packing is checked with `forge inspect storageLayout`; revert reasons are probed before being trusted; the terms document hash is pinned in both `Deploy.s.sol` and `DeployTest`, and an edit to the file fails the deployment until both are updated.
 - **Fuzz where the input space is large.** Holder-count transitions, lockup timing, and freeze arithmetic are fuzzed, not just point-tested.
 - **Mocks are minimal.** `MockToken`, `MockModule` and `MockCurrency` exist only to drive the unit under test; they are test helpers, not part of the coverage target for `src/`.
 
-Current suite: 303 tests, all green. The [testing section](./tests/README.md) catalogues every test and links each claim to the code that proves it.
+Current suite: 365 tests, all green. The [testing section](./tests/README.md) catalogues every test and links each claim to the code that proves it.
 
 ```
 forge test            # run the suite
@@ -180,7 +180,7 @@ Any edit to the terms file changes this hash. The deployment anchors whatever is
 
 ## 7. Invariants
 
-The handler-based invariant suite (Phase 6) drives six bounded actors through mint, burn, transfer, freeze, pause, recovery, identity withdrawal and time sequences, and asserts properties that must hold for *any* sequence of those actions. The handler does not call `transferFrom`, does not move zero amounts, does not add or remove modules, and does not include the dividend distributor:
+The handler-based invariant suite (Phase 6) drives six bounded actors through mint, burn, transfer, freeze, pause, recovery, identity withdrawal and time sequences, and asserts properties that must hold for *any* sequence of those actions. Since the review rounds the handler also drives approvals and `transferFrom` (with an unregistered spender), zero, full-balance and one-wei amounts, a country block, and dividend deposits and claims, and every revert it catches is classified as expected or unexpected. It does not add or remove modules; those rules are covered by the unit and scenario suites:
 
 | Invariant | Statement |
 |:---|:---|
@@ -189,8 +189,13 @@ The handler-based invariant suite (Phase 6) drives six bounded actors through mi
 | **Frozen ≤ balance** | `frozen[a] ≤ balanceOf(a)` for every holder |
 | **Holder count is exact** | the module's count equals the number of addresses with positive balance |
 | **Cap respected** | holder count never exceeds `maxHolders` |
-| **Unverified wallets cannot move** | an unverified address's frozen amount stays ≤ its balance and `canTransfer` from it returns false |
-| **Recovery empties the evicted wallet** | every wallet retired by `forcedRecovery` held zero at the moment of eviction |
+| **Unverified balances never grow** | an actor's balance stays at or below what it held when it stopped being verified (removal, recovery or an expired KYC) |
+| **Lockup clock matches the position** | `lockStart(a) != 0` exactly when `balanceOf(a) != 0` |
+| **Recovery keeps the lockup start** | after each recovery the destination holds the earlier of the two starts and the lost wallet none |
+| **Dividends are solvent** | the distributor's currency balance covers the sum of claimable entitlements |
+| **Dividends are conserved** | claimed plus claimable stays within seven wei below what was deposited, never above |
+| **Blocked holders are never paid** | no claim succeeds while the claimant is fully frozen or unverified |
+| **No unexpected reverts** | every revert the handler caught was one its action may legitimately produce |
 
 These are the properties the per-unit tests cannot prove, because they are about the *composed* system under arbitrary interleavings.
 

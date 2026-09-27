@@ -138,7 +138,7 @@ See [ROADMAP.md](./ROADMAP.md) for detailed progress across 9 phases (0 to 8) an
 
 **Current status:** Phases 0 to 8 complete (foundations, identity, compliance, document anchoring, the token, deployment, the scenario and invariant suites, documentation, and the dividend distributor).
 
-**Test suite:** 303 tests passing (`forge test`), 100% line/statement/branch/function coverage on every `src/` contract (`forge coverage --report summary`). See the [testing section](./tests/README.md) for what each block covers.
+**Test suite:** 365 tests passing (`forge test`), 100% of branches and functions on every `src/` contract, and 100% of lines except one constant `return` line in each of the four modules (`forge coverage --report summary`, see the [README](../README.md#project-progress)). See the [testing section](./tests/README.md) for what each block covers.
 
 ---
 

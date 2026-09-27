@@ -120,7 +120,7 @@ struct Identity {
 
 The field order matters. Solidity packs sequential fields into a slot right-to-left as long as they fit in 32 bytes; `1 + 1 + 2 + 8 = 12 ≤ 32`, so the four verification fields share slot 0. Reordering would not break packing here (there is ample room), but keeping the small flags adjacent is the idiomatic layout.
 
-The layout does not by itself make the read one `SLOAD`. `isVerified` copies the whole record to memory (`Identity memory record = _identities[investor]`), which reads both slots even though `investorId` is unused there: `vm.record` / `vm.accesses` on a call to `isVerified` shows two storage reads, against one for `country`. The gate calls `isVerified` twice per transfer.
+The layout does not by itself make the read one `SLOAD`. Copying the record to memory (`Identity memory record = _identities[investor]`) reads both slots even though `investorId` is unused there, and reading the two fields inline in one expression loads slot 0 twice. `isVerified` therefore reads `verified` and `kycExpiry` through a storage pointer into locals, which the optimized build compiles to one `SLOAD`; `test_isVerified_readsOneStorageSlot` checks with `vm.record` / `vm.accesses` that the investor id slot is never touched. The gate calls `isVerified` twice per transfer.
 
 Two design points ride on the field widths:
 
@@ -128,6 +128,19 @@ Two design points ride on the field widths:
 - **`kycExpiry` as `uint64`** is a Unix timestamp in seconds; `uint64` covers roughly 584 billion years, so overflow is not a concern, and it keeps the verification fields in one slot.
 
 > Packing is verified, not asserted: `forge inspect IdentityRegistry storageLayout` shows the four verification fields in slot 0 and `investorId` in slot 1.
+
+**What a removed record looks like.** `removeIdentity` clears `verified`, `accredited`, `country` and `kycExpiry`, advances the nonce, and keeps `investorId`. Every reader of the record behaves as follows on a removed wallet:
+
+| Reader | On a removed wallet |
+|:---|:---|
+| `isVerified` | `false`, so the token's gate refuses the wallet as sender and as recipient |
+| `investorId` | unchanged, so `forcedRecovery` can still match the wallet to another wallet of the same investor |
+| `country` | `0`. `CountryRestrictionModule` reads it only for a recipient, and a removed recipient is refused by the identity check before any module runs |
+| `identity` | the record with `verified == false`, zeroed attributes and the kept id |
+| `forcedRecovery` | accepted as the lost wallet (it skips its own `removeIdentity` call); refused as the destination, which must be verified |
+| `DividendDistributor.claim` | reverts with `ClaimantNotVerified`; the entitlement keeps accruing |
+| `removeIdentity` again | reverts with `IdentityNotFound` |
+| re-registration | allowed through either door and overwrites the record. The four-argument `registerIdentity` derives the default id (`keccak256(wallet)`), so re-registering a wallet that carried a shared id needs the five-argument overload to keep it |
 
 ---
 
@@ -168,7 +181,7 @@ The **swap case (`Δ = 0`)** is the one that makes the cap usable. If a full-bal
 Two guards keep the count honest:
 
 - The cap **cannot be set below the live count** (`setMaxHolders` reverts otherwise), or the invariant "count ≤ cap" would be violated retroactively.
-- The count is only ever mutated in hooks, which are `onlyCompliance`, so it cannot desync from real balances. This assumes the module is registered before the first mint and stays registered: a module added to a token that already has holders starts at zero (see the [README](../README.md#architecture)).
+- The count is only ever mutated in hooks, which are `onlyCompliance`, so it cannot desync from real balances. That rests on two further guards. Every hook ignores a zero amount: a zero-amount send from a wallet holding nothing reads as "the sender left" and used to decrement the count (a real bug, see the [README review notes](../README.md#review-notes)). And the module refuses to be attached to a token that already has supply, or attached again after a removal, since it would start from zero or miss movements (see the [README](../README.md#architecture)).
 
 ---
 

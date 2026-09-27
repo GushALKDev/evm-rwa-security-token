@@ -37,7 +37,7 @@ Built one contract per unit in dependency order, each with its own unit and fuzz
 | 7 | Documentation and threat model | Done |
 | 8 | Stretch: dividend distribution | Done |
 
-Current state: **303 tests passing across twelve suites** (`forge test`), and **100% line, statement, branch and function coverage on every `src/` contract** (`forge coverage --report summary`, which runs without `--ir-minimum`). The deployment script itself is not fully covered: `script/Deploy.s.sol` reports 60.71% of lines, because the tests call `_deploy` directly and never `run()`. Every test is catalogued in the [testing section](docs/tests/README.md).
+Current state: **365 tests passing across thirteen suites** (`forge test`). `forge coverage --report summary` (no `--ir-minimum` needed) reports 100% of lines, statements, branches and functions for `SecurityToken`, `IdentityRegistry`, `ModularCompliance`, `DocumentRegistry` and `AbstractComplianceModule`, and 100% of branches and functions for the four modules, whose line figures sit between 95.83% and 98.41%: in each, the one unmarked line is the constant `return` of a `pure` view (`isPlugAndPlay` or `token`) that the tests call and check. `script/Deploy.s.sol` reports 100% of lines and functions and 51.72% of branches (15 of 29), the untaken branches being the failure sides of its `require` sanity checks. The [testing section](docs/tests/README.md) catalogues the suite as it stood before the review rounds and is rewritten in the next one.
 
 ## Documentation
 
@@ -107,10 +107,10 @@ Compared against the interfaces in the [EIP text](https://eips.ethereum.org/EIPS
 | Agent role | | OpenZeppelin `AccessControl` with `AGENT_ROLE`, `CUSTODIAN_ROLE` and `DEFAULT_ADMIN_ROLE` instead of `IAgentRole` (`addAgent`, `removeAgent`, `isAgent`) | |
 | Identity registry | | `registerIdentity(user, country, accredited, kycExpiry[, investorId])` stores attributes instead of linking an `IIdentity` contract. `deleteIdentity` is `removeIdentity`. `isVerified` checks a stored flag and `kycExpiry`, not claims. `identity` returns the stored record. `investorCountry` is `country`. Re-registering overwrites a record, which stands in for `updateCountry` and `updateIdentity`. `registerIdentityWithAttestation` (EIP-712, one claim signer) is added | `batchRegisterIdentity`, `contains`, `identityStorage`, `issuersRegistry`, `topicsRegistry` and their setters |
 | Registry split | | `TrustedIssuersRegistry` is reduced to one `claimSigner` | `IdentityRegistryStorage`, `ClaimTopicsRegistry`, ONCHAINID |
-| Compliance | `addModule`, `removeModule`, `canTransfer`, `transferred`, `created`, `destroyed` | `bindToken` is one-shot and cannot be rebound. `getModules`, `getTokenBound` and `isModuleBound` are `modules`, `token` and `isModuleRegistered`. `addModule` checks that the module names this engine | `unbindToken`, `isTokenBound`, `callModuleFunction` |
-| Module | `name` | `moduleTransferAction`, `moduleMintAction` and `moduleBurnAction` are `moduleTransferred`, `moduleCreated` and `moduleDestroyed`. `moduleCheck` takes no compliance argument. `bindCompliance` / `unbindCompliance` are replaced by an immutable constructor binding, read with `compliance()` | `isComplianceBound`, `canComplianceBind`, `isPlugAndPlay` |
+| Compliance | `addModule`, `removeModule`, `canTransfer`, `transferred`, `created`, `destroyed` | `bindToken` is one-shot and cannot be rebound. `getModules`, `getTokenBound` and `isModuleBound` are `modules`, `token` and `isModuleRegistered`. `addModule` also checks that the module names this engine, that `canComplianceBind` allows it, and that the module reads the bound token (`bindToken` checks the same for modules registered earlier) | `unbindToken`, `isTokenBound`, `callModuleFunction` |
+| Module | `name`, `isPlugAndPlay`, `canComplianceBind`, `isComplianceBound`, `bindCompliance`, `unbindCompliance` (called by the engine from `addModule` and `removeModule`) | `moduleTransferAction`, `moduleMintAction` and `moduleBurnAction` are `moduleTransferred`, `moduleCreated` and `moduleDestroyed`. `moduleCheck` takes no compliance argument. A module serves one engine, fixed in its constructor, rather than a list of bound compliances. A `token()` view is added | |
 
-The last row has a practical consequence. In T-REX, a stateful module such as `MaxBalanceModule` reports `isPlugAndPlay() == false`, and its `canComplianceBind` refuses a compliance whose token already has supply unless the module was preset for it. This engine has no such check, so a stateful module added to a token that already has holders starts from empty state (see [Architecture](#architecture)). T-REX also gates `recoveryAddress` to an agent, where this repository uses a separate `CUSTODIAN_ROLE`.
+The last row follows T-REX for the reason T-REX has it. A stateful module such as T-REX's `MaxBalanceModule` reports `isPlugAndPlay() == false`, and its `canComplianceBind` refuses a compliance whose token already has supply. Here `MaxHoldersModule` and `LockupModule` refuse a token with supply, and every stateful module refuses to be attached a second time (see [Architecture](#architecture)). T-REX also gates `recoveryAddress` to an agent, where this repository uses a separate `CUSTODIAN_ROLE`.
 
 ### The two registration paths
 
@@ -122,7 +122,7 @@ The identity registry accepts records through two doors, which exist to make an 
 
 The second path is ERC-3643's trust model in miniature, and it is the reason the standard bothers with ONCHAINID at all: **verification should not rest on trusting whoever writes to the registry.** The signed payload binds the investor, the attributes, the expiry, the investor id, and a per-investor nonce, under a domain separator carrying the chain ID and the registry address.
 
-Each of those bindings closes a specific hole. The domain separator stops a signature from being replayed on another chain or against another registry deployment. The expiry stops it from being replayed after the KYC lapses. The nonce closes the gap the expiry leaves open: without it, an attestation replayed *within* its validity window could silently re-register an investor the agent had just removed. That last one is the subtle one, and it is why the nonce is not optional.
+Each of those bindings closes a specific hole. The domain separator stops a signature from being replayed on another chain or against another registry deployment. The expiry stops it from being replayed after the KYC lapses. The nonce closes the gap the expiry leaves open: without it, an attestation replayed *within* its validity window could silently re-register an investor the agent had just removed. That last one is the subtle one, and it is why the nonce is not optional. Every write to a record advances it (a signed registration, an agent registration and a removal), so an attestation that was issued but never submitted also dies with the next write.
 
 ### Why the lockup runs from initial acquisition, not from each acquisition
 
@@ -243,11 +243,19 @@ Two structural invariants define the shape:
 
 `DocumentRegistry` deliberately hangs off to the side: no contract reads it. Anchoring is a claim made to holders and auditors, not an input to the transfer decision.
 
-**`DividendDistributor` is a module, but not a rule.** The module interface has two halves: `moduleCheck`, which decides whether a transfer is allowed, and the lifecycle hooks, which observe that one settled. The three rule modules use both. The distributor implements `moduleCheck` as an unconditional `true` and puts all of its logic in the hooks, using the fan-out as an on-chain event bus and giving up the power of veto. Withholding income from a sanctioned holder is a matter for the freeze controls, not the transfer gate.
+**`DividendDistributor` is a module, but not a rule.** The module interface has two halves: `moduleCheck`, which decides whether a transfer is allowed, and the lifecycle hooks, which observe that one settled. The three rule modules use both. The distributor implements `moduleCheck` as an unconditional `true` and puts all of its logic in the hooks, using the fan-out as an on-chain event bus and giving up the power of veto. Withholding income from a sanctioned holder is a matter for the token's freeze and identity controls, not the transfer gate: `claim` reverts while the holder is fully frozen or not verified (an expired KYC counts), the entitlement keeps accruing, and it becomes claimable once the block is lifted. A partial freeze does not block a claim, since it immobilises tokens, not the holder.
 
-That choice is why income distribution required no change to `SecurityToken` beyond a single view, and why it can be registered on a live deployment with `addModule`. It also has a limit worth stating: `moduleTransferred(from, to, amount)` is byte-identical for a sale and for a forced recovery, and those mean opposite things for anything that accrues value to a holder. The distributor therefore has to ask the token which it is (`recovering()`), making it the one module that depends on the token being a `SecurityToken` rather than any ERC-20. A system with several value-accruing modules would want the transfer kind passed through the hook itself.
+That choice is why income distribution required no change to `SecurityToken` beyond a single view, and why it can be registered on a live deployment with `addModule`. It also has a limit worth stating: `moduleTransferred(from, to, amount)` is byte-identical for a sale and for a forced recovery, and those mean opposite things for anything that accrues value to a holder. The distributor therefore has to ask the token which it is (`recovering()`), making it one of the two modules that depend on the token being a `SecurityToken` rather than any ERC-20 (`LockupModule` asks the same question, see below), and it reads the token's freeze state and identity registry in `claim`. A system with several value-accruing modules would want the transfer kind passed through the hook itself.
 
-**Registering or removing a stateful module on a live token desynchronizes it.** A module only sees the movements that happen while it is registered, and neither `addModule` nor `removeModule` reconciles its state with existing balances. A `MaxHoldersModule` added after holders exist starts its count at zero, so the first existing holder who exits reverts on an arithmetic underflow. A `LockupModule` added late has no clock for existing holders, so they are not locked; removed and re-added, it keeps an expired clock for a holder who exited while it was detached, so that holder is not locked on re-entry. A `DividendDistributor` removed and re-added pays holders who acquired while it was detached for income they did not hold through, so claims can exceed its balance, and `claimable` reverts for a holder who claimed and then sold while it was detached. Registering the distributor late is safe, since existing balances simply earn from the next deposit; the dividend scenario suite registers it before the first mint. Rules can change without redeploying the token, but the holder cap and the lockup have to be registered before the first balance they track, and no stateful module can be removed and added back while tokens move.
+**The engine refuses to attach a stateful module it cannot keep in step.** A module only sees the movements that happen while it is registered, and nothing reconciles its state with existing balances, so the engine asks the module first (`canComplianceBind`, the T-REX shape) and reverts with `ModuleCannotBind` when it says no:
+
+- `MaxHoldersModule` and `LockupModule` refuse while the token has supply. A holder count added late would start at zero and make the first existing holder's exit underflow; a lockup added late would have no clock for existing holders.
+- Every stateful module (those two and `DividendDistributor`) refuses a second attach after a removal, because it missed every movement made while it was out.
+- `DividendDistributor` may join a live token once: its accumulator starts at zero, so balances that predate it simply earn from the first deposit it sees. After a removal it rejects `deposit` (`DistributorNotAttached`) and keeps paying what accrued while it was attached.
+- `CountryRestrictionModule` is stateless (`isPlugAndPlay`) and can be removed and attached again at any time.
+- A module that reads balances must read the engine's own token: `addModule` and `bindToken` both reject a mismatch (`ModuleTokenMismatch`).
+
+Rules can change without redeploying the token; a stateful rule has to be in place before the balances it tracks. Adding one to an issued token means deploying the token again with it.
 
 ### The transfer gate
 
@@ -295,8 +303,8 @@ CUSTODIAN ──► forcedRecovery(lostWallet, newWallet)          [nonReentrant
    ├─ 4. balance != 0
    │
    ├─ 5. snapshot freeze state (partial amount + full flag)
-   ├─ 6. clear lost wallet's freeze state
-   ├─ 7. registry.removeIdentity(lostWallet)     token holds AGENT_ROLE for this
+   ├─ 6. clear lost wallet's freeze state        emits TokensUnfrozen / AddressFrozen(false)
+   ├─ 7. registry.removeIdentity(lostWallet)     skipped if the agent already removed it
    │
    ├─ 8. _recovering = true → _transfer → _recovering = false
    │
@@ -304,7 +312,7 @@ CUSTODIAN ──► forcedRecovery(lostWallet, newWallet)          [nonReentrant
    └─ 10. emit RecoverySuccess(lost, new, amount, frozen, wasFullyFrozen)
 ```
 
-Steps 5-9 are why recovery relocates a position without laundering a hold: a frozen lot arrives frozen at its new address. Step 3 is what keeps a compromised custodian key from recovering into an arbitrary verified wallet; see [Threat model](#threat-model) for how far that constraint actually goes.
+Steps 5-9 are why recovery relocates a position without laundering a hold: a frozen lot arrives frozen at its new address, and the event log shows both halves. During step 8 the lifecycle hook fires, and the two modules that hold per-wallet state ask the token whether a recovery is in progress: `LockupModule` moves the lockup start instead of starting a fresh clock (the destination keeps the earlier of the two starts), and `DividendDistributor` moves the unclaimed income. Step 3 works on a wallet the agent already removed, because removal keeps the `investorId`. Step 3 is what keeps a compromised custodian key from recovering into an arbitrary verified wallet; see [Threat model](#threat-model) for how far that constraint actually goes.
 
 ### Deployment order
 
@@ -325,11 +333,11 @@ The bindings impose a strict construction order; each arrow is a dependency that
   6. DocumentRegistry(issuer) + setDocument(TERMS, uri, hash)
 ```
 
-Note that this is *not* the order a naive reading suggests (engine, modules, registry, token): `MaxHolders` and `Lockup` hold the token as an `immutable`, so they cannot precede it, and the token takes the engine in its constructor with no setter. `Deploy.s.sol` performs this, hashes `docs/RealEstateNote-Terms.md` as read at deployment, and checks with `require` that the anchored hash equals that hash. No expected hash is hardcoded in the script or in its tests, so the check confirms the anchor matches the file the script read; it does not detect an edit to the document made before the script runs.
+Note that this is *not* the order a naive reading suggests (engine, modules, registry, token): `MaxHolders` and `Lockup` hold the token as an `immutable`, so they cannot precede it, and the token takes the engine in its constructor with no setter. `Deploy.s.sol` performs this, hashes `docs/RealEstateNote-Terms.md` as read at deployment, and reverts with `TermsHashMismatch` unless that hash equals the pinned `TERMS_HASH`. `DeployTest` pins the same value independently, and `test_deploy_revertsWhenTermsDrift` shows a drifted document failing the deployment. Amending the terms before a deployment therefore means changing the file and both constants on purpose; after deployment, it goes through `setDocument` on the registry.
 
 The script deploys and wires the three rule modules only. `DividendDistributor` is not part of it (`_verify` requires exactly three modules); the dividend scenario suite deploys and registers it separately.
 
-One limitation the script does not hide: the wiring calls are admin-gated, so the executing account must be the issuer. A real deployment needs a deploy-then-handover step (deploy under a hot key, transfer `DEFAULT_ADMIN_ROLE` to the multisig, renounce), which is governance plumbing deliberately out of scope here.
+One limitation the script does not hide: the wiring calls are admin-gated, so the executing account must be the issuer. When the `ISSUER`, `AGENT` and `CUSTODIAN` environment variables are unset, all three roles go to the broadcasting account, which suits a local Anvil run and nothing else; `test_run_wiresTheSystemWithDefaultAndExplicitRoles` runs `run()` end to end both ways. A real deployment needs a deploy-then-handover step (deploy under a hot key, transfer `DEFAULT_ADMIN_ROLE` to the multisig, renounce), which is governance plumbing deliberately out of scope here.
 
 Deeper treatment of each seam is in [Guide 3: Architecture](docs/03-architecture.md).
 
@@ -351,8 +359,10 @@ The question is whether any balance can move without clearing the gate. The stru
 | Keep selling after compliance withdraws the identity | Both ends are identity-checked, not just the recipient, so `removeIdentity` suspends the position in both directions rather than only capping incoming transfers |
 | Sit out the lockup by receiving dust to reset someone else's clock | The clock starts only on the 0→positive transition and is never overwritten while non-zero (`lockStart != 0`), so a 1-wei send cannot re-lock a victim |
 | Inflate the holder count to exhaust the cap and DoS onboarding | Self-transfers are discarded in the hook. **This was a real bug**, found by the invariant suite: a full-balance self-transfer made `balanceOf(to) == amount` read as "joined from zero" while the sender was plainly not empty, so the signals failed to cancel and anyone could pump the count for free |
+| Deflate the holder count to walk past the cap | Every stateful hook ignores a zero amount. **This was a real bug**, found in review: a zero-amount send from a verified wallet holding nothing read as "the sender left", and `transferFrom(emptyWallet, x, 0)` needs no allowance, so any address could drain the count, admit holders past the cap, and then make legitimate exits underflow (see [Review notes](#review-notes)) |
+| Attach a holder cap or a lockup to a token that already has holders | `addModule` reverts (`ModuleCannotBind`): those modules refuse a token with supply, and every stateful module refuses a second attach |
 
-The last row is the honest part of this section. The holder-count and lockup modules both infer transitions from post-transfer balances rather than reading pre-transfer state, and that inference is where the bugs live. `invariant_holderCountMatchesReality` now cross-checks the incremental count against enumerated real balances on every run. Its handler only issues transfers and burns of at least one token from a non-empty wallet, and never calls `transferFrom`, so zero-amount movements are outside what the invariant checks.
+The last rows are the honest part of this section. The holder-count and lockup modules both infer transitions from post-transfer balances rather than reading pre-transfer state, and that inference is where the bugs live. `invariant_holderCountMatchesReality` cross-checks the incremental count against enumerated real balances on every run, and its handler now issues zero amounts, full-balance moves and `transferFrom`; reintroducing the zero-amount bug makes it fail.
 
 What is *not* defended: a rule the module set does not encode is not enforced. The gate is exactly as strict as the registered modules, and the ISSUER can remove them.
 
@@ -368,7 +378,7 @@ The ordering in `_update` is CEI: checks, then `super._update` settles balances,
 
 The residual assumption: **modules are trusted code the issuer registers**, not arbitrary third-party contracts. A malicious module can revert every transfer (a denial of service the issuer can undo by removing it) and can consume unbounded gas in the hook fan-out, which iterates all modules without a cap. Vetting what gets registered is a governance responsibility, not a property the engine enforces.
 
-`DividendDistributor` is the first contract here that moves value *out* to an arbitrary address, which makes it the first place where reentrancy is a live concern rather than a structural one. `claim` records the withdrawal before transferring (CEI) and carries `nonReentrant` on top, because the settlement currency is external code: a token with a transfer callback, or an outright malicious one, gets control after the payout is recorded. Both `deposit` and `claim` are guarded, and the [test suite](docs/tests/13-dividend-distributor.md#claiming) drives an attack with a currency that reenters `claim` from inside its own `transfer`. The distributor also never pushes: it pays only the caller's own entitlement, so one holder who cannot receive the currency cannot block anyone else.
+`DividendDistributor` is the first contract here that moves value *out* to an arbitrary address, which makes it the first place where reentrancy is a live concern rather than a structural one. `claim` records the withdrawal before transferring (CEI) and carries `nonReentrant` on top, because the settlement currency is external code: a token with a transfer callback, or an outright malicious one, gets control after the payout is recorded. Both `deposit` and `claim` are guarded. The [test suite](docs/tests/13-dividend-distributor.md#claiming) drives an attack with a currency that reenters `claim` from inside its own `transfer` and one that reenters `deposit` from inside `transferFrom`; each records that it attempted the reentry and the test asserts the guard's error. For `claim` the guard is the first line rather than the only one: the withdrawal is recorded before the payout, so a reentrant claim would also find nothing left. `test_forcedRecovery_isReentrancyGuarded` does the same for recovery, with a registered module holding `CUSTODIAN_ROLE` that reenters from the recovery's own hook. The distributor also never pushes: it pays only the caller's own entitlement, so one holder who cannot receive the currency cannot block anyone else.
 
 ### 3. Recovery abuse (constrained and auditable, not prevented)
 
@@ -376,7 +386,8 @@ The residual assumption: **modules are trusted code the issuer registers**, not 
 
 - **Destination must be verified** and **must carry the same `investorId` as the lost wallet**. Without the second check, a custodian could recover into any verified address, including one they control as an onboarded investor, and, via the freeze carry-over, freeze whatever that address already held.
 - **The freeze state travels with the position.** A partial freeze is additive at the destination; a full freeze applies to the whole destination wallet, which is intentional, since the `investorId` check already requires it to belong to the same investor. Recovery relocates a hold, it does not launder one.
-- **The lost wallet is evicted** from the registry in the same call, so it can no longer send or receive. The eviction is not permanent: an agent can register the wallet again, after which it can hold the token.
+- **The lost wallet is evicted** from the registry in the same call, so it can no longer send or receive. The eviction is not permanent: an agent can register the wallet again, after which it can hold the token. Removal clears the verification but keeps the `investorId`, so a wallet the agent had already suspended can still be recovered.
+- **The lockup travels with the position.** Recovery does not restart the holding period: the destination takes the lost wallet's lockup start, or keeps its own if that is earlier.
 - **Supply is unchanged** and every recovery emits `RecoverySuccess` naming both wallets and the carried freeze state.
 - **Unclaimed income travels with the position.** This did not come for free. Settled as an ordinary transfer, the accumulator leaves accrued dividends on the lost wallet, so the tokens are rescued while the money stays claimable by whoever holds the compromised keys. The distributor branches on `recovering()` and carries the entitlement across; the behaviour is [tested end to end](docs/tests/13-dividend-distributor.md#forced-recovery) against the real recovery path, not only against a mock.
 
@@ -407,6 +418,76 @@ The consequence, stated plainly: the AGENT/CUSTODIAN separation is an **operatio
 
 **Mitigation path, not built here.** A production deployment would keep this authority model and harden its exercise: `DEFAULT_ADMIN_ROLE` behind a multisig, ideally with a timelock, so that self-granting a role or swapping the compliance engine becomes a visible, delayed governance action rather than a single-key transaction. The trust assumption stays; what changes is that acting on it is observable and contestable before it takes effect. That is governance infrastructure, orthogonal to the architecture this POC demonstrates, and deliberately out of scope.
 
+## Review notes
+
+The code was reviewed in rounds after the build. Each finding below was reproduced first, got a regression test that failed against the unfixed code, and was then fixed. The regression tests that run against the deployed wiring live in [`test/scenario/Regressions.t.sol`](test/scenario/Regressions.t.sol).
+
+**1. Zero amounts deflated the holder count** (`22e214f`)
+- Wrong: a zero-amount transfer from a verified wallet holding nothing lowered `MaxHoldersModule.holderCount`. `transferFrom(emptyWallet, x, 0)` needs no allowance, so any address could drain the count, admit holders past the cap, and then make legitimate exits revert on underflow. `burn(nonHolder, 0)` did the same.
+- Root cause: the hook infers "the sender left" from `balanceOf(from) == 0` after the move, which is also true for a sender that held nothing before.
+- Fix: every stateful hook returns early on a zero amount. Zero-amount transfers stay valid ERC-20 calls.
+- Tests: `test_zeroAmountTransfer_doesNotDeflateHolderCount`, `test_zeroAmountTransferFromByStranger_doesNotDeflateHolderCount`, `test_zeroBurnFromNonHolder_doesNotDeflateHolderCount`, `test_zeroAmountSends_doNotBlockLaterExits`.
+
+**2. An unsubmitted attestation could undo a removal** (`480b897`)
+- Wrong: an attestation issued while an investor was registered, but never submitted, re-registered them after the agent removed them.
+- Root cause: only a signed registration advanced the nonce; agent registrations and removals did not.
+- Fix: every write to a record advances the nonce.
+- Tests: `test_attestationSignedBeforeRemoval_isRejectedAfterIt`, `test_attestationSignedBeforeAgentUpdate_isRejectedAfterIt`.
+
+**3. A suspended wallet could not be recovered** (`4975329`)
+- Wrong: after the agent removed a wallet's identity, `forcedRecovery` reverted with `RecoveryAcrossInvestors(0, id)`, so the position stayed stranded until the agent registered the lost wallet again.
+- Root cause: `removeIdentity` deleted the whole record, `investorId` included.
+- Fix: removal clears the verification and attributes but keeps `investorId`; recovery skips its own removal call when the wallet is already removed.
+- Test: `test_forcedRecovery_succeedsAfterAgentRemovedLostWallet`.
+
+**4. Forced recovery restarted the lockup** (`498c4ef`)
+- Wrong: recovering a position into an empty wallet locked the investor again for the full period.
+- Root cause: the recovery hook is the ordinary transfer hook, which `LockupModule` read as a fresh acquisition.
+- Fix: `LockupModule` asks the token `recovering()` and moves the start instead: an empty destination takes the lost wallet's start, a holding destination keeps the earlier of the two.
+- Tests: `test_forcedRecovery_keepsAnExpiredLockupExpired`, `test_forcedRecovery_keepsTheOriginalUnlockTime`, `test_forcedRecovery_intoHoldingWallet_keepsTheEarlierStart`.
+
+**5. Frozen and unverified holders could claim income** (`2c8ea7c`)
+- Wrong: `DividendDistributor.claim` paid a holder who was fully frozen or no longer verified.
+- Root cause: `claim` read neither the token's freeze state nor the identity registry.
+- Fix: `claim` reverts with `ClaimantFrozen` or `ClaimantNotVerified` (an expired KYC counts). The entitlement keeps accruing and is released when the block is lifted. A partial freeze does not block a claim.
+- Tests: `test_claim_blockedWhileFullyFrozen_releasedAfterUnfreeze`, `test_claim_blockedWhileUnverified_releasedAfterReverification`, `test_claim_blockedAfterKycExpiry`, `test_claim_allowedUnderPartialFreeze`.
+
+**6. Stateful modules could be attached where they could not keep up** (`f9ab7b1`, `a957a53`)
+- Wrong: a holder cap added to a token with holders started at zero and made the first exit underflow; a late lockup had no clock for existing holders; a distributor removed and added back overpaid holders who bought while it was out.
+- Root cause: `addModule` and `removeModule` reconciled nothing with existing balances.
+- Fix: the T-REX `isPlugAndPlay` / `canComplianceBind` shape. The holder cap and the lockup refuse a token with supply, every stateful module refuses a second attach, and a detached distributor refuses deposits. The follow-up commit makes the attachment events name the bound engine rather than a caller-supplied address.
+- Tests: `test_addModule_rejectsMaxHoldersOnceSupplyExists`, `test_addModule_rejectsLockupOnceSupplyExists`, `test_addModule_rejectsReattachingARemovedStatefulModule`, `test_addModule_rejectsReattachingARemovedDistributor`, `test_distributor_afterRemoval_refusesDepositsAndPaysAccrued`.
+
+**7. A module could read a different token than the engine's** (`3bdb0c8`)
+- Wrong: a stateful module built against another token was accepted and then counted that token's balances.
+- Root cause: `addModule` checked only that the module named this engine.
+- Fix: `addModule` and `bindToken` reject a module whose `token()` differs from the bound token.
+- Tests: `test_addModule_rejectsModuleBuiltForAnotherToken`, `test_bindToken_rejectsRegisteredModuleForAnotherToken`.
+
+**8. An over-burn panicked** (`aa6a0fd`)
+- Wrong: burning more than the balance of a wallet with frozen tokens reverted with an arithmetic panic.
+- Root cause: the frozen-portion arithmetic ran before the ERC-20 balance check.
+- Fix: `burn` checks the balance first and reverts with `ERC20InsufficientBalance`.
+- Test: `test_burn_aboveBalance_revertsWithInsufficientBalance`.
+
+**9. Recovery left no unfreeze trail** (`e200018`)
+- Wrong: recovery cleared the lost wallet's freeze without an event, so freeze state rebuilt from events kept the retired wallet frozen.
+- Fix: recovery emits `TokensUnfrozen` and `AddressFrozen(false)` for what it clears, before the move.
+- Test: `test_forcedRecovery_emitsTheFullFreezeEventSequence`.
+
+**10. `isVerified` read two slots** (`3b1ca76`)
+- Wrong: the identity check, run twice per transfer, also loaded the investor id slot.
+- Root cause: the record was copied to memory.
+- Fix: the two fields are read through a storage pointer; the token's registry and engine references became `immutable`.
+- Test: `test_isVerified_readsOneStorageSlot`.
+
+**11. An edited terms document was anchored instead of rejected** (`b582a2a`)
+- Wrong: the deployment hashed whatever the terms file contained and compared the anchor with the same file.
+- Fix: `Deploy.s.sol` and `DeployTest` both pin the hash, and a drifted file fails the deployment.
+- Test: `test_deploy_revertsWhenTermsDrift`.
+
+Test-suite changes from the same review (handler revert classification, new invariants, stronger unit tests) are in the commits after `55b7fbd`; the [testing section](docs/tests/README.md) will be rewritten to match in the next round.
+
 ## Build and test
 
 Requires [Foundry](https://book.getfoundry.sh/getting-started/installation).
@@ -420,7 +501,7 @@ forge test
 
 Formatting is `forge fmt` with the default configuration (`foundry.toml` has no `[fmt]` section). CI ([`.github/workflows/test.yml`](.github/workflows/test.yml)) runs `forge fmt --check`, `forge build --sizes` and `forge test -vvv` under `FOUNDRY_PROFILE=ci` on every push and pull request.
 
-`forge test` runs all 303 tests across twelve suites (nine unit, two scenario, one invariant): 274 concrete tests, 22 fuzz tests and 7 stateful invariants. The default profile runs 256 fuzz runs per fuzz test and 64 runs of depth 64 per invariant; the `ci` profile (`FOUNDRY_PROFILE=ci forge test`) raises these to 1,000 fuzz runs and 256 invariant runs of depth 128. The invariant suite is worth running deeper than its default before trusting a change to a stateful module:
+`forge test` runs all 365 tests across thirteen suites (nine unit, three scenario, one invariant): 291 unit tests and 22 fuzz tests in the unit suites, 39 scenario tests (including the 25 in `Regressions.t.sol`), and 12 stateful invariants plus one deterministic reachability test in the invariant suite. Gas benchmarks live in `test/gas/`, are excluded from that count and from the default and `ci` profiles, and run with `FOUNDRY_PROFILE=gas forge test --isolate --gas-report`. The default profile runs 256 fuzz runs per fuzz test and 64 runs of depth 64 per invariant; the `ci` profile (`FOUNDRY_PROFILE=ci forge test`) raises these to 1,000 fuzz runs and 256 invariant runs of depth 128. The invariant suite is worth running deeper than its default before trusting a change to a stateful module:
 
 ```bash
 FOUNDRY_INVARIANT_RUNS=300 FOUNDRY_INVARIANT_DEPTH=100 forge test --match-path 'test/invariant/*'
