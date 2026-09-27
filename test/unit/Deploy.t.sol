@@ -204,41 +204,43 @@ contract DeployTest is Test, Deploy {
                               run() END TO END
     //////////////////////////////////////////////////////////////*/
 
-    /// @dev Runs the script entrypoint end to end. Inside a test, `vm.startBroadcast()` signs as
-    ///      `tx.origin` (forge's default sender), which is the account `run` defaults the roles to.
-    ///
-    ///      One test on purpose: `run` reads the ISSUER, AGENT and CUSTODIAN environment variables,
-    ///      the environment is shared by the whole test process, and `vm.setEnv` cannot unset a
-    ///      variable. So the unset case runs first and the explicit case second, inside one test.
-    function test_run_wiresTheSystemWithDefaultAndExplicitRoles() public {
+    /// @dev With the operator variables unset, all three roles land on the broadcasting account,
+    ///      as a local Anvil run wants. Inside a test, `vm.startBroadcast()` signs as `tx.origin`
+    ///      (forge's default sender), which is the account `run` defaults to. The harness reports
+    ///      every variable as unset, so the test does not depend on the runner's environment.
+    function test_run_defaultsEveryRoleToTheBroadcaster() public {
         address broadcaster = tx.origin;
-        Deploy script = new Deploy();
+        Deployment memory result = new UnsetEnvDeploy().run();
 
-        // Unset: all three roles default to the broadcasting account, as a local Anvil run wants.
-        Deployment memory first = script.run();
-
-        assertEq(first.compliance.token(), address(first.token));
-        assertEq(first.compliance.modules().length, 3);
-        assertTrue(first.identityRegistry.hasRole(Roles.AGENT_ROLE, address(first.token)));
-        assertTrue(first.token.hasRole(first.token.DEFAULT_ADMIN_ROLE(), broadcaster));
-        assertTrue(first.token.hasRole(Roles.AGENT_ROLE, broadcaster));
-        assertTrue(first.token.hasRole(Roles.CUSTODIAN_ROLE, broadcaster));
-        assertTrue(first.identityRegistry.hasRole(Roles.AGENT_ROLE, broadcaster));
-        (, bytes32 anchored,) = first.documentRegistry.getDocument(TERMS_NAME);
+        assertEq(result.compliance.token(), address(result.token));
+        assertEq(result.compliance.modules().length, 3);
+        assertTrue(result.identityRegistry.hasRole(Roles.AGENT_ROLE, address(result.token)));
+        assertTrue(result.token.hasRole(result.token.DEFAULT_ADMIN_ROLE(), broadcaster));
+        assertTrue(result.token.hasRole(Roles.AGENT_ROLE, broadcaster));
+        assertTrue(result.token.hasRole(Roles.CUSTODIAN_ROLE, broadcaster));
+        assertTrue(result.identityRegistry.hasRole(Roles.AGENT_ROLE, broadcaster));
+        (, bytes32 anchored,) = result.documentRegistry.getDocument(TERMS_NAME);
         assertEq(anchored, PINNED_TERMS_HASH);
+    }
 
-        // Explicit operators: AGENT and CUSTODIAN land on the accounts given. ISSUER stays the
-        // broadcaster, because the wiring calls are admin-gated and run as the broadcaster.
-        vm.setEnv("AGENT", vm.toString(agent));
-        vm.setEnv("CUSTODIAN", vm.toString(custodian));
-        Deployment memory second = script.run();
+    /// @dev With the variables set, AGENT and CUSTODIAN land on the accounts given. The test sets
+    ///      all three, so any value the runner exported is overwritten; RWA_ISSUER is the
+    ///      broadcaster, because the admin-gated wiring runs as the broadcaster.
+    function test_run_readsOperatorsFromTheEnvironment() public {
+        address broadcaster = tx.origin;
+        vm.setEnv("RWA_ISSUER", vm.toString(broadcaster));
+        vm.setEnv("RWA_AGENT", vm.toString(agent));
+        vm.setEnv("RWA_CUSTODIAN", vm.toString(custodian));
 
-        assertTrue(second.token.hasRole(Roles.AGENT_ROLE, agent));
-        assertTrue(second.token.hasRole(Roles.CUSTODIAN_ROLE, custodian));
-        assertTrue(second.identityRegistry.hasRole(Roles.AGENT_ROLE, agent));
-        assertTrue(second.maxHolders.hasRole(Roles.AGENT_ROLE, agent));
-        assertFalse(second.token.hasRole(Roles.CUSTODIAN_ROLE, broadcaster));
-        assertFalse(second.token.hasRole(Roles.AGENT_ROLE, broadcaster));
+        Deployment memory result = new Deploy().run();
+
+        assertTrue(result.token.hasRole(result.token.DEFAULT_ADMIN_ROLE(), broadcaster));
+        assertTrue(result.token.hasRole(Roles.AGENT_ROLE, agent));
+        assertTrue(result.token.hasRole(Roles.CUSTODIAN_ROLE, custodian));
+        assertTrue(result.identityRegistry.hasRole(Roles.AGENT_ROLE, agent));
+        assertTrue(result.maxHolders.hasRole(Roles.AGENT_ROLE, agent));
+        assertFalse(result.token.hasRole(Roles.CUSTODIAN_ROLE, broadcaster));
+        assertFalse(result.token.hasRole(Roles.AGENT_ROLE, broadcaster));
     }
 
     /*//////////////////////////////////////////////////////////////
@@ -305,5 +307,12 @@ contract DriftedTermsDeploy is Deploy {
 
     function _readTerms() internal view override returns (bytes memory) {
         return bytes.concat(super._readTerms(), " amended clause");
+    }
+}
+
+/// @notice Runs the script as if none of the operator variables were set.
+contract UnsetEnvDeploy is Deploy {
+    function _envAddress(string memory, address fallback_) internal pure override returns (address) {
+        return fallback_;
     }
 }

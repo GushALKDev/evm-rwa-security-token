@@ -104,13 +104,14 @@ contract Deploy is Script {
 
     /**
      * @notice Deploys and wires the system, reading the operator addresses from the environment.
-     * @dev ISSUER, AGENT and CUSTODIAN default to the broadcasting account when unset, which is
+     * @dev RWA_ISSUER, RWA_AGENT and RWA_CUSTODIAN default to the broadcasting account when unset,
+     *      which is
      *      what a local Anvil run wants. A real deployment sets three distinct accounts: the whole
      *      point of separating AGENT from CUSTODIAN is that a compliance desk cannot seize
      *      balances, and collapsing them into one key discards that separation.
      *
-     *      ISSUER must be the broadcasting account in practice: the wiring calls in `_deploy` are
-     *      admin-gated and run as the broadcaster, so a different ISSUER makes them revert (see
+     *      RWA_ISSUER must be the broadcasting account in practice: the wiring calls in `_deploy`
+     *      are admin-gated and run as the broadcaster, so a different issuer makes them revert (see
      *      `_deploy`).
      *
      *      The broadcasting account is read as `tx.origin`, the account a bare `vm.startBroadcast()`
@@ -121,10 +122,14 @@ contract Deploy is Script {
      * @return The deployed system.
      */
     function run() external returns (Deployment memory) {
+        // tx.origin is read here only to find the broadcasting account, never for authorization:
+        // this is a script executed off-chain by forge, and no deployed contract reads tx.origin.
+        // A bare vm.startBroadcast() signs as tx.origin, so defaulting to it hands the roles to the
+        // account that actually sends the wiring calls.
         address deployer = tx.origin;
-        address issuer = vm.envOr("ISSUER", deployer);
-        address agent = vm.envOr("AGENT", deployer);
-        address custodian = vm.envOr("CUSTODIAN", deployer);
+        address issuer = _envAddress("RWA_ISSUER", deployer);
+        address agent = _envAddress("RWA_AGENT", deployer);
+        address custodian = _envAddress("RWA_CUSTODIAN", deployer);
 
         vm.startBroadcast();
         Deployment memory d = _deploy(issuer, agent, custodian);
@@ -234,6 +239,12 @@ contract Deploy is Script {
         (, bytes32 anchored,) = d.documentRegistry.getDocument(TERMS_NAME);
         require(anchored == d.termsHash, "documents: terms hash mismatch");
         require(anchored == keccak256(_readTerms()), "documents: terms drifted from disk");
+    }
+
+    /// @dev An operator address from the environment, or `fallback_` when the variable is unset.
+    ///      Virtual so a test can model an unset variable whatever the runner's environment holds.
+    function _envAddress(string memory name, address fallback_) internal view virtual returns (address) {
+        return vm.envOr(name, fallback_);
     }
 
     /// @dev The terms document as read from disk. Virtual so a test can substitute drifted content
