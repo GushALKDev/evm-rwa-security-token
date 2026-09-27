@@ -1,43 +1,15 @@
 # EVM RWA Security Token
 
+[![CI](https://github.com/GushALKDev/evm-rwa-security-token/actions/workflows/test.yml/badge.svg)](https://github.com/GushALKDev/evm-rwa-security-token/actions/workflows/test.yml)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
+[![Solidity 0.8.24](https://img.shields.io/badge/Solidity-0.8.24-363636.svg)](https://docs.soliditylang.org/en/v0.8.24/)
+[![Built with Foundry](https://img.shields.io/badge/Built%20with-Foundry-FFDB1C.svg)](https://book.getfoundry.sh/)
+
 A proof-of-concept for compliant tokenization of a real-world financial asset (a real-estate-backed note) as a permissioned security token, modeling the identity, compliance, and custody architecture used by regulated digital-asset platforms.
 
-> **Proof of concept. Not audited and not deployed.** This code is educational and is not fit for production or for representing real financial instruments. See [Standards and scoping](#standards-and-scoping) for what was deliberately left out.
+> **Proof of concept. Not audited and not deployed.** This code is educational and is not fit for production or for representing real financial instruments. See [Standards and scoping](#standards-and-scoping) for what was deliberately left out and [Trust assumptions and limitations](#trust-assumptions-and-limitations) for what the design accepts.
 
-## Implementation status
-
-- [x] Interfaces and shared role constants
-- [x] Sample terms document (`docs/RealEstateNote-Terms.md`)
-- [x] `IdentityRegistry` (agent path, EIP-712 attestation path, packed record)
-- [x] Compliance modules (`MaxHoldersModule`, `CountryRestrictionModule`, `LockupModule`)
-- [x] `ModularCompliance` engine (composes modules, fans lifecycle hooks, superset-gate seam)
-- [x] `DocumentRegistry`
-- [x] `SecurityToken` (transfer gate, freeze, forced recovery)
-- [x] Deployment script with document anchoring
-- [x] Scenario tests
-- [x] Handler-based invariant suite
-- [x] Coverage report
-- [x] Architecture diagram
-- [x] Threat model: compliance bypass, reentrancy, recovery abuse, access control
-- [x] `DividendDistributor` (accumulator pattern, O(1) income distribution, as a compliance module)
-
-## Project progress
-
-Built one contract per unit in dependency order, each with its own unit and fuzz tests, reviewed and committed before the next. The identity and compliance layers exist before the token because the token's transfer gate calls into both. Full detail and live status are in the [ROADMAP](docs/ROADMAP.md).
-
-| Phase | Name | Status |
-|---|---|:---:|
-| 0 | Foundations (interfaces, roles, terms doc) | Done |
-| 1 | Identity layer (`IdentityRegistry`) | Done |
-| 2 | Compliance layer (engine + three modules) | Done |
-| 3 | Document anchoring (`DocumentRegistry`) | Done |
-| 4 | The security token (transfer gate, freeze, recovery) | Done |
-| 5 | Deployment and hash anchoring | Done |
-| 6 | Scenario and invariant testing | Done |
-| 7 | Documentation and threat model | Done |
-| 8 | Stretch: dividend distribution | Done |
-
-Current state: **365 tests passing across thirteen suites** (`forge test`). `forge coverage --report summary` (no `--ir-minimum` needed) reports 100% of lines, statements, branches and functions for `SecurityToken`, `IdentityRegistry`, `ModularCompliance`, `DocumentRegistry` and `AbstractComplianceModule`, and 100% of branches and functions for the four modules, whose line figures sit between 95.83% and 98.41%: in each, the one unmarked line is the constant `return` of a `pure` view (`isPlugAndPlay` or `token`) that the tests call and check. `script/Deploy.s.sol` reports 100% of lines and functions and 51.72% of branches (15 of 29), the untaken branches being the failure sides of its `require` sanity checks. The [testing section](docs/tests/README.md) catalogues the suite as it stood before the review rounds and is rewritten in the next one.
+**Status.** All nine phases of the [ROADMAP](docs/ROADMAP.md) are complete: the identity registry, the compliance engine and its four modules, document anchoring, the token, deployment, the test suites, the documentation and the dividend distributor. The code was then reviewed in three rounds (see [Review notes](#review-notes)). Test and coverage figures are in [Build and test](#build-and-test).
 
 ## Documentation
 
@@ -53,7 +25,8 @@ The README is the narrative entry point. The technical guides in [`docs/`](docs/
 | [5. Implementation](docs/05-implementation.md) | Conventions, OZ primitives, patterns, testing strategy, invariants |
 | [6. Improvements](docs/06-improvements.md) | What a production build adds back, and the priority order |
 | [7. Testing](docs/tests/README.md) | Every test catalogued and linked to its code, the invariant coverage map, and the gaps |
-| [7.13 Dividends](docs/tests/13-dividend-distributor.md) | The accumulator identity, the rounding rule that keeps it solvent, and the two bugs the suite found |
+| [7.13 Dividends](docs/tests/13-dividend-distributor.md) | The accumulator identity, the rounding rule that keeps it solvent, and the bugs the suite found |
+| [7.14 Regressions](docs/tests/14-regressions.md), [7.15 Edge cases](docs/tests/15-edge-cases.md), [7.16 Conformance](docs/tests/16-conformance.md) | One test per review finding, the edge case and griefing tests, and the standards conformance suites |
 | [ROADMAP](docs/ROADMAP.md) | Phased build plan and progress tracker |
 
 ## The asset
@@ -107,7 +80,7 @@ Compared against the interfaces in the [EIP text](https://eips.ethereum.org/EIPS
 | Agent role | | OpenZeppelin `AccessControl` with `AGENT_ROLE`, `CUSTODIAN_ROLE` and `DEFAULT_ADMIN_ROLE` instead of `IAgentRole` (`addAgent`, `removeAgent`, `isAgent`) | |
 | Identity registry | | `registerIdentity(user, country, accredited, kycExpiry[, investorId])` stores attributes instead of linking an `IIdentity` contract. `deleteIdentity` is `removeIdentity`. `isVerified` checks a stored flag and `kycExpiry`, not claims. `identity` returns the stored record. `investorCountry` is `country`. Re-registering overwrites a record, which stands in for `updateCountry` and `updateIdentity`. `registerIdentityWithAttestation` (EIP-712, one claim signer) is added | `batchRegisterIdentity`, `contains`, `identityStorage`, `issuersRegistry`, `topicsRegistry` and their setters |
 | Registry split | | `TrustedIssuersRegistry` is reduced to one `claimSigner` | `IdentityRegistryStorage`, `ClaimTopicsRegistry`, ONCHAINID |
-| Compliance | `addModule`, `removeModule`, `canTransfer`, `transferred`, `created`, `destroyed` | `bindToken` is one-shot and cannot be rebound. `getModules`, `getTokenBound` and `isModuleBound` are `modules`, `token` and `isModuleRegistered`. `addModule` also checks that the module names this engine, that `canComplianceBind` allows it, and that the module reads the bound token (`bindToken` checks the same for modules registered earlier) | `unbindToken`, `isTokenBound`, `callModuleFunction` |
+| Compliance | `addModule`, `removeModule`, `canTransfer`, `transferred`, `created`, `destroyed` | `bindToken` is one-shot and cannot be rebound. `getModules`, `getTokenBound` and `isModuleBound` are `modules`, `token` and `isModuleRegistered`. `addModule` also checks that the module names this engine, that `canComplianceBind` allows it, and that the module reads the bound token (`bindToken` checks the same for modules registered earlier). The engine accepts at most 25 modules, the T-REX limit | `unbindToken`, `isTokenBound`, `callModuleFunction` |
 | Module | `name`, `isPlugAndPlay`, `canComplianceBind`, `isComplianceBound`, `bindCompliance`, `unbindCompliance` (called by the engine from `addModule` and `removeModule`) | `moduleTransferAction`, `moduleMintAction` and `moduleBurnAction` are `moduleTransferred`, `moduleCreated` and `moduleDestroyed`. `moduleCheck` takes no compliance argument. A module serves one engine, fixed in its constructor, rather than a list of bound compliances. A `token()` view is added | |
 
 The last row follows T-REX for the reason T-REX has it. A stateful module such as T-REX's `MaxBalanceModule` reports `isPlugAndPlay() == false`, and its `canComplianceBind` refuses a compliance whose token already has supply. Here `MaxHoldersModule` and `LockupModule` refuse a token with supply, and every stateful module refuses to be attached a second time (see [Architecture](#architecture)). T-REX also gates `recoveryAddress` to an agent, where this repository uses a separate `CUSTODIAN_ROLE`.
@@ -337,7 +310,7 @@ Note that this is *not* the order a naive reading suggests (engine, modules, reg
 
 The script deploys and wires the three rule modules only. `DividendDistributor` is not part of it (`_verify` requires exactly three modules); the dividend scenario suite deploys and registers it separately.
 
-One limitation the script does not hide: the wiring calls are admin-gated, so the executing account must be the issuer. When the `ISSUER`, `AGENT` and `CUSTODIAN` environment variables are unset, all three roles go to the broadcasting account, which suits a local Anvil run and nothing else; `test_run_wiresTheSystemWithDefaultAndExplicitRoles` runs `run()` end to end both ways. A real deployment needs a deploy-then-handover step (deploy under a hot key, transfer `DEFAULT_ADMIN_ROLE` to the multisig, renounce), which is governance plumbing deliberately out of scope here.
+The script reads the operators from `RWA_ISSUER`, `RWA_AGENT` and `RWA_CUSTODIAN`; `test_run_defaultsEveryRoleToTheBroadcaster` and `test_run_readsOperatorsFromTheEnvironment` run `run()` end to end with the variables unset and set. The role defaults and the handover step a real deployment needs are listed in [Trust assumptions and limitations](#trust-assumptions-and-limitations).
 
 Deeper treatment of each seam is in [Guide 3: Architecture](docs/03-architecture.md).
 
@@ -364,9 +337,7 @@ The question is whether any balance can move without clearing the gate. The stru
 
 The last rows are the honest part of this section. The holder-count and lockup modules both infer transitions from post-transfer balances rather than reading pre-transfer state, and that inference is where the bugs live. `invariant_holderCountMatchesReality` cross-checks the incremental count against enumerated real balances on every run, and its handler now issues zero amounts, full-balance moves and `transferFrom`; reintroducing the zero-amount bug makes it fail.
 
-What is *not* defended: a rule the module set does not encode is not enforced. The gate is exactly as strict as the registered modules, and the ISSUER can remove them.
-
-The gate also checks the two holders, not the caller. In `transferFrom` the spender needs only an allowance, so an unverified or frozen spender can move tokens between two verified, unfrozen holders; ERC-3643 behaves the same way. Allowances a lost wallet granted survive `forcedRecovery` and are not carried to the new wallet. They cannot move anything while the lost wallet holds nothing and stays unregistered.
+What is *not* defended: a rule the module set does not encode is not enforced, the gate does not check the `transferFrom` spender, and zero-amount transfers pass every module. Those are listed with the other accepted limitations in [Trust assumptions and limitations](#trust-assumptions-and-limitations).
 
 ### 2. Reentrancy (defended, mostly structurally)
 
@@ -418,9 +389,35 @@ The consequence, stated plainly: the AGENT/CUSTODIAN separation is an **operatio
 
 **Mitigation path, not built here.** A production deployment would keep this authority model and harden its exercise: `DEFAULT_ADMIN_ROLE` behind a multisig, ideally with a timelock, so that self-granting a role or swapping the compliance engine becomes a visible, delayed governance action rather than a single-key transaction. The trust assumption stays; what changes is that acting on it is observable and contestable before it takes effect. That is governance infrastructure, orthogonal to the architecture this POC demonstrates, and deliberately out of scope.
 
+## Trust assumptions and limitations
+
+What the design accepts rather than defends, in one place. Each item is either tested as it behaves or follows from the code named.
+
+| Assumption or limitation | What it means |
+|---|---|
+| **Issuer authority** | `DEFAULT_ADMIN_ROLE` can grant itself `AGENT_ROLE` and `CUSTODIAN_ROLE`, remove modules and anchor documents. The AGENT/CUSTODIAN split contains compromised operational keys, not the issuer (see [4.2](#42-issuer-level-authority-accepted-not-defended)). |
+| **Modules are trusted code** | A registered module can revert every transfer or burn gas in the hook fan-out. The engine bounds the fan-out at 25 modules; vetting what gets registered is governance. A rule no module encodes is not enforced. |
+| **The holder cap counts wallets** | `MaxHoldersModule` counts addresses with a balance, not investors. One investor with two wallets counts twice; a regulation that counts holders of record or beneficial owners would need the count keyed by `investorId`. |
+| **The `transferFrom` spender is not checked** | The gate checks sender and recipient only. An unverified or frozen spender can move tokens between two verified, unfrozen holders within an allowance (`test_transferFrom_spenderIsNotChecked`). ERC-3643 behaves the same way. |
+| **Allowances survive recovery** | Allowances a lost wallet granted stay in place and are not carried to the new wallet. They cannot move anything while the lost wallet holds nothing and stays unregistered. |
+| **Removed wallets can be registered again** | `removeIdentity` suspends a wallet; the agent (or a new attestation) can register it again. Recovery removes the lost wallet the same way. |
+| **Signer rotation back to an old signer** | Rotating the claim signer invalidates outstanding attestations; rotating back to the old signer makes the unsubmitted ones valid again, unless a write to the record has advanced the nonce since. |
+| **No fee-on-transfer or rebasing currency** | `deposit` credits the requested amount without measuring what arrived. Such a currency would leave the distributor owing more than it holds; nothing detects it. |
+| **Zero-amount Transfer events** | Modules judge value movements only, so anyone can call `transferFrom(verifiedA, verifiedB, 0)` without an allowance and emit a `Transfer` event between two verified holders. This is standard ERC-20 behaviour, limited here to verified, unfrozen addresses while the token is not paused. |
+| **`setLockupPeriod` is retroactive** | The period applies to every running clock: lengthening it re-locks holders whose original period had ended, shortening it releases holders early (`test_setLockupPeriod_appliesRetroactively`). |
+| **Stateful modules cannot join a live token** | `MaxHoldersModule` and `LockupModule` refuse a token with supply, and no stateful module can be attached twice. `DividendDistributor` can join a live token once. Adding a holder cap or a lockup to an issued token means a new deployment. |
+| **A pause stops token movements only** | Mint, burn, transfer and transferFrom stop; forced recovery, administration, `deposit` and `claim` do not (`test_pause_againstEachRoleAction`). |
+| **Deploy defaults every role to the broadcaster** | With `RWA_ISSUER`, `RWA_AGENT` and `RWA_CUSTODIAN` unset, one key holds all three roles, which suits a local run only. `RWA_ISSUER` must be the broadcaster, since the wiring is admin-gated; a real deployment needs a deploy-then-handover step. |
+| **No upgradeability** | No proxies and no factory. A change to a contract means a redeployment. |
+| **No EIP-1271** | The attestation path compares an ECDSA-recovered address with the claim signer; a contract cannot be the claim signer (`test_contractSigner_isNotSupported`). |
+
 ## Review notes
 
-The code was reviewed in rounds after the build. Each finding below was reproduced first, got a regression test that failed against the unfixed code, and was then fixed. The regression tests that run against the deployed wiring live in [`test/scenario/Regressions.t.sol`](test/scenario/Regressions.t.sol).
+The code was reviewed in three rounds after the build. Round 1 checked the documentation against the code and measured what the README claimed; round 2 fixed the bugs it found; round 3 covered standards conformance, edge cases and griefing. Every bug below was reproduced first and got a regression test that failed against the unfixed code; most of those tests run against the deployed wiring in [`test/scenario/Regressions.t.sol`](test/scenario/Regressions.t.sol). Each fix was also checked by reintroducing the bug and confirming that at least one test fails.
+
+### Bugs
+
+Findings 1 to 11 were found in round 1 and fixed in round 2.
 
 **1. Zero amounts deflated the holder count** (`22e214f`)
 - Wrong: a zero-amount transfer from a verified wallet holding nothing lowered `MaxHoldersModule.holderCount`. `transferFrom(emptyWallet, x, 0)` needs no allowance, so any address could drain the count, admit holders past the cap, and then make legitimate exits revert on underflow. `burn(nonHolder, 0)` did the same.
@@ -486,7 +483,52 @@ The code was reviewed in rounds after the build. Each finding below was reproduc
 - Fix: `Deploy.s.sol` and `DeployTest` both pin the hash, and a drifted file fails the deployment.
 - Test: `test_deploy_revertsWhenTermsDrift`.
 
-Test-suite changes from the same review (handler revert classification, new invariants, stronger unit tests) are in the commits after `55b7fbd`; the [testing section](docs/tests/README.md) will be rewritten to match in the next round.
+**12. Module checks refused zero-amount transfers** (round 3, `8bfbdb8`)
+- Wrong: the lockup, the holder cap and the country rule refused some zero-amount transfers (from a sender in lockup, to a non-holder at a full cap, to a blocked recipient) although nothing moved, while their hooks already ignored zero amounts.
+- Fix: every module's `moduleCheck` returns true for a zero amount; the token-level identity, freeze and pause checks still apply.
+- Tests: `test_zeroAmountTransfer_fromSenderInLockup_succeeds`, `test_zeroAmountTransfer_toNonHolderAtCap_succeedsWithoutCounting`, `test_zeroAmountTransfer_toBlockedCountry_succeeds`, `test_zeroAmountTransferFrom_passesModulesButNotTheGate`.
+
+**13. The dividend remainder carry was untested, and its role overstated** (round 3, `ac714ff`)
+- Wrong: zeroing `_residue` failed no test, because below a supply of 2^128 base units the carried remainder is worth less than one wei per deposit; the comments credited solvency to the carry.
+- Fix: a test at a supply of 2^129 + 1, where a one-unit deposit moves the accumulator by zero on its own and only the carry lets three deposits pay out. The comments now say the carry defers the sub-unit remainder of each deposit and that the per-holder floor keeps the distributor solvent.
+- Test: `test_deposit_residueCarriesSubUnitRemainderIntoLaterDeposits`.
+
+**14. The terms document described an EU allowlist** (round 1, fixed in round 3, `f0c0f74`)
+- Wrong: the anchored terms said "EU jurisdictions"; the code enforces a blocklist of restricted countries and has no EU rule.
+- Fix: the terms describe the blocklist; both hash pins moved to the new content.
+- Tests: `test_anchor_termsFileMatchesPinnedHash`, `test_deploy_revertsWhenTermsDrift`.
+
+**15. The module fan-out had no bound** (round 3, `5fe0cdd`)
+- Wrong: every transfer iterates all modules twice, and nothing capped their number.
+- Fix: `MAX_MODULES = 25`, the T-REX limit; `addModule` reverts with `ModuleLimitReached` beyond it.
+- Test: `test_addModule_capsTheModuleCount`.
+
+**16. `Deploy.run()` gave the roles to the wrong account when called from a contract** (round 2, `9fd4b4f`; round 3, `8c101b5`)
+- Wrong: the role defaults read `msg.sender`, while a bare `vm.startBroadcast()` signs as `tx.origin`; from a test the wiring reverted. The run test also depended on the runner's environment.
+- Fix: the defaults read `tx.origin` (the broadcasting account in an off-chain script; no contract reads it), the variables became `RWA_ISSUER`, `RWA_AGENT` and `RWA_CUSTODIAN`, and the unset case is modelled by a harness.
+- Tests: `test_run_defaultsEveryRoleToTheBroadcaster`, `test_run_readsOperatorsFromTheEnvironment`.
+
+**17. Module attachment events named a caller-supplied address** (introduced and fixed in round 2, `a957a53`)
+- Wrong: `bindCompliance` and `unbindCompliance` emitted the address they were passed.
+- Fix: they emit the module's bound engine.
+- Test: `test_bindCompliance_eventNamesTheBoundEngine`.
+
+### Test-suite findings
+
+| Finding (round 1) | Fix | Commit |
+|---|---|---|
+| The invariant handler caught every revert, so failures were invisible; two invariants could not fail | Reverts classified as expected or unexpected, with an invariant on the unexpected count; the two vacuous invariants replaced; zero amounts, `transferFrom`, the country block, recovery pairs and dividends added to the handler | `6fe5e72` |
+| A bare `vm.expectRevert()`; the signer fuzz test only tested rejection | Selector-specific expectation; acceptance tested over the whole key range | `449351a` |
+| The reentrancy test did not show a reentry was attempted; `deposit` and `forcedRecovery` had no reentrancy test | Mocks record the attempt and the error; new tests for both | `2697b72` |
+| The 1-wei re-lock test dusted after expiry; the holder-count fuzz never transferred | Dust one second before expiry; random mints, transfers and burns with a recount | `eac33d3` |
+| Engine and document tests checked less than their names said | From/to checked, every hook covered, a real swap-and-pop, interleaved anchors | `04c132d` |
+| The composed-rules scenario could not tell the lockup from the country rule | Each module's own verdict asserted at every step | `67e4215` |
+| Dividend fuzz bounds excluded small supplies; `uint96` parameters were truncated; exact rounding asserted | Bounds from one wei; `uint256` parameters; one-sided bounds with the reason | `fcc4baf` |
+| Suite not runnable under `forge coverage` (stack too deep) | Handler wiring grouped in a struct; slot test counts distinct slots | `cc19618` |
+
+### Documentation findings
+
+Round 1 corrected the README and guides where they disagreed with the code: the test and coverage figures, the clone instructions, the contract count and role matrix, the "one SLOAD" claims, a claim that T-REX has this lockup model, the deploy script's hash check, and 92 em dashes (`d9b7f34`, `eb97a9a`, `baefb20`, `6b7c182`, `14c51bc`, `8a5b77e`). Round 2 brought the docs in line with its fixes (`fc6bb47`, `8530aaa`); round 3 added this section's final form, the conformance and edge case documentation, and the rewritten test catalogue.
 
 ## Build and test
 
@@ -499,23 +541,80 @@ forge build
 forge test
 ```
 
-Formatting is `forge fmt` with the default configuration (`foundry.toml` has no `[fmt]` section). CI ([`.github/workflows/test.yml`](.github/workflows/test.yml)) runs `forge fmt --check`, `forge build --sizes` and `forge test -vvv` under `FOUNDRY_PROFILE=ci` on every push and pull request.
+Formatting is `forge fmt`, configured by the `[fmt]` section of `foundry.toml`. CI ([`.github/workflows/test.yml`](.github/workflows/test.yml)) runs `forge fmt --check`, `forge build --sizes` and `forge test -vvv` under `FOUNDRY_PROFILE=ci` on every push and pull request.
 
-`forge test` runs all 365 tests across thirteen suites (nine unit, three scenario, one invariant): 291 unit tests and 22 fuzz tests in the unit suites, 39 scenario tests (including the 25 in `Regressions.t.sol`), and 12 stateful invariants plus one deterministic reachability test in the invariant suite. Gas benchmarks live in `test/gas/`, are excluded from that count and from the default and `ci` profiles, and run with `FOUNDRY_PROFILE=gas forge test --isolate --gas-report`. The default profile runs 256 fuzz runs per fuzz test and 64 runs of depth 64 per invariant; the `ci` profile (`FOUNDRY_PROFILE=ci forge test`) raises these to 1,000 fuzz runs and 256 invariant runs of depth 128. The invariant suite is worth running deeper than its default before trusting a change to a stateful module:
+### Test figures
+
+`forge test` runs **421 tests in 18 suites**: 387 concrete tests, 22 fuzz tests and **12 stateful invariants**.
+
+| Area | Suites | Tests |
+|---|---|---|
+| Unit | 9 (one per contract, plus `Deploy`) | 297 concrete, 22 fuzz |
+| Scenario | 4 (`Lifecycle`, `Dividends`, `Regressions`, `EdgeCases`) | 55 |
+| Conformance | 4 (ERC-20, ERC-3643, ERC-1643, EIP-712) | 34 |
+| Invariant | 1 | 12 invariants, 1 deterministic reachability test |
+
+The default profile runs 256 runs per fuzz test and 64 runs of depth 64 per invariant; `FOUNDRY_PROFILE=ci forge test` raises these to 1,000 and 256 runs of depth 128. Two deeper runs are worth doing before trusting a change to a stateful module or to the dividend arithmetic:
 
 ```bash
 FOUNDRY_INVARIANT_RUNS=300 FOUNDRY_INVARIANT_DEPTH=100 forge test --match-path 'test/invariant/*'
-```
-
-That configuration is what surfaced the holder-count self-transfer bug.
-
-The dividend arithmetic is sensitive to rounding in a way the default fuzz budget does not probe, so its properties are run deeper too:
-
-```bash
 FOUNDRY_FUZZ_RUNS=20000 forge test --match-contract DividendDistributorTest
 ```
 
-The compounding-insolvency bug that suite found was only reachable across *repeated* deposits: every single-deposit property passed while the contract was quietly becoming insolvent. See the [testing section](docs/tests/README.md) for the full catalogue.
+Coverage, from `forge coverage --report summary` (no `--ir-minimum` needed):
+
+| Contract | Lines | Statements | Branches | Functions |
+|---|---|---|---|---|
+| `SecurityToken` | 110/110 | 130/130 | 36/36 | 18/18 |
+| `IdentityRegistry` | 52/52 | 54/54 | 7/7 | 14/14 |
+| `ModularCompliance` | 55/55 | 76/76 | 13/13 | 13/13 |
+| `DocumentRegistry` | 19/19 | 21/21 | 6/6 | 5/5 |
+| `AbstractComplianceModule` | 21/21 | 21/21 | 3/3 | 8/8 |
+| `CountryRestrictionModule` | 24/25 | 21/22 | 3/3 | 11/11 |
+| `DividendDistributor` | 59/60 | 68/69 | 10/10 | 16/16 |
+| `LockupModule` | 63/64 | 77/78 | 16/16 | 16/16 |
+| `MaxHoldersModule` | 46/47 | 71/72 | 12/12 | 12/12 |
+| `script/Deploy.s.sol` | 61/61 | 62/62 | 15/29 | 6/6 |
+
+In each of the four modules the one unmarked line is the constant `return` of a `pure` view (`isPlugAndPlay` or `token`) that the unit tests call and assert; coverage attributes the call to the function but not to that line. The untaken `Deploy.s.sol` branches are the failure sides of its `require` sanity checks.
+
+### Gas
+
+Ten gas benchmarks live in `test/gas/`, outside the test count and the default and `ci` profiles. `FOUNDRY_PROFILE=gas forge test --isolate --gas-report` runs each call as its own transaction against the system `Deploy.s.sol` produces, which registers three rule modules (`MaxHoldersModule`, `CountryRestrictionModule`, `LockupModule`):
+
+| Operation | Gas |
+|---|---|
+| `transfer` | 100,089 |
+| `transferFrom` | 102,875 |
+| `mint` to a new holder | 136,270 |
+| `burn` (partial) | 68,466 |
+| `forcedRecovery` into an empty wallet | 145,320 |
+| `registerIdentity` | 95,856 |
+| `registerIdentityWithAttestation` | 102,000 |
+| `transfer` with `DividendDistributor` registered (4 modules) | 115,414 |
+| `deposit` (first deposit) | 115,567 |
+| `claim` | 101,315 |
+| `transfer` at the module cap (the 3 deployed rules plus 22 country rules, 25 modules) | 335,359 |
+
+### Static analysis
+
+Run on `src/` with Slither 0.11.6 (`slither . --filter-paths 'lib/|test/|script/'`) and Aderyn 0.6.8 (`aderyn . --src src`).
+
+| Tool and category | Count | Triage |
+|---|---|---|
+| Slither `incorrect-equality` | 9 | By design: the modules infer transitions from balance equalities and use zero as the "no clock" sentinel. Three of these lines in `MaxHoldersModule` were where finding 1 lived; the zero-amount guards fixed it |
+| Slither `timestamp` | 7 | By design: KYC expiry and lockup comparisons on a scale of days |
+| Slither `shadowing-local` | 6 | False positive: parameter names in interface declarations |
+| Slither `calls-loop` | 5 | By design: loops over the registered modules, capped at 25 |
+| Slither `unused-return` | 2 | By design: `EnumerableSet.add` after a `contains` check, and an upsert in `DocumentRegistry` |
+| Slither `unimplemented-functions` | 2 | False positive: `MaxHoldersModule` and `LockupModule` do override `isPlugAndPlay` |
+| Slither `reentrancy-benign` | 1 | `forcedRecovery` writes after calling the trusted registry, under `nonReentrant` |
+| Aderyn state change after external call | 13 | Reads of the trusted token or registry before a write, in guarded functions or in hooks only the engine can call |
+| Aderyn centralization risk | 29 | The issuer and agent roles, an accepted assumption (see above) |
+| Aderyn unchecked return, uninitialized local, unused import, unspecific pragma, PUSH0 | 15, 5, 4, 15, 16 | `_grantRole` and set results not needed; loop counters; imports needed for `@inheritdoc`; solc pinned in `foundry.toml`; the target EVM supports PUSH0 |
+| Aderyn empty block, `nonReentrant` not first, loop with revert, state change without event | 3, 2, 1, 3 | Stateless hooks; `onlyRole` makes no external call; `bindToken` refuses a mismatched module; distributor bookkeeping that follows from `Transfer` events |
+
+The true positives both tools raised during the review (the token's registry and engine references could be `immutable`) were fixed in round 2.
 
 ## License
 

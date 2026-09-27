@@ -1,4 +1,4 @@
-# 🛠️ Guide 5: Implementation
+# Guide 5: Implementation
 
 **Version:** 1.0
 **Prerequisites:** [Guide 3: Architecture](./03-architecture.md)
@@ -6,7 +6,7 @@
 
 ---
 
-## 📋 Table of Contents
+## Table of Contents
 
 1. [Build order and status](#1-build-order-and-status)
 2. [Coding conventions](#2-coding-conventions)
@@ -40,7 +40,7 @@ src/
 └── SecurityToken.sol                  the gated ERC-20                 [built]
 ```
 
-As of the current state: **365 tests passing** (331 concrete, 22 fuzz, 12 stateful invariants; `forge test`), with 100% of branches and functions on every `src/` contract, and 100% of lines except one constant `return` line in each of the four modules (`forge coverage --report summary`, see the [README](../README.md#project-progress)).
+As of the current state: **421 tests passing** in 18 suites (387 concrete, 22 fuzz, 12 stateful invariants; `forge test`), with 100% of branches and functions on every `src/` contract, and 100% of lines except one constant `return` line in each of the four modules (`forge coverage --report summary`, see the [README](../README.md#test-figures)).
 
 ---
 
@@ -145,7 +145,7 @@ The project runs a strict review-gated per-unit loop: implement one contract, te
 - **Fuzz where the input space is large.** Holder-count transitions, lockup timing, and freeze arithmetic are fuzzed, not just point-tested.
 - **Mocks are minimal.** `MockToken`, `MockModule` and `MockCurrency` exist only to drive the unit under test; they are test helpers, not part of the coverage target for `src/`.
 
-Current suite: 365 tests, all green. The [testing section](./tests/README.md) catalogues every test and links each claim to the code that proves it.
+Current suite: 421 tests in 18 suites, all green. The [testing section](./tests/README.md) catalogues every test and links each claim to the code that proves it.
 
 ```
 forge test            # run the suite

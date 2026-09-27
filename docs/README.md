@@ -1,11 +1,11 @@
-# 📚 Documentation Index: EVM RWA Security Token
+# Documentation Index: EVM RWA Security Token
 
 **Version:** 1.0
 **Status:** Portfolio / educational proof-of-concept (unaudited)
 
 ---
 
-## 🎯 Quick Start
+## Quick Start
 
 | Document | Description | Status |
 | :------- | :---------- | :----- |
@@ -18,7 +18,7 @@
 
 ---
 
-## 📖 Technical Guides
+## Technical Guides
 
 ### Core Concepts (Start Here)
 
@@ -80,12 +80,15 @@
     - [Strategy](./tests/01-strategy.md): layers, principles, mocks, how to run the suite
     - One document per suite, cataloguing every test with a link to its code
     - Invariant coverage map: each property and what currently asserts it
-    - [Invariant Suite](./tests/11-invariants.md): the bounded handler and the holder-count bug it found
-    - [Gaps & Roadmap](./tests/12-gaps-and-roadmap.md): what is not covered, and which phase closes it
+    - [Invariant Suite](./tests/11-invariants.md): the handler, its revert classification, and the twelve invariants
+    - [Gaps & Roadmap](./tests/12-gaps-and-roadmap.md): what is still open and what the review closed
+    - [Regressions](./tests/14-regressions.md): one test per review finding, against the deployed wiring
+    - [Edge Cases](./tests/15-edge-cases.md): edge cases and griefing vectors
+    - [Conformance](./tests/16-conformance.md): ERC-20, ERC-3643, ERC-1643 and EIP-712
 
 ---
 
-## 🗂️ Documentation Structure
+## Documentation Structure
 
 ```
 docs/
@@ -104,7 +107,7 @@ docs/
 
 ---
 
-## 🎓 Recommended Reading Order
+## Recommended Reading Order
 
 ### For Developers
 
@@ -132,17 +135,17 @@ docs/
 
 ---
 
-## 📊 Progress Tracking
+## Progress Tracking
 
 See [ROADMAP.md](./ROADMAP.md) for detailed progress across 9 phases (0 to 8) and 35 trackable items.
 
 **Current status:** Phases 0 to 8 complete (foundations, identity, compliance, document anchoring, the token, deployment, the scenario and invariant suites, documentation, and the dividend distributor).
 
-**Test suite:** 365 tests passing (`forge test`), 100% of branches and functions on every `src/` contract, and 100% of lines except one constant `return` line in each of the four modules (`forge coverage --report summary`, see the [README](../README.md#project-progress)). See the [testing section](./tests/README.md) for what each block covers.
+**Test suite:** 421 tests passing in 18 suites (`forge test`), 100% of branches and functions on every `src/` contract, and 100% of lines except one constant `return` line in each of the four modules (`forge coverage --report summary`, see the [README](../README.md#test-figures)). See the [testing section](./tests/README.md) for what each block covers.
 
 ---
 
-## 🔗 External Resources
+## External Resources
 
 - **ERC-3643 (T-REX):** https://eips.ethereum.org/EIPS/eip-3643 (the standard this implements a subset of)
 - **T-REX reference implementation:** https://github.com/TokenySolutions/T-REX (what production would build on)
@@ -154,7 +157,7 @@ See [ROADMAP.md](./ROADMAP.md) for detailed progress across 9 phases (0 to 8) an
 
 ---
 
-## ⚖️ License
+## License
 
 MIT, see [LICENSE](../LICENSE). Unaudited, educational, not for production use or for representing real financial instruments.
 

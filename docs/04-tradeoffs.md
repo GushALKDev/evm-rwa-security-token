@@ -1,4 +1,4 @@
-# ⚖️ Guide 4: Trade-offs
+# Guide 4: Trade-offs
 
 **Version:** 1.0
 **Prerequisites:** [Guide 3: Architecture](./03-architecture.md)
@@ -6,13 +6,14 @@
 
 ---
 
-## 📋 Table of Contents
+## Table of Contents
 
 1. [How to read this guide](#1-how-to-read-this-guide)
 2. [Scope decisions](#2-scope-decisions)
 3. [Design decisions inside the built code](#3-design-decisions-inside-the-built-code)
 4. [Accepted risks](#4-accepted-risks)
 5. [Trade-off summary table](#5-trade-off-summary-table)
+6. [Edge cases and griefing vectors](#6-edge-cases-and-griefing-vectors)
 
 ---
 
@@ -100,6 +101,14 @@ Both the token→engine and module→engine bindings are one-time. Rebinding a l
 
 The transfer gate is implemented once and consumed two ways (revert vs bool), so for transfers and mints the enforced rule and the advertised pre-check cannot drift (burn and forced recovery do not pass through the gate). The alternative (two parallel implementations) is a classic source of "the front end said it would pass but the transfer reverted" bugs. See [Guide 3 §4](./03-architecture.md#4-the-transfer-gate-a-superset-check).
 
+### 3.6 Modules judge value movements only
+
+Every module's `moduleCheck` returns true for a zero amount, and every stateful hook ignores one. A zero-amount transfer moves no value, adds or removes no holder and acquires or disposes of nothing, so no rule has anything to judge; the token-level identity, freeze and pause checks still apply to it. The cost is that anyone can emit a zero-value `Transfer` event between two verified, unfrozen holders through `transferFrom(a, b, 0)`, which needs no allowance: standard ERC-20 behaviour, limited here to verified addresses.
+
+### 3.7 At most 25 modules
+
+`ModularCompliance` accepts at most 25 modules, as T-REX does. Every transfer iterates them twice (the checks and the hooks), so the cap bounds that loop: a transfer measured at 100,089 gas with the three deployed rules costs 335,359 with 25 (`FOUNDRY_PROFILE=gas forge test --isolate --gas-report`).
+
 ---
 
 ## 4. Accepted risks
@@ -143,6 +152,41 @@ Recovery also bypasses the pause and the transfer gate, so no compliance rule li
 | One gate for revert + view | Transfer and mint pre-checks match enforcement | Slightly more indirection; burn and recovery are outside the view |
 | ISSUER = admin, self-grants roles | Faithful to ERC-3643, issuer can act | Centralization (mitigate with multisig) |
 | Recovery = verified same-investor destination only | Theft is attributable and legible | Not prevented, only deterred |
+
+
+---
+
+## 6. Edge cases and griefing vectors
+
+Each row names the test that pins the behaviour. Tests in `EdgeCases`, `Regressions` and the conformance suites run against the deployed wiring.
+
+| Surface | Trigger | Behaviour | Test |
+|:---|:---|:---|:---|
+| Holder cap | Agent lowers the cap below the live count | Reverts with `MaxHoldersBelowCurrentCount`; at exactly the count, a swap is admitted and a new holder only after an exit | `test_holderCap_loweredToCount_thenExitsAndEntries` |
+| Holder cap | Anyone sends zero from an empty wallet, or calls `transferFrom(empty, x, 0)` | Count unchanged (bug 1, fixed) | `test_zeroAmountTransferFromByStranger_doesNotDeflateHolderCount` |
+| Holder cap | One investor spreads a position over many wallets | Each wallet counts: a limitation, documented | none (by design) |
+| Lockup | Griefer dusts a holder one second before expiry | Clock and unlock time unchanged | `test_griefing_oneWeiCannotRelockPosition` |
+| Lockup | Agent changes the period while holders are locked | Applies to running clocks, both ways; documented | `test_setLockupPeriod_appliesRetroactively` |
+| Lockup | Issuer removes the module while holders are locked | Everyone is released; the module cannot come back | `test_removingLockup_releasesLockedHolders_andCannotReturn` |
+| Identity | KYC expires during the lockup, with unclaimed income | Position and income suspended; renewal restores the same schedule and pays the income | `test_kycExpiryDuringLockupAndWithUnclaimedIncome` |
+| Identity | An unsubmitted attestation after a removal | Rejected: removal advances the nonce (bug 2, fixed) | `test_attestationSignedBeforeRemoval_isRejectedAfterIt` |
+| Recovery | Destination is frozen, or the lost wallet partially frozen | Recovery proceeds; both freeze states arrive at the destination | `test_forcedRecovery_succeedsIntoFrozenWallet`, `test_forcedRecovery_carriesPartialFreeze` |
+| Recovery | Destination is a same-investor wallet in a blocked jurisdiction | Recovery proceeds (rules are skipped by design) | `test_recovery_intoBlockedJurisdictionWalletOfSameInvestor` |
+| Recovery | The recovered lost wallet claims income | `ClaimantNotVerified`; once registered again, `NothingToClaim` | `test_recoveredLostWallet_cannotClaim` |
+| Recovery | A registered module reenters `forcedRecovery` from the hook | Rejected by the guard | `test_forcedRecovery_isReentrancyGuarded` |
+| Dividends | One base unit of supply, one-unit deposits | Paid exactly | `test_dividends_smallestSupplyAndDeposit` |
+| Dividends | Supply above 2^128 base units, one-unit deposits | The carried remainder pays out on the third deposit | `test_deposit_residueCarriesSubUnitRemainderIntoLaterDeposits` |
+| Dividends | Currency sent to the distributor outside `deposit` | Not credited; entitlements unchanged | `test_dividends_directDonationIsNotCredited` |
+| Dividends | Currency returns false or reverts on transfer | `claim` and `deposit` revert through SafeERC20 or the currency's error and leave no record | `test_dividends_currencyReturningFalse_failsTheClaimCleanly`, `test_dividends_currencyReturningFalse_failsTheDepositCleanly` |
+| Dividends | Issuer removes the distributor with income unclaimed | Deposits refused, accrued income stays claimable | `test_distributor_afterRemoval_refusesDepositsAndPaysAccrued` |
+| Dividends | Hostile currency reenters `claim` or `deposit` | Rejected by the guard | `test_claim_isReentrancyGuarded`, `test_deposit_isReentrancyGuarded` |
+| Pause | Each role action while paused | Token movements stop; recovery, administration and the distributor do not | `test_pause_againstEachRoleAction` |
+| Transfers | Anyone calls `transferFrom(a, b, 0)` between verified holders | Settles and emits `Transfer`; refused to unverified or frozen wallets | `test_zeroAmountTransferFrom_passesModulesButNotTheGate` |
+| Transfers | Unverified or frozen spender with an allowance | Moves tokens between verified holders: a limitation, documented | `test_transferFrom_spenderIsNotChecked` |
+| Documents | Empty URI, empty hash | Refused | `test_stricterInputs` |
+| Documents | Longest name (32 bytes), 4 KiB URI, re-anchoring a name | Stored and read back; re-anchoring updates in place | `test_documents_longestNameAndLongUri`, `test_setDocument_updatesExisting` |
+| Engine | 26th module | Refused with `ModuleLimitReached` | `test_addModule_capsTheModuleCount` |
+| Engine | Hook fan-out at 25 modules | 335,359 gas for a transfer, against 100,089 with three modules (measured, not asserted) | `test_gas_transferAtModuleCap` (gas harness) |
 
 ---
 

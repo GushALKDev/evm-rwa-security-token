@@ -1,11 +1,11 @@
-# 📘 Guide 1: Fundamentals
+# Guide 1: Fundamentals
 
 **Version:** 1.0
 **Next:** [Guide 2: Mathematics & Cryptography](./02-mathematics.md)
 
 ---
 
-## 📋 Table of Contents
+## Table of Contents
 
 1. [What this project is](#1-what-this-project-is)
 2. [The asset and why it drives the design](#2-the-asset-and-why-it-drives-the-design)

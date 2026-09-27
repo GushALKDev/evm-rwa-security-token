@@ -1,4 +1,4 @@
-# 🔢 Guide 2: Mathematics & Cryptography
+# Guide 2: Mathematics & Cryptography
 
 **Version:** 1.0
 **Prerequisites:** [Guide 1: Fundamentals](./01-fundamentals.md)
@@ -6,7 +6,7 @@
 
 ---
 
-## 📋 Table of Contents
+## Table of Contents
 
 1. [Why this guide exists](#1-why-this-guide-exists)
 2. [The EIP-712 attestation digest](#2-the-eip-712-attestation-digest)
@@ -153,7 +153,7 @@ Two design points ride on the field widths:
 | `balanceOf(to) == amount` | Recipient held zero before; they just joined | `count + 1` |
 | `balanceOf(from) == 0` | Sender sent their whole balance; they just left | `count - 1` |
 
-A self-transfer (`from == to`) is discarded before either test, and the joined test also requires `amount != 0`.
+A self-transfer (`from == to`) and a zero amount are discarded before either test. `moduleCheck` also returns true for a zero amount, which adds no holder.
 
 On a transfer both can happen, and the arithmetic composes cleanly:
 
@@ -377,7 +377,7 @@ This is the one place the distributor depends on the token being a `SecurityToke
 
 `amount / totalSupply` truncates to zero for any realistic supply, so the accumulator is scaled by `2**128` and descaled on read. Two roundings remain, handled differently on purpose:
 
-- **The deposit's own truncation is carried, not lost.** The remainder is kept in `residue` in **scaled** units (`scaled % supply`) and folded into the next deposit. Carrying it in currency units instead rounds the dust *up* every deposit and compounds until claims exceed deposits: this was a real bug in this contract, found by testing across repeated deposits. The regression tests are `test_deposit_claimsNeverExceedFundsAcrossManyDeposits` and `testFuzz_solventAcrossRepeatedDeposits`.
+- **The deposit's own truncation is carried, not lost.** The remainder of `amount × 2^128 / supply` is kept in `residue` in **scaled** units (`scaled % supply`) and folded into the next deposit, so no remainder is dropped. Below a supply of 2^128 base units the remainder is worth less than one wei per deposit; above it, a one-unit deposit can move the accumulator by zero on its own, and only the carry lets later deposits pay it out (`test_deposit_residueCarriesSubUnitRemainderIntoLaterDeposits`, at a supply of 2^129 + 1). The carry never adds value, so it plays no part in solvency. An earlier version carried the remainder in currency units and rounded the dust *up* every deposit, which compounded until claims exceeded deposits; that bug is pinned by `test_deposit_claimsNeverExceedFundsAcrossManyDeposits` and `testFuzz_solventAcrossRepeatedDeposits`.
 - **Each holder's descaling truncates down**, at most one wei each. This is the direction that keeps the contract solvent: the sum of claims sits at or below what was deposited, never above, so the last claimant is never left short.
 
 `deposit` reverts on zero supply rather than accruing to nobody. A consequence worth noting: once the note is fully amortised and supply reaches zero, no further deposit is possible, but everything deposited earlier stays claimable by its holders, who by then hold no tokens at all, and are made whole by their negative corrections.

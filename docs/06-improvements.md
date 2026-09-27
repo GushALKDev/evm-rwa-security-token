@@ -1,11 +1,11 @@
-# 🚀 Guide 6: Improvements
+# Guide 6: Improvements
 
 **Version:** 1.0
 **Prerequisites:** [Guide 4: Trade-offs](./04-tradeoffs.md)
 
 ---
 
-## 📋 Table of Contents
+## Table of Contents
 
 1. [Scope of this guide](#1-scope-of-this-guide)
 2. [Restoring the ERC-3643 identity hierarchy](#2-restoring-the-erc-3643-identity-hierarchy)
@@ -105,6 +105,8 @@ Smaller items that would round out a production deployment:
 | Improvement | What it adds |
 |:---|:---|
 | **Per-investor lockup snapshot** | Snapshot the lockup period at acquisition, so a later `setLockupPeriod` does not retroactively move existing holders (see [Guide 4 §3.3](./04-tradeoffs.md#33-lockup-period-applies-to-existing-clocks)) |
+| **Holder cap keyed by investor** | Count holders by `investorId` rather than by wallet, so one investor with several wallets counts once, as a regulation that counts holders of record or beneficial owners would require |
+| **EIP-1271 claim signer** | Accept a contract (a multisig or a provider's signing service) as the claim signer by checking `isValidSignature` when the signer has code |
 | **Batch onboarding** | `registerIdentity` over an array, to amortize gas across a placement |
 | **Recovery approval trail** | An on-chain record linking a `forcedRecovery` to the off-chain legal determination |
 | **Compliance module for accreditation** | A module gating on the `accredited` flag already stored in the identity record |

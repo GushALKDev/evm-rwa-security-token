@@ -1,4 +1,4 @@
-# 🏛️ Guide 3: Architecture
+# Guide 3: Architecture
 
 **Version:** 1.0
 **Prerequisites:** [Guide 2: Mathematics & Cryptography](./02-mathematics.md)
@@ -6,7 +6,7 @@
 
 ---
 
-## 📋 Table of Contents
+## Table of Contents
 
 1. [System overview](#1-system-overview)
 2. [The identity registry](#2-the-identity-registry)
@@ -113,6 +113,7 @@ If lifecycle hooks were callable by anyone, an attacker could desynchronize a st
 Every module extends `AbstractComplianceModule`, which holds the engine binding as an **immutable** and gates hooks with `onlyCompliance`. Two guards, working together, make the module graph trustworthy:
 
 - **`addModule` rejects a module not already pointing at this engine** (`ModuleNotBound`). Otherwise the engine could register a module whose `onlyCompliance` gate rejects every hook call the engine makes, which would revert every mint, burn and transfer.
+- **At most 25 modules** (`MAX_MODULES`, the T-REX limit). Every transfer iterates the modules in the check and again in the hooks, so the cap bounds that loop; `addModule` reverts with `ModuleLimitReached` beyond it.
 - **The binding is immutable.** A module cannot be re-pointed at a second engine that would corrupt the state the first accumulated. A module is cheap to redeploy, so there is no use case for rebinding.
 
 The three rule modules are each one rule. A fourth module, `DividendDistributor`, never vetoes (its `moduleCheck` always returns true) and uses the hooks only to account income:
@@ -231,7 +232,7 @@ The bindings impose a partial order: the engine and the registry (in either orde
 
 The order is worth stating because the intuitive one is wrong. "Engine, modules, registry, token" is not satisfiable: two of the three rule modules (and `DividendDistributor`) take the token address as an `immutable`, and the token takes the registry and the engine as constructor arguments with no setter for either. The token must therefore be constructed after the registry and the engine, but before the modules that watch its balances.
 
-The last grant is the one non-obvious edge: `forcedRecovery` calls `removeIdentity` on the registry, which is `AGENT`-gated, so the **token contract itself** holds `AGENT_ROLE` on the registry. The role is held by code, not a person. It would also permit both `registerIdentity` overloads, but the token's code calls only `removeIdentity`, and only inside recovery. `Deploy.s.sol` performs this wiring and reverts with `TermsHashMismatch` unless the terms file hashes to the pinned `TERMS_HASH`, so a drifted document fails the deployment; it then checks that the registry stored that hash. Its limitations: the wiring calls are admin-gated, so the executing account must be the issuer and a real deployment needs a deploy-then-handover step; the three operator roles default to the broadcasting account when the `ISSUER`, `AGENT` and `CUSTODIAN` environment variables are unset; and `DividendDistributor` is not deployed. See [Guide 5](./05-implementation.md) for the script and the invariant suite that exercises the assembled system.
+The last grant is the one non-obvious edge: `forcedRecovery` calls `removeIdentity` on the registry, which is `AGENT`-gated, so the **token contract itself** holds `AGENT_ROLE` on the registry. The role is held by code, not a person. It would also permit both `registerIdentity` overloads, but the token's code calls only `removeIdentity`, and only inside recovery. `Deploy.s.sol` performs this wiring and reverts with `TermsHashMismatch` unless the terms file hashes to the pinned `TERMS_HASH`, so a drifted document fails the deployment; it then checks that the registry stored that hash. Its limitations: the wiring calls are admin-gated, so the executing account must be the issuer and a real deployment needs a deploy-then-handover step; the three operator roles default to the broadcasting account when the `RWA_ISSUER`, `RWA_AGENT` and `RWA_CUSTODIAN` environment variables are unset; and `DividendDistributor` is not deployed. See [Guide 5](./05-implementation.md) for the script and the invariant suite that exercises the assembled system.
 
 ---
 

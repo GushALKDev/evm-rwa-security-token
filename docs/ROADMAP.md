@@ -1,11 +1,11 @@
-# 🗺️ ROADMAP: EVM RWA Security Token
+# ROADMAP: EVM RWA Security Token
 
 **Version:** 1.0
 **Purpose:** Ordered implementation guide and progress tracker
 
 ---
 
-## 📋 How to use this document
+## How to use this document
 
 - **[ ]** = Pending
 - **[~]** = In progress
@@ -16,7 +16,7 @@ The build order is a dependency order, not a preference. Each unit is one contra
 
 ---
 
-## 📊 Progress Summary
+## Progress Summary
 
 | Phase     | Name                          | Items  | Completed | Progress |
 | :-------- | :---------------------------- | :----- | :-------- | :------- |
@@ -30,6 +30,8 @@ The build order is a dependency order, not a preference. Each unit is one contra
 | 7         | Documentation & Threat Model  | 4      | 4         | 100%     |
 | 8         | Stretch: Dividends            | 4      | 4         | 100%     |
 | **TOTAL** |                               | **35** | **35**    | **100%** |
+
+After the build, the code went through three review rounds (documentation against code, fixes with regression tests, conformance and hardening); the README's [Review notes](../README.md#review-notes) list every finding with its fix and commit.
 
 > The percentage tracks units of implementation, not lines of code. The identity and compliance layers are the architecturally substantive part of an ERC-3643 subset.
 
@@ -218,21 +220,22 @@ The build order is a dependency order, not a preference. Each unit is one contra
 
 **Two bugs found while building it**, both by tests rather than by review, and both documented in [Testing §13](./tests/13-dividend-distributor.md):
 
-1. **Compounding insolvency.** Carrying each deposit's rounding residue in currency units rounds the dust up every time and the error compounds, so by the third deposit the sum of claims exceeded the sum of deposits. Fixed by carrying the raw modulus in scaled units, which pins the shortfall at one wei per holder and always errs toward solvency.
+1. **Compounding insolvency.** Carrying each deposit's rounding residue in currency units rounds the dust up every time and the error compounds, so by the third deposit the sum of claims exceeded the sum of deposits. Fixed by carrying the raw modulus in scaled units, which defers the remainder instead of rounding it up; the per-holder floor in `accumulated` is what keeps claims at or below the funds received.
 2. **Recovery left the money behind.** After `forcedRecovery` the unclaimed income stayed claimable by the compromised wallet, verified end to end. The hook cannot distinguish a recovery from a sale on its arguments alone, so `SecurityToken` gained a `recovering()` view (a getter over the existing flag, no logic change) and the distributor now carries both the correction and the withdrawal record to the new wallet.
 
 **Note on item 8.2:** the roadmap originally said "the token's transfer hook". The correction is applied in the *module's* hook, driven by the engine's fan-out. The token itself was not given a dividend hook, which is the stronger outcome: the capability can be registered on a live system with `addModule`. Registering it late is safe (existing balances earn from the next deposit). Once removed it refuses deposits and cannot be attached again, since it would have missed the movements made while it was out; income accrued before the removal stays claimable.
 
-**Deliberately not done:** the distributor is not wired into `script/Deploy.s.sol`, since Phase 8 is a stretch and adding it would change the documented deployment. The scenario suite registers it after `_deploy` returns instead. See [Gaps](./tests/12-gaps-and-roadmap.md).
+**Deliberately not done:** the distributor is not wired into `script/Deploy.s.sol`, since Phase 8 is a stretch and adding it would change the documented deployment. The scenario, regression and edge case suites register it after `_deploy` returns, and the invariant suite attaches it at setup. See [Gaps](./tests/12-gaps-and-roadmap.md).
 
 **Reference:** [06-improvements.md](./06-improvements.md) · [Testing §13](./tests/13-dividend-distributor.md)
 
 ---
 
-## 📝 Changelog
+## Changelog
 
 | Date       | Changes                 |
 | :--------- | :---------------------- |
+| 2026-09-27 | Review rounds 1 to 3: documentation checked against the code; 17 findings fixed with regression tests (zero amounts in the holder count and the module checks, nonce on every identity write, investor id kept on removal, lockup carried across recovery, claims withheld from frozen and unverified holders, attach rules for stateful modules, module token check, 25-module cap, over-burn error, unfreeze events, one-SLOAD identity check, pinned terms hash); invariant handler with revert classification; conformance and edge case suites. 421 tests |
 | 2026-07-27 | Phase 8 complete, and with it every roadmap item: `DividendDistributor` as a compliance module (accumulator pattern, ERC-20 stablecoin settlement, pull claim with reentrancy guard), integrated without a dividend-specific hook in `SecurityToken`. The suite found two real bugs: a compounding rounding residue that would have made the contract insolvent, and unclaimed income left claimable by a wallet after it had been recovered. 45 new tests, 303 total, 100% coverage on all `src/` contracts |
 | 2026-07-27 | Phase 7 complete: architecture diagrams against the finished code (component graph, transfer gate, recovery sequence, corrected deployment order), threat model covering compliance bypass, reentrancy and recovery abuse, and guides 01-05 brought back in step with the code. Only the optional Phase 8 stretch remains |
 | 2026-07-24 | Phase 3 complete: `DocumentRegistry` (ERC-1643 subset, `EnumerableSet.Bytes32Set` name index, `setDocument` upsert, `bytes32` readable names, ISSUER-gated). 20 tests, 158 total, 100% coverage on all `src/` contracts |
@@ -243,7 +246,7 @@ The build order is a dependency order, not a preference. Each unit is one contra
 
 ---
 
-## 📚 References
+## References
 
 - [Guide 1: Fundamentals](./01-fundamentals.md)
 - [Guide 2: Mathematics & Cryptography](./02-mathematics.md)
