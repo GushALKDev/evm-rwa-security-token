@@ -320,6 +320,9 @@ contract ModularComplianceTest is Test {
         assertEq(moduleA.lastFrom(), alice);
         assertEq(moduleA.lastTo(), bob);
         assertEq(moduleA.lastAmount(), AMOUNT);
+        assertEq(moduleB.lastFrom(), alice);
+        assertEq(moduleB.lastTo(), bob);
+        assertEq(moduleB.lastAmount(), AMOUNT);
     }
 
     function test_created_fansOutToEveryModule() public {
@@ -382,9 +385,16 @@ contract ModularComplianceTest is Test {
     function test_hooks_revertBeforeBind() public {
         _addBoth();
         // No token bound: _token is zero, so even the real token address is not yet the caller.
-        vm.prank(tokenAddr);
+        vm.startPrank(tokenAddr);
         vm.expectRevert(abi.encodeWithSelector(IModularCompliance.OnlyToken.selector, tokenAddr, address(0)));
         engine.transferred(alice, bob, AMOUNT);
+        vm.expectRevert(abi.encodeWithSelector(IModularCompliance.OnlyToken.selector, tokenAddr, address(0)));
+        engine.created(alice, AMOUNT);
+        vm.expectRevert(abi.encodeWithSelector(IModularCompliance.OnlyToken.selector, tokenAddr, address(0)));
+        engine.destroyed(alice, AMOUNT);
+        vm.stopPrank();
+
+        assertEq(moduleA.transferredCount() + moduleA.createdCount() + moduleA.destroyedCount(), 0);
     }
 
     /*//////////////////////////////////////////////////////////////
@@ -405,6 +415,11 @@ contract ModularComplianceTest is Test {
         engine.transferred(from, to, amount);
         assertEq(moduleA.transferredCount(), 1);
         assertEq(moduleB.transferredCount(), 1);
+        assertEq(moduleA.lastFrom(), from);
+        assertEq(moduleA.lastTo(), to);
+        assertEq(moduleA.lastAmount(), amount);
+        assertEq(moduleB.lastFrom(), from);
+        assertEq(moduleB.lastTo(), to);
         assertEq(moduleB.lastAmount(), amount);
     }
 }

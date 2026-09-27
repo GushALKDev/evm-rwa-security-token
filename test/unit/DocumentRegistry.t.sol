@@ -164,17 +164,35 @@ contract DocumentRegistryTest is Test {
         registry.removeDocument(TERMS);
     }
 
-    /// @dev A re-anchor after removal starts a fresh record rather than resurrecting the old one.
+    /// @dev Removing a name that is not last in the index makes the set swap the last name into
+    ///      its slot and pop. The moved name must stay readable, and a re-anchor of the removed
+    ///      name starts a fresh record rather than resurrecting the old one.
     function test_removeThenSet_reindexes() public {
-        _set(TERMS, URI, HASH);
-        vm.prank(issuer);
-        registry.removeDocument(TERMS);
+        bytes32 a = bytes32("A");
+        bytes32 b = bytes32("B");
+        bytes32 c = bytes32("C");
+        _set(a, URI, HASH);
+        _set(b, URI, keccak256("b"));
+        _set(c, URI, keccak256("c"));
 
-        _set(TERMS, "ipfs://QmNew", keccak256("new"));
+        vm.prank(issuer);
+        registry.removeDocument(a);
 
         bytes32[] memory names = registry.getAllDocuments();
-        assertEq(names.length, 1);
-        assertEq(names[0], TERMS);
+        assertEq(names.length, 2);
+        assertEq(names[0], c, "last name was not swapped into the freed slot");
+        assertEq(names[1], b);
+        (, bytes32 cHash,) = registry.getDocument(c);
+        assertEq(cHash, keccak256("c"), "the swapped name lost its record");
+
+        _set(a, "ipfs://QmNew", keccak256("new"));
+
+        names = registry.getAllDocuments();
+        assertEq(names.length, 3);
+        assertEq(names[2], a);
+        (string memory uri, bytes32 aHash,) = registry.getDocument(a);
+        assertEq(uri, "ipfs://QmNew");
+        assertEq(aHash, keccak256("new"));
     }
 
     /*//////////////////////////////////////////////////////////////
@@ -220,19 +238,35 @@ contract DocumentRegistryTest is Test {
 
     /// @dev Property: the index size equals the count of distinct names anchored, never inflated by
     ///      re-anchors of the same name.
-    function testFuzz_indexCountsDistinctNames(uint8 count) public {
-        uint256 n = bound(count, 1, 30);
+    function testFuzz_indexCountsDistinctNames(uint256 seed, uint8 steps) public {
+        uint256 n = bound(steps, 1, 60);
+        bool[8] memory anchored;
+        uint256 expected;
 
-        // bytes32(i + 1) keeps the names distinct and non-zero (bytes32(0) would revert).
+        // Interleaves new anchors, re-anchors and removals over eight names. bytes32(k + 1) keeps
+        // the names distinct and non-zero (bytes32(0) would revert).
         for (uint256 i; i < n; ++i) {
-            _set(bytes32(i + 1), URI, HASH);
-        }
-        assertEq(registry.getAllDocuments().length, n);
+            uint256 r = uint256(keccak256(abi.encode(seed, i)));
+            uint256 k = r % 8;
+            bytes32 name = bytes32(k + 1);
+            if ((r >> 8) % 3 == 0 && anchored[k]) {
+                vm.prank(issuer);
+                registry.removeDocument(name);
+                anchored[k] = false;
+                --expected;
+            } else {
+                _set(name, URI, keccak256(abi.encode(r)));
+                if (!anchored[k]) {
+                    anchored[k] = true;
+                    ++expected;
+                }
+            }
 
-        // Re-anchor every name once: the index must not grow.
-        for (uint256 i; i < n; ++i) {
-            _set(bytes32(i + 1), "ipfs://QmV2", keccak256("v2"));
+            bytes32[] memory names = registry.getAllDocuments();
+            assertEq(names.length, expected, "index size drifted");
+            for (uint256 j; j < names.length; ++j) {
+                assertTrue(anchored[uint256(names[j]) - 1], "index lists a name that is not anchored");
+            }
         }
-        assertEq(registry.getAllDocuments().length, n);
     }
 }
