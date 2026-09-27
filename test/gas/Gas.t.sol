@@ -6,6 +6,7 @@ import {MessageHashUtils} from "@openzeppelin/contracts/utils/cryptography/Messa
 
 import {Deploy} from "../../script/Deploy.s.sol";
 import {DividendDistributor} from "../../src/compliance/modules/DividendDistributor.sol";
+import {CountryRestrictionModule} from "../../src/compliance/modules/CountryRestrictionModule.sol";
 import {MockCurrency} from "../helpers/MockCurrency.sol";
 
 /**
@@ -103,6 +104,22 @@ contract GasBenchmarks is Test, Deploy {
 
     function test_gas_withDistributor_transfer() public {
         _attachDistributor();
+        vm.prank(alice);
+        d.token.transfer(bob, 1e18);
+    }
+
+    /// @dev The hook fan-out at the module cap: the three deployed rules plus 22 more country
+    ///      rules, 25 modules in all, each consulted by canTransfer and called by the hook.
+    function test_gas_transferAtModuleCap() public {
+        uint256 cap = d.compliance.MAX_MODULES();
+        while (d.compliance.modules().length < cap) {
+            d.compliance
+                .addModule(
+                    address(
+                        new CountryRestrictionModule(address(d.compliance), address(d.identityRegistry), issuer, agent)
+                    )
+                );
+        }
         vm.prank(alice);
         d.token.transfer(bob, 1e18);
     }
