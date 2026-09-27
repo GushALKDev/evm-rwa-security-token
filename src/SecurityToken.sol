@@ -204,8 +204,16 @@ contract SecurityToken is ISecurityToken, ERC20, AccessControl, Pausable, Reentr
         // Retire the lost wallet: zero its frozen state and evict it from the registry so it can
         // never hold the token again. Done before the move so the recovery transfer sees a clean
         // sender, and so the partial-freeze gate cannot block the custodian's own move.
-        delete _frozenTokens[lostWallet];
-        delete _frozen[lostWallet];
+        // The clearing is announced like any other unfreeze, so a freeze state rebuilt from events
+        // does not keep the retired wallet frozen.
+        if (frozenAmount != 0) {
+            delete _frozenTokens[lostWallet];
+            emit TokensUnfrozen(lostWallet, frozenAmount);
+        }
+        if (wasFullyFrozen) {
+            delete _frozen[lostWallet];
+            emit AddressFrozen(lostWallet, false);
+        }
         // The agent may already have removed the lost wallet (a suspension before the loss was
         // reported). Its investor id survives removal, which is what let the check above pass, and
         // removing it a second time would revert.

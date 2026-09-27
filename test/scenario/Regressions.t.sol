@@ -511,4 +511,66 @@ contract RegressionsTest is Test, Deploy {
         );
         d.token.burn(alice, AMOUNT + 1);
     }
+
+    /*//////////////////////////////////////////////////////////////
+          RECOVERY LEAVES A COMPLETE FREEZE TRAIL IN THE EVENTS
+    //////////////////////////////////////////////////////////////*/
+
+    /// @dev Recovery clears the lost wallet's freeze state and re-applies it on the new wallet. It
+    ///      used to emit only the second half, so an indexer rebuilding freeze state from events
+    ///      kept the lost wallet frozen forever. The token's own events must now read, in order:
+    ///      unfreeze the lost wallet (partial, then full), move the balance, freeze the new wallet
+    ///      (partial, then full), and report the recovery.
+    function test_forcedRecovery_emitsTheFullFreezeEventSequence() public {
+        bytes32 id = keccak256("investor-alice");
+        address aliceNew = makeAddr("aliceNew");
+        _onboardAs(alice, id);
+        _onboardAs(aliceNew, id);
+        d.token.mint(alice, AMOUNT);
+        vm.startPrank(agent);
+        d.token.freezePartialTokens(alice, 100e18);
+        d.token.setAddressFrozen(alice, true);
+        vm.stopPrank();
+
+        vm.recordLogs();
+        vm.prank(custodian);
+        d.token.forcedRecovery(alice, aliceNew);
+        Vm.Log[] memory logs = vm.getRecordedLogs();
+
+        bytes32[6] memory expected = [
+            keccak256("TokensUnfrozen(address,uint256)"),
+            keccak256("AddressFrozen(address,bool)"),
+            keccak256("Transfer(address,address,uint256)"),
+            keccak256("TokensFrozen(address,uint256)"),
+            keccak256("AddressFrozen(address,bool)"),
+            keccak256("RecoverySuccess(address,address,uint256,uint256,bool)")
+        ];
+        address[6] memory subject = [alice, alice, alice, aliceNew, aliceNew, alice];
+
+        uint256 seen;
+        for (uint256 i; i < logs.length; ++i) {
+            if (logs[i].emitter != address(d.token)) continue;
+            assertLt(seen, 6, "unexpected extra token event");
+            assertEq(logs[i].topics[0], expected[seen], "token event out of order");
+            assertEq(address(uint160(uint256(logs[i].topics[1]))), subject[seen], "event names the wrong wallet");
+            ++seen;
+        }
+        assertEq(seen, 6, "token events missing");
+
+        // The data carried by the two unfreeze events.
+        (uint256 unfrozen) = abi.decode(_tokenLog(logs, 0).data, (uint256));
+        assertEq(unfrozen, 100e18);
+        (bool fullFlag) = abi.decode(_tokenLog(logs, 1).data, (bool));
+        assertFalse(fullFlag);
+    }
+
+    function _tokenLog(Vm.Log[] memory logs, uint256 index) internal view returns (Vm.Log memory) {
+        uint256 seen;
+        for (uint256 i; i < logs.length; ++i) {
+            if (logs[i].emitter != address(d.token)) continue;
+            if (seen == index) return logs[i];
+            ++seen;
+        }
+        revert("no such token log");
+    }
 }
