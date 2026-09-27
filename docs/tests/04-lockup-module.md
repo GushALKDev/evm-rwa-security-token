@@ -25,7 +25,7 @@ The unit tests drive the hooks from a plain address standing in for the engine, 
 | :--- | :------ |
 | [`test_attachment_statefulAndSupplyGated`](../../test/unit/LockupModule.t.sol#L62) | The module is not plug and play and reads the token it was built for; `canComplianceBind` is true for its engine and false for another, false while the token has supply, and false again after a bind and an unbind |
 
-A clock can only be right if the module saw the acquisition that started it. Attaching the lockup to a token that already has holders would leave them with no clock, and so unrestricted; attaching it a second time would miss everything that moved while it was out. Both are refused at `addModule` (review finding 6). The deployed-wiring counterpart is [`test_addModule_rejectsLockupOnceSupplyExists`](../../test/scenario/Regressions.t.sol#L387).
+A clock can only be right if the module saw the acquisition that started it. Attaching the lockup to a token that already has holders would leave them with no clock, and so unrestricted; attaching it a second time would miss everything that moved while it was out. Both are refused at `addModule` (review finding 6). The deployed-wiring counterpart is [`test_addModule_rejectsLockupOnceSupplyExists`](../../test/scenario/Regressions.t.sol#L392).
 
 ---
 
@@ -55,7 +55,7 @@ The clock is a property of the **acquisition**, not of the wallet or of the toke
 
 Three point tests around a single boundary look redundant until you consider what each catches. `blocksOneSecondBeforeExpiry` and `allowsExactlyAtExpiry` are adjacent instants: an off-by-one in either direction flips exactly one of them. The fuzz test below covers the space; these two pin the edge, which fuzzing reaches only by luck.
 
-The zero-amount case is review finding 12: the hooks already ignored zero amounts after finding 1, but the check still refused one from a sender in lockup although nothing was disposed of. Every module's check now lets a zero amount through; the token still applies its own identity and freeze checks to it, see [`test_zeroAmountTransferFrom_passesModulesButNotTheGate`](../../test/scenario/Regressions.t.sol#L641).
+The zero-amount case is review finding 12: the hooks already ignored zero amounts after finding 1, but the check still refused one from a sender in lockup although nothing was disposed of. Every module's check now lets a zero amount through; the token still applies its own identity and freeze checks to it, see [`test_zeroAmountTransferFrom_passesModulesButNotTheGate`](../../test/scenario/Regressions.t.sol#L648).
 
 ---
 

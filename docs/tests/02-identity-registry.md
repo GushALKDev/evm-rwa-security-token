@@ -108,7 +108,7 @@ An `investorId` stands in for ERC-3643's ONCHAINID. Two wallets sharing one belo
 | [`test_removeIdentity_revertsWhenNotFound`](../../test/unit/IdentityRegistry.t.sol#L499) | Removing a wallet that was never registered reverts `IdentityNotFound` rather than succeeding silently |
 | [`test_removeIdentity_revertsForNonAgent`](../../test/unit/IdentityRegistry.t.sol#L506) | Removal is agent-gated, asserted with the exact `AccessControlUnauthorizedAccount` error |
 
-Removal does not touch balances: the registry has no knowledge of the token, and the dependency runs the other way. The consequence for a holder who loses their identity is enforced in the token's gate and documented under [the transfer gate](./07-security-token.md#the-transfer-gate-42-43). Keeping the `investorId` through removal is what lets a custodian recover a wallet the agent has already suspended, pinned end to end in [`test_forcedRecovery_succeedsAfterAgentRemovedLostWallet`](../../test/scenario/Regressions.t.sol#L213).
+Removal does not touch balances: the registry has no knowledge of the token, and the dependency runs the other way. The consequence for a holder who loses their identity is enforced in the token's gate and documented under [the transfer gate](./07-security-token.md#the-transfer-gate-42-43). Keeping the `investorId` through removal is what lets a custodian recover a wallet the agent has already suspended, pinned end to end in [`test_forcedRecovery_succeedsAfterAgentRemovedLostWallet`](../../test/scenario/Regressions.t.sol#L218).
 
 ---
 

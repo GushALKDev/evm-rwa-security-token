@@ -25,7 +25,7 @@ The suite runs against a real [`IdentityRegistry`](../../src/identity/IdentityRe
 | :--- | :------ |
 | [`test_attachment_plugAndPlay`](../../test/unit/CountryRestrictionModule.t.sol#L47) | The module is plug and play and reads no token (`token()` is zero); after a bind and an unbind, `canComplianceBind` is still true for its engine |
 
-A stateless rule has nothing to miss while it is detached, so unlike the lockup and the holder cap it may be removed and added back. The same property against the deployed wiring is [`test_addModule_statelessModuleCanBeReattached`](../../test/scenario/Regressions.t.sol#L454).
+A stateless rule has nothing to miss while it is detached, so unlike the lockup and the holder cap it may be removed and added back. The same property against the deployed wiring is [`test_addModule_statelessModuleCanBeReattached`](../../test/scenario/Regressions.t.sol#L461).
 
 ---
 
@@ -46,7 +46,7 @@ A stateless rule has nothing to miss while it is detached, so unlike the lockup 
 
 **The country-zero case** is worth its own note. An address with no registry record reads back `0`, which is not a real ISO code. The module treats it as unrestricted rather than special-casing it, because rejecting it here would be the wrong rule answering the question: an unregistered recipient is stopped by the token's identity check, not by a jurisdiction rule. The test asserts both halves: unrestricted by default, and blockable if an operator wants to.
 
-The zero-amount case is review finding 12: every module's check lets a zero amount through, and the token's own identity and freeze checks still apply to it. See [`test_zeroAmountTransfer_toBlockedCountry_succeeds`](../../test/scenario/Regressions.t.sol#L620).
+The zero-amount case is review finding 12: every module's check lets a zero amount through, and the token's own identity and freeze checks still apply to it. See [`test_zeroAmountTransfer_toBlockedCountry_succeeds`](../../test/scenario/Regressions.t.sol#L627).
 
 ---
 

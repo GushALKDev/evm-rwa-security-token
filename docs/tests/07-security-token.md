@@ -44,7 +44,7 @@ The suite wires a real `IdentityRegistry` and `ModularCompliance` with one [`Moc
 
 The last pair encodes a deliberate ordering of authority: **the issuer outranks an operational freeze.** A freeze is a compliance hold placed by an agent; a burn is the issuer retiring a position, which in practice follows a redemption, a court order, or a corporate action. Reconciling the frozen figure downward also preserves `frozen <= balance`, which would otherwise break the moment a burn cut the balance below the frozen amount.
 
-A burn larger than the whole balance of a wallet with frozen tokens used to hit that arithmetic first and panic (review finding 8). The regression, [`test_burn_aboveBalance_revertsWithInsufficientBalance`](../../test/scenario/Regressions.t.sol#L504), asserts the ERC-20 `ERC20InsufficientBalance` error instead.
+A burn larger than the whole balance of a wallet with frozen tokens used to hit that arithmetic first and panic (review finding 8). The regression, [`test_burn_aboveBalance_revertsWithInsufficientBalance`](../../test/scenario/Regressions.t.sol#L511), asserts the ERC-20 `ERC20InsufficientBalance` error instead.
 
 ---
 
@@ -156,7 +156,7 @@ The investor check is the difference between recovery and confiscation. Without 
 
 The reentrancy test targets the one window where the freeze has been cleared on the lost wallet and not yet re-applied on the new one. The module is given the custodian role so that only the guard can stop it.
 
-A wallet the agent had already suspended used to be unrecoverable (review finding 3), because removal deleted the `investorId` that the check above compares. The regression is [`test_forcedRecovery_succeedsAfterAgentRemovedLostWallet`](../../test/scenario/Regressions.t.sol#L213).
+A wallet the agent had already suspended used to be unrecoverable (review finding 3), because removal deleted the `investorId` that the check above compares. The regression is [`test_forcedRecovery_succeedsAfterAgentRemovedLostWallet`](../../test/scenario/Regressions.t.sol#L218).
 
 ### The freeze travels
 
@@ -169,7 +169,7 @@ A wallet the agent had already suspended used to be unrecoverable (review findin
 
 Recovery relocates a position; it does not launder a hold. The asymmetry in the last two is deliberate: a partial freeze is a property of a *lot*, so it moves with the tokens it applies to, while a full freeze is a property of the *investor*, so it applies to everything they hold at the destination. The identity check requires that the destination belongs to the same investor, which is what makes the second behaviour intended rather than collateral damage.
 
-Clearing the lost wallet's freeze used to leave no event (review finding 9). The event sequence is asserted in [`test_forcedRecovery_emitsTheFullFreezeEventSequence`](../../test/scenario/Regressions.t.sol#L525).
+Clearing the lost wallet's freeze used to leave no event (review finding 9). The event sequence is asserted in [`test_forcedRecovery_emitsTheFullFreezeEventSequence`](../../test/scenario/Regressions.t.sol#L532).
 
 ### The gate is bypassed
 

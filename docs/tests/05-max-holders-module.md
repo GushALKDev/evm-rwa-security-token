@@ -25,7 +25,7 @@ The unit tests use a cap of 3 and drive the hooks from a plain address standing 
 | :--- | :------ |
 | [`test_attachment_statefulAndSupplyGated`](../../test/unit/MaxHoldersModule.t.sol#L61) | The module is not plug and play and reads the token it was built for; `canComplianceBind` is true for its engine and false for another, false while the token has supply, and false again after a bind and an unbind |
 
-A count attached to a token that already has holders would start at zero and make the first exit underflow; attached twice, it would miss the movements made while it was out. Both are refused at `addModule` (review finding 6). The deployed-wiring counterpart is [`test_addModule_rejectsMaxHoldersOnceSupplyExists`](../../test/scenario/Regressions.t.sol#L376).
+A count attached to a token that already has holders would start at zero and make the first exit underflow; attached twice, it would miss the movements made while it was out. Both are refused at `addModule` (review finding 6). The deployed-wiring counterpart is [`test_addModule_rejectsMaxHoldersOnceSupplyExists`](../../test/scenario/Regressions.t.sol#L381).
 
 ---
 
