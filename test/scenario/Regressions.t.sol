@@ -20,9 +20,14 @@ import {ModularCompliance} from "../../src/compliance/ModularCompliance.sol";
 
 /**
  * @title RegressionsTest
- * @notice One test per bug found in the review rounds, run against the system `Deploy` produces.
- * @dev Each test asserts the correct behaviour and failed against the code before its fix. The
- *      README "Review notes" section maps every test here to its finding and its fix commit.
+ * @notice Regression tests for the review's bugs that concern the deployed wiring, run against the
+ *         system `Deploy` produces.
+ * @dev Every test asserts the correct behaviour. All but three failed against the code before
+ *      their fix. The other three pin paths a fix deliberately leaves open, and passed before the
+ *      fix as well: `test_claim_allowedUnderPartialFreeze` (bug 5),
+ *      `test_distributor_lateAttachSplitsLaterDeposits` and
+ *      `test_addModule_statelessModuleCanBeReattached` (both bug 6). The "Bugs in the reviewed code"
+ *      block of the README review notes gives each bug's cause, fix and commit.
  */
 contract RegressionsTest is Test, Deploy {
     Deployment internal d;
@@ -353,7 +358,7 @@ contract RegressionsTest is Test, Deploy {
     }
 
     /// @dev A partial freeze immobilises a lot of tokens, not the holder, so it does not withhold
-    ///      income.
+    ///      income. Pins a path the bug 5 fix leaves open; it passed before the fix as well.
     function test_claim_allowedUnderPartialFreeze() public {
         (DividendDistributor dist, MockCurrency currency) = _attachDistributor();
         _onboard(alice);
@@ -416,7 +421,8 @@ contract RegressionsTest is Test, Deploy {
     }
 
     /// @dev A single late attach of the distributor is safe: balances that predate it simply earn
-    ///      from the first deposit it sees, split pro rata.
+    ///      from the first deposit it sees, split pro rata. Pins a path the bug 6 fix leaves open;
+    ///      it passed before the fix as well.
     function test_distributor_lateAttachSplitsLaterDeposits() public {
         _onboard(alice);
         _onboard(bob);
@@ -451,6 +457,7 @@ contract RegressionsTest is Test, Deploy {
     }
 
     /// @dev A stateless rule holds nothing that can go stale, so it can be removed and added back.
+    ///      Pins a path the bug 6 fix leaves open; it passed before the fix as well.
     function test_addModule_statelessModuleCanBeReattached() public {
         _onboard(alice);
         d.token.mint(alice, AMOUNT);

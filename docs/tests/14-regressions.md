@@ -5,7 +5,7 @@
 
 ---
 
-> One test per bug found in the review rounds, run against the system [`Deploy`](../../script/Deploy.s.sol) produces. Each of these bugs was reproduced first, got a regression test that failed against the unfixed code, and was then fixed. The sections below follow the numbering and the wording of the "Bugs in the reviewed code" block of the README's review notes, so a bug can be traced from the README to its tests and back. Two tests in the section for bug 6 are the exception: they pin the paths the fix leaves open and passed before it too.
+> One test per bug found in the review rounds, run against the system [`Deploy`](../../script/Deploy.s.sol) produces. Each of these bugs was reproduced first, got a regression test that failed against the unfixed code, and was then fixed. The sections below follow the numbering and the wording of the "Bugs in the reviewed code" block of the README's review notes, so a bug can be traced from the README to its tests and back. Three tests are the exception: they pin paths a fix leaves open and passed before it too. They are `test_claim_allowedUnderPartialFreeze` in the section for bug 5, and `test_distributor_lateAttachSplitsLaterDeposits` and `test_addModule_statelessModuleCanBeReattached` in the section for bug 6.
 >
 > The other findings are about one contract or the deployment script, so their tests live in the unit suites. They are listed in [Findings tested in the unit suites](#findings-tested-in-the-unit-suites) at the end of this page.
 
@@ -68,7 +68,7 @@ Recovering a position into an empty wallet locked the investor again for the ful
 | [`test_claim_blockedWhileFullyFrozen_releasedAfterUnfreeze`](../../test/scenario/Regressions.t.sol#L300) | With one deposit before a full freeze and one during it, the claim reverts `ClaimantFrozen`; after unfreezing, what is owed is at least both deposits less one wei, and the claim pays exactly that |
 | [`test_claim_blockedWhileUnverified_releasedAfterReverification`](../../test/scenario/Regressions.t.sol#L323) | After `removeIdentity` the claim reverts `ClaimantNotVerified`; after re-registration it pays the deposit less one wei |
 | [`test_claim_blockedAfterKycExpiry`](../../test/scenario/Regressions.t.sol#L342) | Once a 30-day attestation expires, the claim reverts `ClaimantNotVerified` |
-| [`test_claim_allowedUnderPartialFreeze`](../../test/scenario/Regressions.t.sol#L357) | With the whole balance under a partial freeze (but no full freeze), the claim pays the deposit less one wei: a partial freeze holds a lot of tokens, not the holder |
+| [`test_claim_allowedUnderPartialFreeze`](../../test/scenario/Regressions.t.sol#L357) | With the whole balance under a partial freeze (but no full freeze), the claim pays the deposit less one wei: a partial freeze holds a lot of tokens, not the holder. It pins a path the fix leaves open and passed before the fix as well |
 
 The distributor is registered with `addModule` after `_deploy`, so the freeze and verification it reads are the real token's and registry's. The stateful form is [`invariant_blockedHoldersAreNeverPaid`](../../test/invariant/Invariants.t.sol#L259).
 
@@ -88,7 +88,7 @@ A holder cap added to a token with holders started at zero and made the first ex
 | [`test_distributor_lateAttachSplitsLaterDeposits`](../../test/scenario/Regressions.t.sol#L420) | A distributor attached once to a token that already has holders at 1:3 splits its first deposit 200/600, each within one wei below |
 | [`test_addModule_statelessModuleCanBeReattached`](../../test/scenario/Regressions.t.sol#L454) | The country module, removed with supply present, is added back and registered |
 
-The last two are not in the README's list for this finding; they pin the two cases the fix deliberately still allows, so that it cannot be tightened into refusing them. The follow-up commit of the finding (the attachment events name the bound engine) is finding 17, tested in the unit suite, see [below](#findings-tested-in-the-unit-suites).
+The last two are not in the README's list for this finding; they pin the two cases the fix deliberately still allows, so that it cannot be tightened into refusing them. The follow-up commit of the finding (the attachment events name the bound engine) is the entry under "Introduced and fixed during the review", tested in the unit suite, see [below](#findings-tested-in-the-unit-suites).
 
 ---
 
