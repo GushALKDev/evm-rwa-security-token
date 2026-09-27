@@ -1,11 +1,11 @@
 # Regressions (Review)
 
 **Suites:** [`RegressionsTest`](../../test/scenario/Regressions.t.sol) (29 scenario)
-**Covers:** the [README review notes](../../README.md#review-notes), findings 1 to 9 and 12
+**Covers:** the [README review notes](../../README.md#bugs-in-the-reviewed-code), bugs 1 to 9 and 12
 
 ---
 
-> One test per bug found in the review rounds, run against the system [`Deploy`](../../script/Deploy.s.sol) produces. Each finding was reproduced first, got a regression test that failed against the unfixed code, and was then fixed. The sections below follow the numbering and the wording of the README's review notes, so a finding can be traced from the README to its tests and back.
+> One test per bug found in the review rounds, run against the system [`Deploy`](../../script/Deploy.s.sol) produces. Each of these bugs was reproduced first, got a regression test that failed against the unfixed code, and was then fixed. The sections below follow the numbering and the wording of the "Bugs in the reviewed code" block of the README's review notes, so a bug can be traced from the README to its tests and back. Two tests in the section for bug 6 are the exception: they pin the paths the fix leaves open and passed before it too.
 >
 > The other findings are about one contract or the deployment script, so their tests live in the unit suites. They are listed in [Findings tested in the unit suites](#findings-tested-in-the-unit-suites) at the end of this page.
 
@@ -142,16 +142,16 @@ The last test is the boundary: the modules step aside for a zero amount, the tok
 
 ## Findings tested in the unit suites
 
-These findings concern one contract or the deployment script, so their regression tests sit next to the rest of that contract's tests. The finding names are the README's.
+These entries concern one contract or the deployment script, so their tests sit next to the rest of that contract's tests. The names and numbers are the README's, in its three blocks: bugs in the reviewed code, the defect introduced and fixed during the review, and hardening and documentation. Only the bugs have a regression test that failed against the unfixed code.
 
-| Finding | Regression test | Documented in |
-| :------ | :-------------- | :------------ |
-| 10. `isVerified` read two slots | [`test_isVerified_readsOneStorageSlot`](../../test/unit/IdentityRegistry.t.sol#L423) | [Identity Registry, expiry](./02-identity-registry.md#expiry) |
-| 11. An edited terms document was anchored instead of rejected | [`test_deploy_revertsWhenTermsDrift`](../../test/unit/Deploy.t.sol#L283) | [Deployment, the document anchor](./09-deploy.md#the-document-anchor-52) |
-| 13. The dividend remainder carry was untested, and its role overstated | [`test_deposit_residueCarriesSubUnitRemainderIntoLaterDeposits`](../../test/unit/DividendDistributor.t.sol#L318) | [Dividend Distributor, rounding and solvency](./13-dividend-distributor.md#rounding-and-solvency) |
-| 14. The terms document described an EU allowlist | [`test_anchor_termsFileMatchesPinnedHash`](../../test/unit/Deploy.t.sol#L275), [`test_deploy_revertsWhenTermsDrift`](../../test/unit/Deploy.t.sol#L283) | [Deployment, the document anchor](./09-deploy.md#the-document-anchor-52) |
-| 15. The module fan-out had no bound | [`test_addModule_capsTheModuleCount`](../../test/unit/ModularCompliance.t.sol#L195) | [Modular Compliance, module admin](./03-modular-compliance.md#module-admin-25) |
-| 16. `Deploy.run()` gave the roles to the wrong account when called from a contract | [`test_run_defaultsEveryRoleToTheBroadcaster`](../../test/unit/Deploy.t.sol#L211), [`test_run_readsOperatorsFromTheEnvironment`](../../test/unit/Deploy.t.sol#L229) | [Deployment, `run()` end to end](./09-deploy.md#run-end-to-end) |
-| 17. Module attachment events named a caller-supplied address | [`test_bindCompliance_eventNamesTheBoundEngine`](../../test/unit/ModularCompliance.t.sol#L171) | [Modular Compliance, attachment](./03-modular-compliance.md#attachment-the-plug-and-play-shape) |
+| Entry | Tested by | Documented in |
+| :---- | :-------- | :------------ |
+| Bug 10. `isVerified` read two slots | [`test_isVerified_readsOneStorageSlot`](../../test/unit/IdentityRegistry.t.sol#L423) | [Identity Registry, expiry](./02-identity-registry.md#expiry) |
+| Bug 11. An edited terms document was anchored instead of rejected | [`test_deploy_revertsWhenTermsDrift`](../../test/unit/Deploy.t.sol#L283) | [Deployment, the document anchor](./09-deploy.md#the-document-anchor-52) |
+| Hardening 1. The dividend remainder carry was untested, and its role overstated | [`test_deposit_residueCarriesSubUnitRemainderIntoLaterDeposits`](../../test/unit/DividendDistributor.t.sol#L318) | [Dividend Distributor, rounding and solvency](./13-dividend-distributor.md#rounding-and-solvency) |
+| Hardening 2. The terms document described an EU allowlist | [`test_anchor_termsFileMatchesPinnedHash`](../../test/unit/Deploy.t.sol#L275), [`test_deploy_revertsWhenTermsDrift`](../../test/unit/Deploy.t.sol#L283) | [Deployment, the document anchor](./09-deploy.md#the-document-anchor-52) |
+| Hardening 3. The module fan-out had no bound | [`test_addModule_capsTheModuleCount`](../../test/unit/ModularCompliance.t.sol#L195) | [Modular Compliance, module admin](./03-modular-compliance.md#module-admin-25) |
+| Bug 13. `Deploy.run()` gave the roles to the wrong account when called from a contract | [`test_run_defaultsEveryRoleToTheBroadcaster`](../../test/unit/Deploy.t.sol#L211), [`test_run_readsOperatorsFromTheEnvironment`](../../test/unit/Deploy.t.sol#L229) | [Deployment, `run()` end to end](./09-deploy.md#run-end-to-end) |
+| Introduced 1. Module attachment events named a caller-supplied address | [`test_bindCompliance_eventNamesTheBoundEngine`](../../test/unit/ModularCompliance.t.sol#L171) | [Modular Compliance, attachment](./03-modular-compliance.md#attachment-the-plug-and-play-shape) |
 
 The review's test-suite findings (changes to the tests themselves rather than to the contracts) are summarised in the [strategy](./01-strategy.md#5-what-the-review-changed-in-the-tests).

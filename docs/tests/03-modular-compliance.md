@@ -29,7 +29,7 @@ Adding and removing rules is the ISSUER's power, gated by `DEFAULT_ADMIN_ROLE`. 
 | [`test_addModule_revertsOnZeroAddress`](../../test/unit/ModularCompliance.t.sol#L88) | A zero module address reverts `ZeroAddress` |
 | [`test_addModule_revertsOnDuplicate`](../../test/unit/ModularCompliance.t.sol#L94) | Adding the same module twice reverts `ModuleAlreadyAdded`, so a rule cannot be applied twice |
 | [`test_addModule_revertsForModuleBoundToDifferentEngine`](../../test/unit/ModularCompliance.t.sol#L102) | **Module integrity.** A module whose immutable binding points at another engine reverts `ModuleNotBound` |
-| [`test_addModule_capsTheModuleCount`](../../test/unit/ModularCompliance.t.sol#L195) | `MAX_MODULES` is 25; twenty-five modules register, the twenty-sixth reverts `ModuleLimitReached(25)`, and after one removal it registers. Regression test for review finding 15 |
+| [`test_addModule_capsTheModuleCount`](../../test/unit/ModularCompliance.t.sol#L195) | `MAX_MODULES` is 25; twenty-five modules register, the twenty-sixth reverts `ModuleLimitReached(25)`, and after one removal it registers. Pins hardening entry 3 of the review notes (the module cap); removing the cap makes it fail |
 | [`test_removeModule_deregisters`](../../test/unit/ModularCompliance.t.sol#L113) | The module leaves the set and `ModuleRemoved` fires, while the other module stays registered |
 | [`test_removeModule_revertsForNonAdmin`](../../test/unit/ModularCompliance.t.sol#L214) | Removal is admin-gated: a rule cannot be disabled by anyone else |
 | [`test_removeModule_revertsWhenNotRegistered`](../../test/unit/ModularCompliance.t.sol#L224) | Removing an unregistered module reverts `ModuleNotFound` rather than succeeding as a no-op |
@@ -50,7 +50,7 @@ Review finding 6 showed that `addModule` and `removeModule` reconciled nothing w
 | [`test_addModule_plugAndPlayModuleCanReturn`](../../test/unit/ModularCompliance.t.sol#L143) | A plug-and-play module added, removed and added again is registered |
 | [`test_addModule_revertsWhenStatefulModuleReturns`](../../test/unit/ModularCompliance.t.sol#L153) | A stateful module added and removed reverts `ModuleCannotBind` on its second attach: it missed every movement made while it was out |
 | [`test_canComplianceBind_falseForAnotherEngine`](../../test/unit/ModularCompliance.t.sol#L164) | A module answers `canComplianceBind` true only for its own engine, and `isComplianceBound` is false for any other address |
-| [`test_bindCompliance_eventNamesTheBoundEngine`](../../test/unit/ModularCompliance.t.sol#L171) | Called by the engine with a different address as argument, `bindCompliance` and `unbindCompliance` emit events naming the bound engine, not the argument. Regression test for review finding 17 |
+| [`test_bindCompliance_eventNamesTheBoundEngine`](../../test/unit/ModularCompliance.t.sol#L171) | Called by the engine with a different address as argument, `bindCompliance` and `unbindCompliance` emit events naming the bound engine, not the argument. Written with the fix for the defect listed under "Introduced and fixed during the review" |
 | [`test_bindAndUnbindCompliance_revertForNonEngine`](../../test/unit/ModularCompliance.t.sol#L184) | A stranger calling `bindCompliance` or `unbindCompliance` reverts `OnlyCompliance(stranger, engine)` |
 
 ---

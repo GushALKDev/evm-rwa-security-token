@@ -420,11 +420,11 @@ What the design accepts rather than defends, in one place. Each item is either t
 
 ## Review notes
 
-The code was reviewed in three rounds after the build. Round 1 checked the documentation against the code and measured what the README claimed; round 2 fixed the bugs it found; round 3 covered standards conformance, edge cases and griefing. Every bug below was reproduced first and got a regression test that failed against the unfixed code; most of those tests run against the deployed wiring in [`test/scenario/Regressions.t.sol`](test/scenario/Regressions.t.sol). Each fix was also checked by reintroducing the bug and confirming that at least one test fails.
+The code was reviewed in three rounds after the build. Round 1 checked the documentation against the code and measured what the README claimed; round 2 fixed the bugs it found; round 3 covered standards conformance, edge cases and griefing. The entries below are grouped by what each one can show: bugs in the reviewed code, one defect introduced and fixed during the review, and hardening and documentation changes.
 
-### Bugs
+### Bugs in the reviewed code
 
-Findings 1 to 11 were found in round 1 and fixed in round 2.
+Each of these 13 bugs was reproduced first and has a regression test that failed against the unfixed code; most of those tests run against the deployed wiring in [`test/scenario/Regressions.t.sol`](test/scenario/Regressions.t.sol). Bugs 1 to 11 were found in round 1 and fixed in round 2; bug 12 was found and fixed in round 3; bug 13 was found and fixed in round 2 and finished in round 3. For bugs 1 to 12, reintroducing the bug into the fixed code makes at least one test fail; bug 13 is in the deployment script and was not checked that way.
 
 **1. Zero amounts deflated the holder count** (`22e214f`)
 - Wrong: a zero-amount transfer from a verified wallet holding nothing lowered `MaxHoldersModule.holderCount`. `transferFrom(emptyWallet, x, 0)` needs no allowance, so any address could drain the count, admit holders past the cap, and then make legitimate exits revert on underflow. `burn(nonHolder, 0)` did the same.
@@ -459,7 +459,7 @@ Findings 1 to 11 were found in round 1 and fixed in round 2.
 **6. Stateful modules could be attached where they could not keep up** (`f9ab7b1`, `a957a53`)
 - Wrong: a holder cap added to a token with holders started at zero and made the first exit underflow; a late lockup had no clock for existing holders; a distributor removed and added back overpaid holders who bought while it was out.
 - Root cause: `addModule` and `removeModule` reconciled nothing with existing balances.
-- Fix: the T-REX `isPlugAndPlay` / `canComplianceBind` shape. The holder cap and the lockup refuse a token with supply, every stateful module refuses a second attach, and a detached distributor refuses deposits. The follow-up commit makes the attachment events name the bound engine rather than a caller-supplied address.
+- Fix: the T-REX `isPlugAndPlay` / `canComplianceBind` shape. The holder cap and the lockup refuse a token with supply, every stateful module refuses a second attach, and a detached distributor refuses deposits. The follow-up commit fixes a defect this fix introduced (see [Introduced and fixed during the review](#introduced-and-fixed-during-the-review)).
 - Tests: `test_addModule_rejectsMaxHoldersOnceSupplyExists`, `test_addModule_rejectsLockupOnceSupplyExists`, `test_addModule_rejectsReattachingARemovedStatefulModule`, `test_addModule_rejectsReattachingARemovedDistributor`, `test_distributor_afterRemoval_refusesDepositsAndPaysAccrued`.
 
 **7. A module could read a different token than the engine's** (`3bdb0c8`)
@@ -495,30 +495,38 @@ Findings 1 to 11 were found in round 1 and fixed in round 2.
 - Fix: every module's `moduleCheck` returns true for a zero amount; the token-level identity, freeze and pause checks still apply.
 - Tests: `test_zeroAmountTransfer_fromSenderInLockup_succeeds`, `test_zeroAmountTransfer_toNonHolderAtCap_succeedsWithoutCounting`, `test_zeroAmountTransfer_toBlockedCountry_succeeds`, `test_zeroAmountTransferFrom_passesModulesButNotTheGate`.
 
-**13. The dividend remainder carry was untested, and its role overstated** (round 3, `ac714ff`)
-- Wrong: zeroing `_residue` failed no test, because below a supply of 2^128 base units the carried remainder is worth less than one wei per deposit; the comments credited solvency to the carry.
-- Fix: a test at a supply of 2^129 + 1, where a one-unit deposit moves the accumulator by zero on its own and only the carry lets three deposits pay out. The comments now say the carry defers the sub-unit remainder of each deposit and that the per-holder floor keeps the distributor solvent.
-- Test: `test_deposit_residueCarriesSubUnitRemainderIntoLaterDeposits`.
-
-**14. The terms document described an EU allowlist** (round 1, fixed in round 3, `f0c0f74`)
-- Wrong: the anchored terms said "EU jurisdictions"; the code enforces a blocklist of restricted countries and has no EU rule.
-- Fix: the terms describe the blocklist; both hash pins moved to the new content.
-- Tests: `test_anchor_termsFileMatchesPinnedHash`, `test_deploy_revertsWhenTermsDrift`.
-
-**15. The module fan-out had no bound** (round 3, `5fe0cdd`)
-- Wrong: every transfer iterates all modules twice, and nothing capped their number.
-- Fix: `MAX_MODULES = 25`, the T-REX limit; `addModule` reverts with `ModuleLimitReached` beyond it.
-- Test: `test_addModule_capsTheModuleCount`.
-
-**16. `Deploy.run()` gave the roles to the wrong account when called from a contract** (round 2, `9fd4b4f`; round 3, `8c101b5`)
+**13. `Deploy.run()` gave the roles to the wrong account when called from a contract** (round 2, `9fd4b4f`; round 3, `8c101b5`)
 - Wrong: the role defaults read `msg.sender`, while a bare `vm.startBroadcast()` signs as `tx.origin`; from a test the wiring reverted. The run test also depended on the runner's environment.
 - Fix: the defaults read `tx.origin` (the broadcasting account in an off-chain script; no contract reads it), the variables became `RWA_ISSUER`, `RWA_AGENT` and `RWA_CUSTODIAN`, and the unset case is modelled by a harness.
-- Tests: `test_run_defaultsEveryRoleToTheBroadcaster`, `test_run_readsOperatorsFromTheEnvironment`.
+- Tests: `test_run_defaultsEveryRoleToTheBroadcaster`, `test_run_readsOperatorsFromTheEnvironment`. They replace `test_run_wiresTheSystemWithDefaultAndExplicitRoles`, which reverted with `AccessControlUnauthorizedAccount` against the `msg.sender` default.
 
-**17. Module attachment events named a caller-supplied address** (introduced and fixed in round 2, `a957a53`)
+### Introduced and fixed during the review
+
+This defect was introduced in round 2 and fixed in the same round.
+
+**1. Module attachment events named a caller-supplied address** (round 2, `a957a53`)
 - Wrong: `bindCompliance` and `unbindCompliance` emitted the address they were passed.
 - Fix: they emit the module's bound engine.
-- Test: `test_bindCompliance_eventNamesTheBoundEngine`.
+- Test: `test_bindCompliance_eventNamesTheBoundEngine`, written alongside the fix; no failing run against the unfixed code was captured.
+
+### Hardening and documentation
+
+These changes had no failing test behind them: one proves a mechanism that had no test, one corrects a document, one bounds a loop. None claims a regression test that failed before the change.
+
+**1. The dividend remainder carry was untested, and its role overstated** (round 3, `ac714ff`)
+- Wrong: zeroing `_residue` failed no test, because below a supply of 2^128 base units the carried remainder is worth less than one wei per deposit; the comments credited solvency to the carry.
+- Fix: a test at a supply of 2^129 + 1, where a one-unit deposit moves the accumulator by zero on its own and only the carry lets three deposits pay out. The comments now say the carry defers the sub-unit remainder of each deposit and that the per-holder floor keeps the distributor solvent.
+- Test: `test_deposit_residueCarriesSubUnitRemainderIntoLaterDeposits`. There was no bug to reproduce; the test is shown to matter by mutation: with `_residue` set to zero it fails.
+
+**2. The terms document described an EU allowlist** (round 1, fixed in round 3, `f0c0f74`)
+- Wrong: the anchored terms said "EU jurisdictions"; the code enforces a blocklist of restricted countries and has no EU rule.
+- Fix: the terms describe the blocklist; both hash pins moved to the new content.
+- Found by reading the terms against the code in round 1. The pinned hash from bug 11 then caught the edit itself: every deployment in the suite reverted with `TermsHashMismatch` until both pins were moved to the new content. No test covers the wording.
+
+**3. The module fan-out had no bound** (round 3, `5fe0cdd`)
+- Wrong: every transfer iterates all modules twice, and nothing capped their number.
+- Fix: `MAX_MODULES = 25`, the T-REX limit; `addModule` reverts with `ModuleLimitReached` beyond it.
+- Test: `test_addModule_capsTheModuleCount`, written with the cap; removing the cap makes it fail.
 
 ### Test-suite findings
 

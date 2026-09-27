@@ -43,7 +43,7 @@ The gas benchmarks in [`test/gas/Gas.t.sol`](../../test/gas/Gas.t.sol) are measu
 
 **Pin documented limitations as tests.** Where the system deliberately does not defend against something (a `transferFrom` spender is not checked, a contract cannot be the claim signer, a pause does not stop administration), a test asserts the actual behaviour and its comment says so. If the behaviour changes, the test fails and the documentation has to change with it.
 
-**Check the tests against the bugs.** In the review, each fixed bug was reintroduced into the code to confirm that at least one test fails without the fix; the README's review notes state this once, for all the fixes. A regression test that passes against the unfixed code tests nothing.
+**Check the tests against the bugs.** In the review, bugs 1 to 12 of the README's review notes, and hardening entries 1 and 3, were reintroduced into the code to confirm that at least one test fails without the fix. Bug 13 (in the deployment script), the defect introduced during the review and the terms wording were not checked that way. A regression test that passes against the unfixed code tests nothing.
 
 **Mocks isolate the unit under test; the scenarios use none.** [`MockModule`](../../test/helpers/MockModule.sol) is a real `AbstractComplianceModule` with a toggleable verdict and hook counters, so a token test can force a compliance rejection without depending on any real rule's semantics. The scenario, conformance and deployment suites wire the *real* modules, so the integration is shown separately from the isolation.
 
