@@ -599,12 +599,12 @@ contract DividendDistributorTest is Test {
     //////////////////////////////////////////////////////////////*/
 
     /// @dev No holder may ever claim more than the contract was funded with.
-    function testFuzz_conservation_claimsNeverExceedDeposits(uint96 aliceShares, uint96 bobShares, uint96 income)
+    function testFuzz_conservation_claimsNeverExceedDeposits(uint256 aliceShares, uint256 bobShares, uint256 income)
         public
     {
-        aliceShares = uint96(bound(aliceShares, 1e18, 1e30));
-        bobShares = uint96(bound(bobShares, 1e18, 1e30));
-        income = uint96(bound(income, 1e6, 1e18));
+        aliceShares = bound(aliceShares, 1, 1e30);
+        bobShares = bound(bobShares, 1, 1e30);
+        income = bound(income, 1, 1e18);
 
         _mint(alice, aliceShares);
         _mint(bob, bobShares);
@@ -617,10 +617,10 @@ contract DividendDistributorTest is Test {
     }
 
     /// @dev Rounding dust is bounded: it is the residue of one division per holder, not a leak.
-    function testFuzz_roundingDustIsBounded(uint96 aliceShares, uint96 bobShares, uint96 income) public {
-        aliceShares = uint96(bound(aliceShares, 1e18, 1e30));
-        bobShares = uint96(bound(bobShares, 1e18, 1e30));
-        income = uint96(bound(income, 1e6, 1e18));
+    function testFuzz_roundingDustIsBounded(uint256 aliceShares, uint256 bobShares, uint256 income) public {
+        aliceShares = bound(aliceShares, 1, 1e30);
+        bobShares = bound(bobShares, 1, 1e30);
+        income = bound(income, 1, 1e18);
 
         _mint(alice, aliceShares);
         _mint(bob, bobShares);
@@ -633,10 +633,10 @@ contract DividendDistributorTest is Test {
     }
 
     /// @dev Entitlement is invariant under transfer, whatever the split.
-    function testFuzz_transferPreservesTotalEntitlement(uint96 shares, uint96 income, uint96 sendPart) public {
-        shares = uint96(bound(shares, 2e18, 1e30));
-        income = uint96(bound(income, 1e6, 1e18));
-        sendPart = uint96(bound(sendPart, 1, shares));
+    function testFuzz_transferPreservesTotalEntitlement(uint256 shares, uint256 income, uint256 sendPart) public {
+        shares = bound(shares, 2, 1e30);
+        income = bound(income, 1, 1e18);
+        sendPart = bound(sendPart, 1, shares);
 
         _mint(alice, shares);
         currency.mint(issuer, income);
@@ -650,13 +650,17 @@ contract DividendDistributorTest is Test {
     }
 
     /// @dev Solvency under repeated deposits, the case the currency-unit residue broke. The
-    ///      contract must always hold enough to pay everything it says is owed.
-    function testFuzz_solventAcrossRepeatedDeposits(uint96 aliceShares, uint96 bobShares, uint96 income, uint8 rounds)
-        public
-    {
-        aliceShares = uint96(bound(aliceShares, 1e18, 1e30));
-        bobShares = uint96(bound(bobShares, 1e18, 1e30));
-        income = uint96(bound(income, 1e6, 1e18));
+    ///      contract must always hold enough to pay everything it says is owed, and must not leak
+    ///      value to rounding as deposits accumulate.
+    function testFuzz_solventAcrossRepeatedDeposits(
+        uint256 aliceShares,
+        uint256 bobShares,
+        uint256 income,
+        uint8 rounds
+    ) public {
+        aliceShares = bound(aliceShares, 1, 1e30);
+        bobShares = bound(bobShares, 1, 1e30);
+        income = bound(income, 1, 1e18);
         rounds = uint8(bound(rounds, 1, 20));
 
         _mint(alice, aliceShares);
@@ -669,13 +673,20 @@ contract DividendDistributorTest is Test {
 
         uint256 owed = dist.claimable(alice) + dist.claimable(bob);
         assertLe(owed, currency.balanceOf(address(dist)), "owed more than the contract holds");
+
+        // Lower bound: the holders together fall short of everything deposited by at most two wei,
+        // however many deposits there were. Each deposit's own truncation is carried in the scaled
+        // residue, so the unpaid remainder never reaches a whole unit; the only loss is the final
+        // floor in each holder's `accumulated`, under one wei per holder. A shortfall that grew
+        // with the number of deposits would mean the residue leaks.
+        assertGe(owed + 2, income * rounds, "holders lost more than the per-holder rounding");
     }
 
     /// @dev Every claim must be payable: the contract must hold what it says is claimable.
-    function testFuzz_claimIsAlwaysSolvent(uint96 shares, uint96 income, uint96 sendPart) public {
-        shares = uint96(bound(shares, 2e18, 1e30));
-        income = uint96(bound(income, 1e6, 1e18));
-        sendPart = uint96(bound(sendPart, 1, shares));
+    function testFuzz_claimIsAlwaysSolvent(uint256 shares, uint256 income, uint256 sendPart) public {
+        shares = bound(shares, 2, 1e30);
+        income = bound(income, 1, 1e18);
+        sendPart = bound(sendPart, 1, shares);
 
         _mint(alice, shares);
         currency.mint(issuer, income);

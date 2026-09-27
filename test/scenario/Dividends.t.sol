@@ -48,6 +48,14 @@ contract DividendsTest is Test, Deploy {
         currency.approve(address(dist), type(uint256).max);
     }
 
+    /// @dev Each holder's payout is descaled with a floor, so it may fall short of its exact share
+    ///      by less than one wei and must never exceed it. Asserting `INCOME - 1` exactly would pin a
+    ///      rounding outcome the design does not promise; this is the bound it does promise.
+    function _assertOwed(uint256 actual, uint256 expected, string memory reason) internal pure {
+        assertLe(actual, expected, reason);
+        assertGe(actual + 1, expected, reason);
+    }
+
     function _onboard(address who) internal {
         vm.prank(agent);
         d.identityRegistry.registerIdentity(who, ES, true, uint64(block.timestamp + KYC_WINDOW));
@@ -74,7 +82,7 @@ contract DividendsTest is Test, Deploy {
         dist.deposit(INCOME);
 
         // Alice held the whole supply when the income landed, so all of it is hers.
-        assertEq(dist.claimable(alice), INCOME - 1, "sole holder takes the deposit less dust");
+        _assertOwed(dist.claimable(alice), INCOME, "sole holder takes the deposit less dust");
         assertEq(dist.claimable(bob), 0);
 
         // She sells the position on once the lockup allows it. The income already earned does not
@@ -83,7 +91,7 @@ contract DividendsTest is Test, Deploy {
         vm.prank(alice);
         d.token.transfer(bob, AMOUNT);
 
-        assertEq(dist.claimable(alice), INCOME - 1, "seller kept the income earned while holding");
+        _assertOwed(dist.claimable(alice), INCOME, "seller kept the income earned while holding");
         assertEq(dist.claimable(bob), 0, "buyer was not paid for income predating them");
 
         // The next distribution goes entirely to the new holder.
@@ -95,7 +103,10 @@ contract DividendsTest is Test, Deploy {
         vm.prank(bob);
         dist.claim(bob);
 
-        assertEq(currency.balanceOf(alice) + currency.balanceOf(bob), INCOME * 2 - 1);
+        // Two deposits, one holder each time: at most one wei of rounding per holder, never over.
+        uint256 paid = currency.balanceOf(alice) + currency.balanceOf(bob);
+        assertLe(paid, INCOME * 2);
+        assertGe(paid + 2, INCOME * 2);
     }
 
     /**
