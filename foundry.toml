@@ -14,6 +14,11 @@ remappings = [
 no_match_path = "test/gas/*"
 
 # Gas benchmarks only: FOUNDRY_PROFILE=gas forge test --isolate --gas-report
+#
+# Every profile inherits the default's no_match_path, which would exclude the benchmarks here too.
+# Forge offers no way to clear an inherited pattern: an empty string makes it match every path and
+# no test runs. So this profile overrides it with test/scratch/*, the git-ignored directory for
+# local scratch tests, which keeps those out of a benchmark run and excludes nothing tracked.
 [profile.gas]
 match_path = "test/gas/*"
 no_match_path = "test/scratch/*"
