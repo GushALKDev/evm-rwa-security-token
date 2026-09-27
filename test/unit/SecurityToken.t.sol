@@ -3,6 +3,7 @@ pragma solidity ^0.8.24;
 
 import {Test} from "forge-std/Test.sol";
 import {IAccessControl} from "@openzeppelin/contracts/access/IAccessControl.sol";
+import {IERC20Errors} from "@openzeppelin/contracts/interfaces/draft-IERC6093.sol";
 import {Pausable} from "@openzeppelin/contracts/utils/Pausable.sol";
 
 import {SecurityToken} from "../../src/SecurityToken.sol";
@@ -10,7 +11,8 @@ import {ISecurityToken} from "../../src/interfaces/ISecurityToken.sol";
 import {IdentityRegistry} from "../../src/identity/IdentityRegistry.sol";
 import {ModularCompliance} from "../../src/compliance/ModularCompliance.sol";
 import {Roles} from "../../src/Roles.sol";
-import {MockModule} from "../helpers/MockModule.sol";
+import {MockModule, ReenteringModule} from "../helpers/MockModule.sol";
+import {ReentrancyGuard} from "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
 
 contract SecurityTokenTest is Test {
     SecurityToken internal token;
@@ -533,19 +535,122 @@ contract SecurityTokenTest is Test {
         assertFalse(token.canTransfer(alice, bob, AMOUNT));
     }
 
-    /// @dev The view and the transfer share one gate, so a case the view rejects also reverts.
+    /// @dev Puts the token in one of the gate's states, from alice's point of view as sender and
+    ///      bob's as recipient. State 0 is the clean state; every other state trips one check.
+    function _enterGateState(uint256 state) internal {
+        if (state == 1) {
+            vm.prank(agent);
+            token.pause();
+        } else if (state == 2) {
+            vm.prank(agent);
+            registry.removeIdentity(bob);
+        } else if (state == 3) {
+            vm.prank(agent);
+            registry.removeIdentity(alice);
+        } else if (state == 4) {
+            vm.prank(agent);
+            token.setAddressFrozen(bob, true);
+        } else if (state == 5) {
+            vm.prank(agent);
+            token.setAddressFrozen(alice, true);
+        } else if (state == 6) {
+            vm.prank(agent);
+            token.freezePartialTokens(alice, AMOUNT / 2 + 1);
+        } else if (state == 7) {
+            module.setAllow(false);
+        } else if (state == 8) {
+            vm.warp(block.timestamp + 366 days); // both attestations expire
+        }
+    }
+
+    /// @dev The view and the transfer share one gate, so across every gate state the view says
+    ///      true exactly when the transfer settles: the clean state, a pause, each identity and
+    ///      freeze check on either side, the unfrozen balance, a rejecting module and expired KYC.
     function test_canTransfer_agreesWithUpdate() public {
         _mint(alice, AMOUNT);
-        vm.prank(agent);
-        token.freezePartialTokens(alice, AMOUNT / 2);
+        uint256 amount = AMOUNT / 2;
 
-        assertFalse(token.canTransfer(alice, bob, AMOUNT));
+        for (uint256 state; state <= 8; ++state) {
+            uint256 snapshot = vm.snapshotState();
+            _enterGateState(state);
 
-        vm.expectRevert(
-            abi.encodeWithSelector(ISecurityToken.InsufficientUnfrozenBalance.selector, alice, AMOUNT / 2, AMOUNT)
-        );
+            bool predicted = token.canTransfer(alice, bob, amount);
+            vm.prank(alice);
+            (bool settled,) = address(token).call(abi.encodeCall(token.transfer, (bob, amount)));
+
+            assertEq(predicted, settled, "view and transfer disagree");
+            assertEq(settled, state == 0, "wrong verdict for the state");
+            vm.revertToState(snapshot);
+        }
+    }
+
+    /*//////////////////////////////////////////////////////////////
+                              TRANSFER FROM
+    //////////////////////////////////////////////////////////////*/
+
+    /// @dev A spender moves tokens within its allowance, which is consumed by exactly the amount.
+    function test_transferFrom_consumesAllowance() public {
+        _mint(alice, AMOUNT);
         vm.prank(alice);
-        token.transfer(bob, AMOUNT);
+        token.approve(carol, 300e18);
+
+        vm.prank(carol);
+        token.transferFrom(alice, bob, 100e18);
+
+        assertEq(token.balanceOf(bob), 100e18);
+        assertEq(token.allowance(alice, carol), 200e18);
+
+        vm.expectRevert(abi.encodeWithSelector(IERC20Errors.ERC20InsufficientAllowance.selector, carol, 200e18, 300e18));
+        vm.prank(carol);
+        token.transferFrom(alice, bob, 300e18);
+    }
+
+    /// @dev The gate applies to `transferFrom` as to `transfer`: a frozen owner cannot be spent from.
+    function test_transferFrom_revertsForFrozenSender() public {
+        _mint(alice, AMOUNT);
+        vm.prank(alice);
+        token.approve(carol, AMOUNT);
+        vm.prank(agent);
+        token.setAddressFrozen(alice, true);
+
+        vm.expectRevert(abi.encodeWithSelector(ISecurityToken.SenderAddressFrozen.selector, alice));
+        vm.prank(carol);
+        token.transferFrom(alice, bob, 1);
+    }
+
+    /// @dev ...and the recipient must be verified whoever the spender is.
+    function test_transferFrom_revertsForUnverifiedRecipient() public {
+        _mint(alice, AMOUNT);
+        vm.prank(alice);
+        token.approve(carol, AMOUNT);
+
+        vm.expectRevert(abi.encodeWithSelector(ISecurityToken.RecipientNotVerified.selector, attacker));
+        vm.prank(carol);
+        token.transferFrom(alice, attacker, 1);
+    }
+
+    /**
+     * @dev Documented limitation: the gate checks the two holders, not the caller. A spender that
+     *      is not verified, and one that is frozen, can still move tokens between two verified,
+     *      unfrozen holders within an allowance the owner granted. ERC-3643 behaves the same way.
+     *      If this test starts failing, the limitation was closed and the docs must change.
+     */
+    function test_transferFrom_spenderIsNotChecked() public {
+        _mint(alice, AMOUNT);
+        assertFalse(registry.isVerified(attacker));
+        vm.prank(alice);
+        token.approve(attacker, AMOUNT);
+        vm.prank(attacker);
+        token.transferFrom(alice, bob, 10e18);
+
+        vm.prank(agent);
+        token.setAddressFrozen(carol, true);
+        vm.prank(alice);
+        token.approve(carol, AMOUNT);
+        vm.prank(carol);
+        token.transferFrom(alice, bob, 10e18);
+
+        assertEq(token.balanceOf(bob), 20e18);
     }
 
     /*//////////////////////////////////////////////////////////////
@@ -718,6 +823,37 @@ contract SecurityTokenTest is Test {
         vm.expectRevert(abi.encodeWithSelector(ISecurityToken.SenderAddressFrozen.selector, aliceSecondary));
         vm.prank(aliceSecondary);
         token.transfer(carol, 1);
+    }
+
+    /**
+     * @dev A module reentering `forcedRecovery` from inside the recovery's own transfer hook. The
+     *      module is given `CUSTODIAN_ROLE`, so only the guard can stop it. Reentering here is the
+     *      one window where the freeze state is cleared on the lost wallet and not yet re-applied
+     *      on the new one. The reentry is attempted, rejected with the guard's error, and the outer
+     *      recovery completes with the freeze carried over.
+     */
+    function test_forcedRecovery_isReentrancyGuarded() public {
+        ReenteringModule evil = new ReenteringModule(address(compliance));
+        vm.startPrank(issuer);
+        compliance.addModule(address(evil));
+        token.grantRole(Roles.CUSTODIAN_ROLE, address(evil));
+        vm.stopPrank();
+
+        _mint(alice, AMOUNT);
+        _mint(bob, AMOUNT);
+        vm.prank(agent);
+        token.freezePartialTokens(alice, 100e18);
+
+        evil.arm(address(token), abi.encodeCall(token.forcedRecovery, (bob, carol)));
+        vm.prank(custodian);
+        token.forcedRecovery(alice, aliceSecondary);
+
+        assertTrue(evil.reentryAttempted(), "the module never reentered");
+        assertFalse(evil.reentrySucceeded(), "the reentrant recovery went through");
+        assertEq(bytes4(evil.reentryError()), ReentrancyGuard.ReentrancyGuardReentrantCall.selector);
+        assertEq(token.balanceOf(aliceSecondary), AMOUNT);
+        assertEq(token.frozenTokens(aliceSecondary), 100e18);
+        assertEq(token.balanceOf(bob), AMOUNT, "the reentrant call moved bob's position");
     }
 
     function test_forcedRecovery_revertsForSameWallet() public {

@@ -101,3 +101,52 @@ contract StatefulMockModule is MockModule {
         return false;
     }
 }
+
+/**
+ * @notice A module that reenters an arbitrary target from inside the transfer hook.
+ * @dev Stands in for a malicious or buggy module the issuer registered. Once armed, the first
+ *      transfer hook makes one call, records that it tried and how the call ended, and returns
+ *      normally, so the outer operation's own result stays visible to the test.
+ */
+contract ReenteringModule is AbstractComplianceModule {
+    address public target;
+    bytes public reentryCall;
+    bool public reentryAttempted;
+    bool public reentrySucceeded;
+    bytes public reentryError;
+
+    constructor(address compliance_) AbstractComplianceModule(compliance_) {}
+
+    function arm(address target_, bytes calldata call_) external {
+        target = target_;
+        reentryCall = call_;
+    }
+
+    function moduleCheck(address, address, uint256) external pure returns (bool) {
+        return true;
+    }
+
+    function moduleTransferred(address, address, uint256) external onlyCompliance {
+        if (target == address(0) || reentryAttempted) return;
+        reentryAttempted = true;
+        (bool ok, bytes memory ret) = target.call(reentryCall);
+        reentrySucceeded = ok;
+        if (!ok) reentryError = ret;
+    }
+
+    function moduleCreated(address, uint256) external onlyCompliance {}
+
+    function moduleDestroyed(address, uint256) external onlyCompliance {}
+
+    function token() external pure returns (address) {
+        return address(0);
+    }
+
+    function name() external pure returns (string memory) {
+        return "ReenteringModule";
+    }
+
+    function isPlugAndPlay() public pure override returns (bool) {
+        return true;
+    }
+}

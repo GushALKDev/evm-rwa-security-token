@@ -526,31 +526,72 @@ contract DividendDistributorTest is Test {
                              REENTRANCY
     //////////////////////////////////////////////////////////////*/
 
-    /// @dev A malicious settlement currency must not be able to reenter claim and be paid twice.
-    function test_claim_isReentrancyGuarded() public {
-        ReenteringCurrency evil = new ReenteringCurrency();
-        DividendDistributor target = new DividendDistributor(engine, address(token), address(evil), issuer);
+    /// @dev Deploys a distributor over a currency that reenters it, funds the issuer and gives the
+    ///      currency contract itself a position, so it has something to claim.
+    function _hostileSetup() internal returns (ReenteringCurrency evil, DividendDistributor target) {
+        evil = new ReenteringCurrency();
+        target = new DividendDistributor(engine, address(token), address(evil), issuer);
         vm.prank(engine);
         target.bindCompliance(engine);
 
-        evil.mint(issuer, 1_000e6);
+        evil.mint(issuer, 10_000e6);
         vm.prank(issuer);
         evil.approve(address(target), type(uint256).max);
 
         token.mint(address(evil), SHARES);
         vm.prank(engine);
         target.moduleCreated(address(evil), SHARES);
+    }
 
+    /**
+     * @dev A settlement currency that reenters `claim` from inside its own `transfer`. The reentry
+     *      is attempted (the flag proves it), the guard rejects it with its own error, and the
+     *      outer claim still pays exactly once.
+     *
+     *      The guard is the first line here, not the only one: `claim` records the withdrawal
+     *      before paying, so even without the guard the reentrant call would find nothing left to
+     *      claim and revert with `NothingToClaim`.
+     */
+    function test_claim_isReentrancyGuarded() public {
+        (ReenteringCurrency evil, DividendDistributor target) = _hostileSetup();
+        vm.prank(issuer);
+        target.deposit(INCOME);
+        uint256 owed = target.claimable(address(evil));
+
+        evil.arm(address(target), abi.encodeCall(DividendDistributor.claim, (address(evil))), false);
+        vm.prank(address(evil));
+        target.claim(address(evil));
+
+        assertTrue(evil.reentryAttempted(), "the currency never reentered");
+        assertFalse(evil.reentrySucceeded(), "the reentrant claim went through");
+        assertEq(bytes4(evil.reentryError()), ReentrancyGuard.ReentrancyGuardReentrantCall.selector);
+        assertEq(evil.balanceOf(address(evil)), owed, "paid more or less than once");
+        assertEq(target.claimable(address(evil)), 0);
+    }
+
+    /**
+     * @dev A settlement currency that reenters `deposit` from inside the `transferFrom` that pulls
+     *      the funds. The currency is given `AGENT_ROLE`, so only the guard can stop it: the reentry
+     *      is attempted, rejected with the guard's error, and the outer deposit is counted once.
+     */
+    function test_deposit_isReentrancyGuarded() public {
+        (ReenteringCurrency evil, DividendDistributor target) = _hostileSetup();
+        bytes32 agentRole = Roles.AGENT_ROLE;
+        vm.prank(issuer);
+        target.grantRole(agentRole, address(evil));
+        evil.mint(address(evil), INCOME);
+        vm.prank(address(evil));
+        evil.approve(address(target), type(uint256).max);
+
+        evil.arm(address(target), abi.encodeCall(DividendDistributor.deposit, (INCOME)), true);
         vm.prank(issuer);
         target.deposit(INCOME);
 
-        evil.setTarget(target);
-
-        // The currency reenters claim from inside its own transfer. The guard must reject it,
-        // which surfaces as the whole outer claim reverting.
-        vm.prank(address(evil));
-        vm.expectRevert(ReentrancyGuard.ReentrancyGuardReentrantCall.selector);
-        target.claim(address(evil));
+        assertTrue(evil.reentryAttempted(), "the currency never reentered");
+        assertFalse(evil.reentrySucceeded(), "the reentrant deposit went through");
+        assertEq(bytes4(evil.reentryError()), ReentrancyGuard.ReentrancyGuardReentrantCall.selector);
+        assertEq(evil.balanceOf(address(target)), INCOME, "deposit counted more than once");
+        _assertOwed(target.claimable(address(evil)), INCOME, "accumulator moved more than once");
     }
 
     /*//////////////////////////////////////////////////////////////
@@ -658,22 +699,42 @@ contract DividendDistributorTest is Test {
 }
 
 /**
- * @notice A settlement currency that reenters claim from inside its own transfer.
- * @dev Models the realistic hostile case for a pull-payment contract: the currency is an external
- *      contract, and a token with a transfer callback (or an outright malicious one) gets control
- *      after the withdrawal is recorded. Only the guard stands between that and a double payout.
+ * @notice A settlement currency that reenters its distributor while moving funds.
+ * @dev Models the hostile case for a contract that pays out or pulls in an external token: the
+ *      currency gets control in the middle of `claim` (inside `transfer`) or `deposit` (inside
+ *      `transferFrom`). Once armed, it makes one reentrant call, records that it tried and how the
+ *      call ended, and then completes the transfer, so the outer call's own result stays visible.
  */
 contract ReenteringCurrency is MockCurrency {
-    DividendDistributor internal _target;
+    address public target;
+    bytes public reentryCall;
+    bool public onTransferFrom;
 
-    function setTarget(DividendDistributor target_) external {
-        _target = target_;
+    bool public reentryAttempted;
+    bool public reentrySucceeded;
+    bytes public reentryError;
+
+    function arm(address target_, bytes calldata call_, bool onTransferFrom_) external {
+        target = target_;
+        reentryCall = call_;
+        onTransferFrom = onTransferFrom_;
     }
 
     function transfer(address to, uint256 amount) public override returns (bool) {
-        if (address(_target) != address(0)) {
-            _target.claim(to);
-        }
+        if (!onTransferFrom) _reenter();
         return super.transfer(to, amount);
+    }
+
+    function transferFrom(address from, address to, uint256 amount) public override returns (bool) {
+        if (onTransferFrom) _reenter();
+        return super.transferFrom(from, to, amount);
+    }
+
+    function _reenter() internal {
+        if (target == address(0) || reentryAttempted) return;
+        reentryAttempted = true;
+        (bool ok, bytes memory ret) = target.call(reentryCall);
+        reentrySucceeded = ok;
+        if (!ok) reentryError = ret;
     }
 }
