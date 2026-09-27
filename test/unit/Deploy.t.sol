@@ -201,6 +201,47 @@ contract DeployTest is Test, Deploy {
     }
 
     /*//////////////////////////////////////////////////////////////
+                              run() END TO END
+    //////////////////////////////////////////////////////////////*/
+
+    /// @dev Runs the script entrypoint end to end. Inside a test, `vm.startBroadcast()` signs as
+    ///      `tx.origin` (forge's default sender), which is the account `run` defaults the roles to.
+    ///
+    ///      One test on purpose: `run` reads the ISSUER, AGENT and CUSTODIAN environment variables,
+    ///      the environment is shared by the whole test process, and `vm.setEnv` cannot unset a
+    ///      variable. So the unset case runs first and the explicit case second, inside one test.
+    function test_run_wiresTheSystemWithDefaultAndExplicitRoles() public {
+        address broadcaster = tx.origin;
+        Deploy script = new Deploy();
+
+        // Unset: all three roles default to the broadcasting account, as a local Anvil run wants.
+        Deployment memory first = script.run();
+
+        assertEq(first.compliance.token(), address(first.token));
+        assertEq(first.compliance.modules().length, 3);
+        assertTrue(first.identityRegistry.hasRole(Roles.AGENT_ROLE, address(first.token)));
+        assertTrue(first.token.hasRole(first.token.DEFAULT_ADMIN_ROLE(), broadcaster));
+        assertTrue(first.token.hasRole(Roles.AGENT_ROLE, broadcaster));
+        assertTrue(first.token.hasRole(Roles.CUSTODIAN_ROLE, broadcaster));
+        assertTrue(first.identityRegistry.hasRole(Roles.AGENT_ROLE, broadcaster));
+        (, bytes32 anchored,) = first.documentRegistry.getDocument(TERMS_NAME);
+        assertEq(anchored, PINNED_TERMS_HASH);
+
+        // Explicit operators: AGENT and CUSTODIAN land on the accounts given. ISSUER stays the
+        // broadcaster, because the wiring calls are admin-gated and run as the broadcaster.
+        vm.setEnv("AGENT", vm.toString(agent));
+        vm.setEnv("CUSTODIAN", vm.toString(custodian));
+        Deployment memory second = script.run();
+
+        assertTrue(second.token.hasRole(Roles.AGENT_ROLE, agent));
+        assertTrue(second.token.hasRole(Roles.CUSTODIAN_ROLE, custodian));
+        assertTrue(second.identityRegistry.hasRole(Roles.AGENT_ROLE, agent));
+        assertTrue(second.maxHolders.hasRole(Roles.AGENT_ROLE, agent));
+        assertFalse(second.token.hasRole(Roles.CUSTODIAN_ROLE, broadcaster));
+        assertFalse(second.token.hasRole(Roles.AGENT_ROLE, broadcaster));
+    }
+
+    /*//////////////////////////////////////////////////////////////
                             DOCUMENT ANCHOR
     //////////////////////////////////////////////////////////////*/
 

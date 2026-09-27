@@ -108,10 +108,20 @@ contract Deploy is Script {
      *      what a local Anvil run wants. A real deployment sets three distinct accounts: the whole
      *      point of separating AGENT from CUSTODIAN is that a compliance desk cannot seize
      *      balances, and collapsing them into one key discards that separation.
+     *
+     *      ISSUER must be the broadcasting account in practice: the wiring calls in `_deploy` are
+     *      admin-gated and run as the broadcaster, so a different ISSUER makes them revert (see
+     *      `_deploy`).
+     *
+     *      The broadcasting account is read as `tx.origin`, the account a bare `vm.startBroadcast()`
+     *      signs with. Under `forge script` it equals `msg.sender`; when `run` is called from a
+     *      test, `msg.sender` is the calling test contract while the broadcast still comes from
+     *      `tx.origin`, and defaulting to `msg.sender` would hand the roles to an account that
+     *      never sends the wiring calls.
      * @return The deployed system.
      */
     function run() external returns (Deployment memory) {
-        address deployer = msg.sender;
+        address deployer = tx.origin;
         address issuer = vm.envOr("ISSUER", deployer);
         address agent = vm.envOr("AGENT", deployer);
         address custodian = vm.envOr("CUSTODIAN", deployer);
