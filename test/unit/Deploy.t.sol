@@ -39,6 +39,9 @@ contract DeployTest is Test, Deploy {
     ///      wrong revert.
     uint64 internal constant KYC_WINDOW = 4 * 365 days;
 
+    /// @dev The terms hash, pinned independently of the script's own constant.
+    bytes32 internal constant PINNED_TERMS_HASH = 0x30536762f053a4d373521894dfaf049104505d7eb476717273feb537c88847a6;
+
     function setUp() public {
         // The deployer must hold admin for the wiring calls, so the test contract is the issuer.
         d = _deploy(issuer, agent, custodian);
@@ -224,12 +227,42 @@ contract DeployTest is Test, Deploy {
         assertEq(names[0], bytes32("TERMS"));
     }
 
-    /// @dev The failure the anchor exists to catch: an edited document no longer matches what was
-    ///      anchored. Simulated by hashing altered content rather than writing to the real file.
+    /// @dev The terms file hashes to the value pinned in this test, and the script pins the same
+    ///      value. Editing the document breaks both until they are updated on purpose.
+    function test_anchor_termsFileMatchesPinnedHash() public view {
+        assertEq(keccak256(bytes(vm.readFile(TERMS_PATH))), PINNED_TERMS_HASH);
+        assertEq(TERMS_HASH, PINNED_TERMS_HASH);
+        assertEq(d.termsHash, PINNED_TERMS_HASH);
+    }
+
+    /// @dev A drifted terms document fails the deployment. The harness serves altered content in
+    ///      place of the file, which stays untouched on disk.
+    function test_deploy_revertsWhenTermsDrift() public {
+        DriftedTermsDeploy harness = new DriftedTermsDeploy();
+        bytes32 drifted = keccak256(bytes.concat(bytes(vm.readFile(TERMS_PATH)), " amended clause"));
+
+        vm.expectRevert(abi.encodeWithSelector(Deploy.TermsHashMismatch.selector, PINNED_TERMS_HASH, drifted));
+        harness.deploy(address(harness), agent, custodian);
+    }
+
+    /// @dev After deployment, an edited document no longer matches what was anchored, so a holder
+    ///      who hashes the published file sees the mismatch. Simulated by hashing altered content
+    ///      rather than writing to the real file.
     function test_anchor_detectsDriftedDocument() public view {
         (, bytes32 anchored,) = d.documentRegistry.getDocument(TERMS_NAME);
         bytes32 amended = keccak256(bytes.concat(bytes(vm.readFile(TERMS_PATH)), " amended clause"));
 
         assertTrue(anchored != amended);
+    }
+}
+
+/// @notice Runs the deployment with the terms document altered by one appended clause.
+contract DriftedTermsDeploy is Deploy {
+    function deploy(address issuer, address agent, address custodian) external returns (Deployment memory) {
+        return _deploy(issuer, agent, custodian);
+    }
+
+    function _readTerms() internal view override returns (bytes memory) {
+        return bytes.concat(super._readTerms(), " amended clause");
     }
 }

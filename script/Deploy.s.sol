@@ -33,9 +33,11 @@ import {Roles} from "../src/Roles.sol";
  *      The wiring calls that close the graph (`addModule`, `bindToken`, and granting the token
  *      AGENT on the registry) then run once every address is known.
  *
- *      Anchoring reads `docs/RealEstateNote-Terms.md` through `vm.readFile` and hashes the bytes
- *      here rather than accepting a hash as a parameter. A hardcoded hash would drift silently the
- *      first time the document is edited, which is the exact failure the anchor exists to detect.
+ *      Anchoring reads `docs/RealEstateNote-Terms.md` through `vm.readFile`, hashes the bytes here,
+ *      and requires the result to equal the pinned TERMS_HASH. The pin is what makes an edited
+ *      document fail the deployment: without it, the script would anchor whatever is on disk.
+ *      Amending the terms is a deliberate change of the file, of TERMS_HASH and of the matching
+ *      constant in DeployTest; after deployment it goes through `setDocument` on the registry.
  */
 contract Deploy is Script {
     /*//////////////////////////////////////////////////////////////
@@ -56,6 +58,11 @@ contract Deploy is Script {
     string internal constant TERMS_URI =
         "https://raw.githubusercontent.com/GushALKDev/evm-rwa-security-token/main/docs/RealEstateNote-Terms.md";
 
+    /// @dev keccak256 of the terms document this deployment is meant to anchor. The file on disk
+    ///      must hash to this value or `_deploy` reverts, so an edit to the document cannot be
+    ///      anchored without also changing this constant (and the matching one in DeployTest).
+    bytes32 internal constant TERMS_HASH = 0x30536762f053a4d373521894dfaf049104505d7eb476717273feb537c88847a6;
+
     /// @dev Document name as a readable label rather than a hash, so it decodes off-chain.
     bytes32 internal constant TERMS_NAME = bytes32("TERMS");
 
@@ -67,6 +74,13 @@ contract Deploy is Script {
 
     /// @dev Holding period before an acquired position may move.
     uint64 internal constant LOCKUP_PERIOD = 365 days;
+
+    /*//////////////////////////////////////////////////////////////
+                                 ERRORS
+    //////////////////////////////////////////////////////////////*/
+
+    /// @notice Thrown when the terms file on disk does not hash to the pinned TERMS_HASH.
+    error TermsHashMismatch(bytes32 expected, bytes32 actual);
 
     /*//////////////////////////////////////////////////////////////
                                  TYPES
@@ -164,7 +178,10 @@ contract Deploy is Script {
 
         // 6. Anchor the terms by a hash of the bytes on disk, never a hardcoded constant.
         d.documentRegistry = new DocumentRegistry(issuer);
-        d.termsHash = keccak256(bytes(vm.readFile(TERMS_PATH)));
+        d.termsHash = keccak256(_readTerms());
+        // The file must be the version this deployment was written for. Without the pin, an edited
+        // document would simply be anchored under its new hash.
+        if (d.termsHash != TERMS_HASH) revert TermsHashMismatch(TERMS_HASH, d.termsHash);
         d.documentRegistry.setDocument(TERMS_NAME, TERMS_URI, d.termsHash);
 
         _verify(d, issuer, agent, custodian);
@@ -201,11 +218,18 @@ contract Deploy is Script {
         require(d.token.hasRole(Roles.CUSTODIAN_ROLE, custodian), "token: custodian missing");
         require(d.token.hasRole(0x00, issuer), "token: issuer missing");
 
-        // The anchored hash matches the file on disk. This is the check the whole anchor exists
-        // for: if the document was edited after this script last ran, the two disagree.
+        // The registry stored the hash computed from the file, and the file still hashes to it.
+        // Detecting an edited document is the job of the TERMS_HASH pin in `_deploy`; these two
+        // checks confirm the anchor write itself.
         (, bytes32 anchored,) = d.documentRegistry.getDocument(TERMS_NAME);
         require(anchored == d.termsHash, "documents: terms hash mismatch");
-        require(anchored == keccak256(bytes(vm.readFile(TERMS_PATH))), "documents: terms drifted from disk");
+        require(anchored == keccak256(_readTerms()), "documents: terms drifted from disk");
+    }
+
+    /// @dev The terms document as read from disk. Virtual so a test can substitute drifted content
+    ///      without writing to the real file.
+    function _readTerms() internal view virtual returns (bytes memory) {
+        return bytes(vm.readFile(TERMS_PATH));
     }
 
     /// @dev Prints the address book a deployment needs to be usable afterwards.
