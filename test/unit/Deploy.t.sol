@@ -40,7 +40,7 @@ contract DeployTest is Test, Deploy {
     uint64 internal constant KYC_WINDOW = 4 * 365 days;
 
     /// @dev The terms hash, pinned independently of the script's own constant.
-    bytes32 internal constant PINNED_TERMS_HASH = 0x30536762f053a4d373521894dfaf049104505d7eb476717273feb537c88847a6;
+    bytes32 internal constant PINNED_TERMS_HASH = 0xc47a09b676c0dc0d2575c4dd2240d665048c0bb3fec1ba7b3c0eab1b1c49aac9;
 
     function setUp() public {
         // The deployer must hold admin for the wiring calls, so the test contract is the issuer.

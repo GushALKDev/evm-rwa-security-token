@@ -171,7 +171,7 @@ require(anchored == keccak256(bytes(vm.readFile(TERMS_PATH))), "documents: terms
 The current on-disk hash of the terms document is:
 
 ```
-0x30536762f053a4d373521894dfaf049104505d7eb476717273feb537c88847a6
+0xc47a09b676c0dc0d2575c4dd2240d665048c0bb3fec1ba7b3c0eab1b1c49aac9
 ```
 
 Any edit to the terms file changes this hash. The deployment anchors whatever is on disk at deploy time and checks that the registry stored that value; no expected hash is hardcoded in the script or its tests. A later edit therefore shows up as a mismatch between the on-chain anchor and the published file, not as a failed deployment.

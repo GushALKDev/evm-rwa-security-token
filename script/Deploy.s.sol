@@ -61,7 +61,7 @@ contract Deploy is Script {
     /// @dev keccak256 of the terms document this deployment is meant to anchor. The file on disk
     ///      must hash to this value or `_deploy` reverts, so an edit to the document cannot be
     ///      anchored without also changing this constant (and the matching one in DeployTest).
-    bytes32 internal constant TERMS_HASH = 0x30536762f053a4d373521894dfaf049104505d7eb476717273feb537c88847a6;
+    bytes32 internal constant TERMS_HASH = 0xc47a09b676c0dc0d2575c4dd2240d665048c0bb3fec1ba7b3c0eab1b1c49aac9;
 
     /// @dev Document name as a readable label rather than a hash, so it decodes off-chain.
     bytes32 internal constant TERMS_NAME = bytes32("TERMS");
