@@ -47,6 +47,22 @@ import {MockCurrency} from "../helpers/MockCurrency.sol";
  *      totals, and for each unverified actor the balance it held when it stopped being verified.
  */
 contract Handler is CommonBase, StdCheats, StdUtils {
+    /// @dev Everything the handler is wired to, grouped so the constructor stays within the stack
+    ///      limit of an unoptimized build (the one `forge coverage` compiles).
+    struct System {
+        SecurityToken token;
+        IdentityRegistry registry;
+        CountryRestrictionModule countryRule;
+        DividendDistributor distributor;
+        LockupModule lockup;
+        MockCurrency currency;
+        address issuer;
+        address agent;
+        address custodian;
+        address outsider;
+        uint16 blockableCountry;
+    }
+
     /*//////////////////////////////////////////////////////////////
                                  SYSTEM
     //////////////////////////////////////////////////////////////*/
@@ -121,31 +137,18 @@ contract Handler is CommonBase, StdCheats, StdUtils {
                               CONSTRUCTOR
     //////////////////////////////////////////////////////////////*/
 
-    constructor(
-        SecurityToken token_,
-        IdentityRegistry registry_,
-        CountryRestrictionModule countryRule_,
-        DividendDistributor distributor_,
-        LockupModule lockup_,
-        MockCurrency currency_,
-        address[3] memory operators, // issuer, agent, custodian
-        address[6] memory actors_,
-        bytes32[6] memory ids_,
-        uint16[6] memory countries_,
-        uint16 blockableCountry_,
-        address outsider_
-    ) {
-        token = token_;
-        registry = registry_;
-        countryRule = countryRule_;
-        distributor = distributor_;
-        lockup = lockup_;
-        currency = currency_;
-        issuer = operators[0];
-        agent = operators[1];
-        custodian = operators[2];
-        blockableCountry = blockableCountry_;
-        outsider = outsider_;
+    constructor(System memory system, address[6] memory actors_, bytes32[6] memory ids_, uint16[6] memory countries_) {
+        token = system.token;
+        registry = system.registry;
+        countryRule = system.countryRule;
+        distributor = system.distributor;
+        lockup = system.lockup;
+        currency = system.currency;
+        issuer = system.issuer;
+        agent = system.agent;
+        custodian = system.custodian;
+        blockableCountry = system.blockableCountry;
+        outsider = system.outsider;
         actors = actors_;
         for (uint256 i; i < actors_.length; ++i) {
             investorIdOf[actors_[i]] = ids_[i];

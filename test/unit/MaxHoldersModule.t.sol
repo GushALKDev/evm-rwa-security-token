@@ -56,6 +56,26 @@ contract MaxHoldersModuleTest is Test {
                               CONSTRUCTOR
     //////////////////////////////////////////////////////////////*/
 
+    /// @dev A stateful rule that infers transitions from balances: not plug and play, attachable
+    ///      only while the token has no supply, and only once.
+    function test_attachment_statefulAndSupplyGated() public {
+        assertFalse(module.isPlugAndPlay());
+        assertEq(module.token(), address(token));
+        assertTrue(module.canComplianceBind(engine));
+        assertFalse(module.canComplianceBind(makeAddr("otherEngine")));
+
+        token.mint(alice, 1);
+        assertFalse(module.canComplianceBind(engine), "a live supply must refuse the bind");
+        token.burn(alice, 1);
+
+        vm.prank(engine);
+        module.bindCompliance(engine);
+        assertTrue(module.isComplianceBound(engine));
+        vm.prank(engine);
+        module.unbindCompliance(engine);
+        assertFalse(module.canComplianceBind(engine), "a removed stateful module must not return");
+    }
+
     function test_constructor_setsState() public view {
         assertEq(module.compliance(), engine);
         assertEq(module.token(), address(token));

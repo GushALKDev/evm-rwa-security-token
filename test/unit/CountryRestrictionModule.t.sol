@@ -43,6 +43,17 @@ contract CountryRestrictionModuleTest is Test {
                               CONSTRUCTOR
     //////////////////////////////////////////////////////////////*/
 
+    /// @dev A stateless rule: plug and play, reads no token, and can come back after a removal.
+    function test_attachment_plugAndPlay() public {
+        assertTrue(module.isPlugAndPlay());
+        assertEq(module.token(), address(0));
+        vm.prank(engine);
+        module.bindCompliance(engine);
+        vm.prank(engine);
+        module.unbindCompliance(engine);
+        assertTrue(module.canComplianceBind(engine));
+    }
+
     function test_constructor_setsState() public view {
         assertEq(module.compliance(), engine);
         assertEq(module.identityRegistry(), address(registry));

@@ -86,6 +86,14 @@ contract DividendDistributorTest is Test {
                               CONSTRUCTOR
     //////////////////////////////////////////////////////////////*/
 
+    /// @dev Stateful but supply-agnostic: it may join a live token, once. setUp already attached it.
+    function test_attachment_lateOnceOnly() public {
+        assertFalse(dist.isPlugAndPlay());
+        _mint(alice, SHARES);
+        assertTrue(dist.isComplianceBound(engine));
+        assertFalse(dist.canComplianceBind(engine), "an attached distributor must not bind again");
+    }
+
     function test_constructor_setsState() public view {
         assertEq(dist.compliance(), engine);
         assertEq(dist.token(), address(token));

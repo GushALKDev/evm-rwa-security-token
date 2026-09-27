@@ -417,7 +417,9 @@ contract IdentityRegistryTest is Test {
     }
 
     /// @dev isVerified runs twice per transfer, so it reads only the slot that holds the
-    ///      verification fields, not the investor id in the second slot.
+    ///      verification fields, never the investor id in the second slot. The optimized build
+    ///      loads that slot once; an unoptimized build (the one `forge coverage` compiles) loads
+    ///      it once per field, so the test counts distinct slots rather than raw reads.
     function test_isVerified_readsOneStorageSlot() public {
         vm.prank(agent);
         registry.registerIdentity(investor, ES, true, futureExpiry);
@@ -426,7 +428,10 @@ contract IdentityRegistryTest is Test {
         registry.isVerified(investor);
         (bytes32[] memory reads,) = vm.accesses(address(registry));
 
-        assertEq(reads.length, 1, "isVerified read more than the verification slot");
+        assertGt(reads.length, 0);
+        for (uint256 i = 1; i < reads.length; ++i) {
+            assertEq(reads[i], reads[0], "isVerified read more than the verification slot");
+        }
     }
 
     /// @dev Nonces are per-investor, so one investor's activity cannot invalidate another's.

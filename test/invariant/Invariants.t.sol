@@ -93,18 +93,22 @@ contract InvariantsTest is StdInvariant, Test {
         vm.stopPrank();
 
         handler = new Handler(
-            token,
-            registry,
-            countryRestriction,
-            distributor,
-            lockup,
-            currency,
-            [issuer, agent, custodian],
+            Handler.System({
+                token: token,
+                registry: registry,
+                countryRule: countryRestriction,
+                distributor: distributor,
+                lockup: lockup,
+                currency: currency,
+                issuer: issuer,
+                agent: agent,
+                custodian: custodian,
+                outsider: outsider,
+                blockableCountry: FR
+            }),
             actors,
             ids,
-            countries,
-            FR,
-            outsider
+            countries
         );
 
         targetContract(address(handler));
