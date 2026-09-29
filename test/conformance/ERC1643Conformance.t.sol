@@ -9,7 +9,7 @@ import {IDocumentRegistry} from "../../src/interfaces/IDocumentRegistry.sol";
 /**
  * @title ERC1643ConformanceTest
  * @notice Checks DocumentRegistry against the ERC-1643 issue text (ethereum/EIPs#1643).
- * @dev Differences, asserted below and documented in the README:
+ * @dev Differences, asserted below and documented in docs/04-tradeoffs.md:
  *
  *      - `DocumentRemoved(bytes32)` here; the issue has `DocumentRemoved(bytes32,string,bytes32)`,
  *        carrying the removed document's URI and hash.

@@ -16,7 +16,7 @@
 
 ---
 
-> This guide is the conceptual entry point. It does not re-argue the scoping decisions or the access-control threat model in depth: those live in the [README](../README.md), which is the narrative source of truth. Where a topic is fully covered there, this guide summarizes and links rather than duplicating.
+> This guide is the conceptual entry point. It does not re-argue the scoping decisions or the access-control threat model in depth: those live in [Guide 4](./04-tradeoffs.md#2-scope-decisions) and [Guide 7](./07-security.md), and the narrative in the [README](../README.md). Where a topic is fully covered there, this guide summarizes and links rather than duplicating.
 
 ---
 
@@ -126,7 +126,15 @@ Two properties of the boundary are worth stating up front, because everything el
 
 2. **The document hash is of the content, not the URI.** The URI says where the terms live; the hash proves which exact bytes are in force. If the issuer silently amends the terms, the hash stops matching and the substitution is evident on-chain.
 
-> The full boundary table (what lives off-chain, how it crosses, how it is enforced) is in the [README](../README.md#on-chain-and-off-chain-boundary).
+What lives off-chain, how it crosses the boundary, and how it is enforced on-chain:
+
+| Lives off-chain | Crosses the boundary as | Enforced on-chain as |
+|---|---|---|
+| KYC/AML identity verification, sanctions screening, accreditation checks (a licensed provider, holding documents that must never be public) | An attestation: signed EIP-712 payload, or an agent transaction | An `Identity` record with `country`, `accredited`, `kycExpiry` |
+| The property, the SPV, the note indenture, the valuation | Nothing directly. The token represents the claim; it does not contain it | Total supply, backed by an off-chain legal instrument |
+| Legal documents (prospectus, terms) | `keccak256` of the document content, plus a URI | A `DocumentRegistry` anchor |
+| Custody operations, key ceremonies, the decision that a wallet is lost | A custodian transaction | `forcedRecovery`, gated by `CUSTODIAN_ROLE` |
+| The regulator's rule set (who may hold, which jurisdictions, holding periods) | A governance decision to plug in a module | A `ComplianceModule` registered on the engine |
 
 ---
 
@@ -137,18 +145,18 @@ Two properties of the boundary are worth stating up front, because everything el
 | **Security token** | A token representing a regulated financial instrument, whose transfers are legally restricted. |
 | **ERC-3643 (T-REX)** | The permissioned-token standard this project implements a subset of: identity registry + modular compliance + gated transfer. |
 | **ERC-1643** | Document-management standard (from the ERC-1400 family); the source of the anchoring pattern. |
-| **ONCHAINID** | ERC-3643's per-investor on-chain identity contract holding signed claims. Collapsed into a flat registry here (see [README](../README.md#what-was-deliberately-left-out-and-why)). |
+| **ONCHAINID** | ERC-3643's per-investor on-chain identity contract holding signed claims. Collapsed into a flat registry here (see [Guide 4](./04-tradeoffs.md#21-onchainid-collapsed-into-a-flat-registry)). |
 | **Attestation** | A signed statement (EIP-712 payload) that an investor passed KYC, with a shelf life (`kycExpiry`). |
 | **Claim signer** | The single authorized address whose signature the registry trusts on the attestation path. |
 | **Compliance module** | A contract registered on the engine that either enforces one transfer rule (holder cap, jurisdiction, lockup) or observes balance changes through the lifecycle hooks (dividend distribution). |
 | **Lifecycle hook** | A post-transfer callback (`transferred`/`created`/`destroyed`) letting stateful modules update. |
 | **Forced recovery** | Custodian-only move of a full position from a lost wallet to a verified wallet registered under the same `investorId`, evicting the lost wallet from the registry, with supply unchanged. |
 | **Full / partial freeze** | Immobilizing an entire wallet, or a portion of a balance (a disputed lot, a pledge). |
-| **ISSUER / AGENT / CUSTODIAN** | The three roles: supply & config / compliance operations / recovery. See the [README matrix](../README.md#role-and-permission-matrix). |
+| **ISSUER / AGENT / CUSTODIAN** | The three roles: supply & config / compliance operations / recovery. See the [role matrix](./07-security.md#role-and-permission-matrix). |
 
 ---
 
 **See also:**
 - [Guide 2: Mathematics & Cryptography](./02-mathematics.md) - the EIP-712 digest, holder-count transitions, the lockup clock
 - [Guide 3: Architecture](./03-architecture.md) - how the four parts wire together
-- [Project README](../README.md) - scoping decisions and threat model in full
+- [Guide 7: Security](./07-security.md) - roles, threat model and trust assumptions in full

@@ -43,7 +43,7 @@ The gas benchmarks in [`test/gas/Gas.t.sol`](../../test/gas/Gas.t.sol) are measu
 
 **Pin documented limitations as tests.** Where the system deliberately does not defend against something (a `transferFrom` spender is not checked, a contract cannot be the claim signer, a pause does not stop administration), a test asserts the actual behaviour and its comment says so. If the behaviour changes, the test fails and the documentation has to change with it.
 
-**Check the tests against the bugs.** In the review, bugs 1 to 12 of the README's review notes, and hardening entries 1 and 3, were reintroduced into the code to confirm that at least one test fails without the fix. Bug 13 (in the deployment script), the defect introduced during the review and the terms wording were not checked that way. A regression test that passes against the unfixed code tests nothing.
+**Check the tests against the bugs.** In the review, bugs 1 to 12 of the [review notes](../08-review-notes.md), and hardening entries 1 and 3, were reintroduced into the code to confirm that at least one test fails without the fix. Bug 13 (in the deployment script), the defect introduced during the review and the terms wording were not checked that way. A regression test that passes against the unfixed code tests nothing.
 
 **Mocks isolate the unit under test; the scenarios use none.** [`MockModule`](../../test/helpers/MockModule.sol) is a real `AbstractComplianceModule` with a toggleable verdict and hook counters, so a token test can force a compliance rejection without depending on any real rule's semantics. The scenario, conformance and deployment suites wire the *real* modules, so the integration is shown separately from the isolation.
 
@@ -97,9 +97,9 @@ FOUNDRY_FUZZ_RUNS=20000 forge test --match-contract DividendDistributorTest
 
 ## 5. What the review changed in the tests
 
-Besides the regression tests for each bug ([Regressions](./14-regressions.md)), the review found problems in the tests themselves. The README lists them as test-suite findings; this is where each one landed in the catalogue.
+Besides the regression tests for each bug ([Regressions](./14-regressions.md)), the review found problems in the tests themselves. The [review notes](../08-review-notes.md#test-suite-findings) list them as test-suite findings; this is where each one landed in the catalogue.
 
-| Finding (README wording) | Where the change is documented |
+| Finding (review notes wording) | Where the change is documented |
 | :----------------------- | :----------------------------- |
 | The invariant handler caught every revert, so failures were invisible; two invariants could not fail | [Invariant Suite, what the review changed](./11-invariants.md#what-the-review-changed) |
 | A bare `vm.expectRevert()`; the signer fuzz test only tested rejection | Principle 1 above; [`testFuzz_registerWithAttestation_onlyClaimSignerAccepted`](../../test/unit/IdentityRegistry.t.sol#L627) |

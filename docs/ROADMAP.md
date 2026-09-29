@@ -31,7 +31,7 @@ The build order is a dependency order, not a preference. Each unit is one contra
 | 8         | Stretch: Dividends            | 4      | 4         | 100%     |
 | **TOTAL** |                               | **35** | **35**    | **100%** |
 
-After the build, the code went through three review rounds (documentation against code, fixes with regression tests, conformance and hardening); the README's [Review notes](../README.md#review-notes) list every finding with its fix and commit.
+After the build, the code went through three review rounds (documentation against code, fixes with regression tests, conformance and hardening); [Guide 8: Review Notes](./08-review-notes.md) lists every finding with its fix and commit.
 
 > The percentage tracks units of implementation, not lines of code. The identity and compliance layers are the architecturally substantive part of an ERC-3643 subset.
 

@@ -17,7 +17,7 @@ import {MockCurrency} from "../helpers/MockCurrency.sol";
 /**
  * @title EdgeCasesTest
  * @notice Edge cases and griefing vectors the unit suites do not reach, run against the system
- *         `Deploy` produces. The README's edge case table points at each test by name.
+ *         `Deploy` produces. The edge case table in docs/04-tradeoffs.md points at each test by name.
  */
 contract EdgeCasesTest is Test, Deploy {
     Deployment internal d;

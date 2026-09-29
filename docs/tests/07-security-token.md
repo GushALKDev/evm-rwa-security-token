@@ -152,7 +152,7 @@ Recovery evicts the lost wallet by calling `removeIdentity`, so it can no longer
 | [`test_forcedRecovery_revertsForSameWallet`](../../test/unit/SecurityToken.t.sol#L859) | Recovering into the same wallet reverts `RecoveryToSameWallet` |
 | [`test_forcedRecovery_isReentrancyGuarded`](../../test/unit/SecurityToken.t.sol#L835) | A registered module holding `CUSTODIAN_ROLE` reenters `forcedRecovery` from the recovery's own transfer hook: the module records that it tried, the reentry fails with `ReentrancyGuardReentrantCall`, the outer recovery completes with the partial freeze carried, and the target of the reentrant call keeps its balance |
 
-The investor check is the difference between recovery and confiscation. Without it, a custodian could move any balance to any verified wallet (including one they control as an onboarded investor), and the operation would look identical on-chain to a legitimate recovery. The residual risk, where a custodian key and an agent key collude to link an attacker wallet first, is stated in the [threat model](../../README.md#threat-model).
+The investor check is the difference between recovery and confiscation. Without it, a custodian could move any balance to any verified wallet (including one they control as an onboarded investor), and the operation would look identical on-chain to a legitimate recovery. The residual risk, where a custodian key and an agent key collude to link an attacker wallet first, is stated in the [threat model](../07-security.md#threat-model).
 
 The reentrancy test targets the one window where the freeze has been cleared on the lost wallet and not yet re-applied on the new one. The module is given the custodian role so that only the guard can stop it.
 

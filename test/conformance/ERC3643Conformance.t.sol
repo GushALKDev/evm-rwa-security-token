@@ -12,12 +12,12 @@ import {CountryRestrictionModule} from "../../src/compliance/modules/CountryRest
 
 /**
  * @title ERC3643ConformanceTest
- * @notice Checks the functions the README lists as implemented as in ERC-3643 against the EIP
+ * @notice Checks the functions docs/04-tradeoffs.md lists as implemented as in ERC-3643 against the EIP
  *         text, and compares every event this system emits for those operations with the event
  *         the EIP and the T-REX interfaces define.
  * @dev Event comparison is by topic0, the keccak256 of the canonical signature. Where the two
  *      differ, the test asserts this system's signature and names the standard one, so a change
- *      in either direction shows up here. Differences, all documented in the README:
+ *      in either direction shows up here. Differences, all documented in docs/04-tradeoffs.md:
  *
  *      - `AddressFrozen(address,bool)` here; the standard has `AddressFrozen(address,bool,address)`,
  *        the third argument being the agent that acted.

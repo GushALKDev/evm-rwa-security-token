@@ -181,7 +181,7 @@ The **swap case (`Δ = 0`)** is the one that makes the cap usable. If a full-bal
 Two guards keep the count honest:
 
 - The cap **cannot be set below the live count** (`setMaxHolders` reverts otherwise), or the invariant "count ≤ cap" would be violated retroactively.
-- The count is only ever mutated in hooks, which are `onlyCompliance`, so it cannot desync from real balances. That rests on two further guards. Every hook ignores a zero amount: a zero-amount send from a wallet holding nothing reads as "the sender left" and used to decrement the count (a real bug, see the [README review notes](../README.md#review-notes)). And the module refuses to be attached to a token that already has supply, or attached again after a removal, since it would start from zero or miss movements (see the [README](../README.md#architecture)).
+- The count is only ever mutated in hooks, which are `onlyCompliance`, so it cannot desync from real balances. That rests on two further guards. Every hook ignores a zero amount: a zero-amount send from a wallet holding nothing reads as "the sender left" and used to decrement the count (a real bug, see the [review notes](./08-review-notes.md#bugs-in-the-reviewed-code)). And the module refuses to be attached to a token that already has supply, or attached again after a removal, since it would start from zero or miss movements (see [Guide 3](./03-architecture.md#attaching-stateful-modules)).
 
 ---
 

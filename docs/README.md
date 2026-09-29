@@ -9,12 +9,12 @@
 
 | Document | Description | Status |
 | :------- | :---------- | :----- |
-| **[Project README](../README.md)** | Overview, scoping decisions, role matrix, threat model, build instructions | ✅ Complete |
-| **[ROADMAP](./ROADMAP.md)** | Nine-phase (0 to 8) implementation plan and progress tracker | ✅ Complete |
-| **[Terms document](./RealEstateNote-Terms.md)** | The legal instrument the token represents, anchored on-chain by content hash | ✅ Complete |
-| **[LICENSE](../LICENSE)** | MIT License | ✅ Complete |
+| **[Project README](../README.md)** | Overview, the asset, scoping summary, architecture, build instructions | Complete |
+| **[ROADMAP](./ROADMAP.md)** | Nine-phase (0 to 8) implementation plan and progress tracker | Complete |
+| **[Terms document](./RealEstateNote-Terms.md)** | The legal instrument the token represents, anchored on-chain by content hash | Complete |
+| **[LICENSE](../LICENSE)** | MIT License | Complete |
 
-> The project README is the **narrative source of truth**. The guides below go deeper on specific topics and deliberately reference the README rather than repeating its scoping and threat-model arguments.
+> The project README is the **narrative entry point**. The guides below go deeper on specific topics: the scope decisions are in Guide 4, the roles, threat model and trust assumptions in Guide 7, and the review findings in Guide 8.
 
 ---
 
@@ -27,6 +27,7 @@
     - The asset (a real-estate-backed note) and why it drives every design decision
     - The core inversion: permission by default, not balance by default
     - The four moving parts and how they relate
+    - The on-chain / off-chain boundary
     - Glossary of terms
 
 2. **[Mathematics & Cryptography](./02-mathematics.md)**
@@ -44,13 +45,15 @@
     - System overview and the two structural invariants
     - The identity registry and its two registration doors
     - The compliance engine, module integrity, and the pluggable seam
-    - The transfer gate as a superset check (one implementation, two callers)
+    - The dividend distributor and the rules for attaching stateful modules
+    - The transfer gate as a superset check (one implementation, two callers), the `_update` branches and the forced-recovery sequence
     - Lifecycle hooks and state consistency
     - Document anchoring
     - Deployment order and the binding graph
 
 4. **[Trade-offs](./04-tradeoffs.md)**
     - Scope decisions (ONCHAINID collapse, single claim signer, no partitions, no proxies)
+    - The ERC-3643 surface: what is implemented as in the standard, differently, or not at all
     - Design decisions inside the built code
     - Accepted risks (issuer authority, custodian blast radius, projection vs truth)
     - Trade-off summary table
@@ -76,7 +79,17 @@
 
 ### Verification
 
-7. **[Testing Documentation](./tests/README.md)**: a section, not a single guide
+7. **[Security](./07-security.md)**
+    - Role and permission matrix
+    - Threat model: compliance bypass, reentrancy, recovery abuse, key compromise and issuer authority
+    - Trust assumptions and limitations
+    - Static analysis triage
+
+8. **[Review Notes](./08-review-notes.md)**
+    - The 13 bugs of the three review rounds, each with cause, fix, commit and regression tests
+    - Hardening, test-suite and documentation findings
+
+9. **[Testing Documentation](./tests/README.md)**: a section, not a single guide
     - [Strategy](./tests/01-strategy.md): layers, principles, mocks, how to run the suite
     - One document per suite, cataloguing every test with a link to its code
     - Invariant coverage map: each property and what currently asserts it
@@ -102,6 +115,8 @@ docs/
 ├── 04-tradeoffs.md              # Decisions and accepted risks
 ├── 05-implementation.md         # Conventions, patterns, testing
 ├── 06-improvements.md           # What production would add back
+├── 07-security.md               # Roles, threat model, trust assumptions
+├── 08-review-notes.md           # Findings of the review rounds
 └── tests/                       # Testing section: strategy, per-suite catalogue, gaps
 ```
 
@@ -121,10 +136,11 @@ docs/
 
 1. [Architecture](./03-architecture.md) - system overview and trust boundaries
 2. [Mathematics & Cryptography](./02-mathematics.md) - replay closure and rule arithmetic
-3. [Project README: threat model](../README.md#threat-model) - access-control model and accepted risks
+3. [Security](./07-security.md) - access-control model, threat model and accepted risks
 4. [Trade-offs](./04-tradeoffs.md) - known limitations, stated deliberately
 5. [Implementation](./05-implementation.md) - invariants and testing strategy
 6. [Testing Documentation](./tests/README.md) - the invariant coverage map, then the per-suite catalogue
+7. [Review Notes](./08-review-notes.md) - what the review found and how each finding was closed
 
 ### For Reviewers Assessing Design Judgement
 
@@ -141,7 +157,7 @@ See [ROADMAP.md](./ROADMAP.md) for detailed progress across 9 phases (0 to 8) an
 
 **Current status:** Phases 0 to 8 complete (foundations, identity, compliance, document anchoring, the token, deployment, the scenario and invariant suites, documentation, and the dividend distributor).
 
-**Test suite:** 421 tests passing in 18 suites (`forge test`), 100% of branches and functions on every `src/` contract, and 100% of lines except one constant `return` line in each of the four modules (`forge coverage --report summary`, see the [README](../README.md#test-figures)). See the [testing section](./tests/README.md) for what each block covers.
+**Test suite:** 421 tests passing in 18 suites (`forge test`), 100% of branches and functions on every `src/` contract, and 100% of lines except one constant `return` line in each of the four modules (`forge coverage --report summary`, see the [testing section](./tests/README.md#current-status)). See the [testing section](./tests/README.md) for what each block covers.
 
 ---
 

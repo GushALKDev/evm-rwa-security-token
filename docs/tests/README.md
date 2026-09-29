@@ -84,6 +84,24 @@ From `forge coverage --report summary`:
 
 In each of the four modules the one unmarked line is the constant return of a `pure` view (`isPlugAndPlay` or `token`) that the unit tests call and assert. The 14 untaken `Deploy.s.sol` branches are the failure sides of the `require` checks in `_verify`. Both are explained in [Gaps & Roadmap](./12-gaps-and-roadmap.md#coverage-is-not-complete-on-every-metric).
 
+### Gas
+
+Ten gas benchmarks live in [`test/gas/`](../../test/gas/), outside the test count and the default and `ci` profiles. `FOUNDRY_PROFILE=gas forge test --isolate --gas-report` runs each call as its own transaction against the system `Deploy.s.sol` produces, which registers three rule modules (`MaxHoldersModule`, `CountryRestrictionModule`, `LockupModule`):
+
+| Operation | Gas |
+|---|---|
+| `transfer` | 100,089 |
+| `transferFrom` | 102,875 |
+| `mint` to a new holder | 136,270 |
+| `burn` (partial) | 68,466 |
+| `forcedRecovery` into an empty wallet | 145,320 |
+| `registerIdentity` | 95,856 |
+| `registerIdentityWithAttestation` | 102,000 |
+| `transfer` with `DividendDistributor` registered (4 modules) | 115,414 |
+| `deposit` (first deposit) | 115,567 |
+| `claim` | 101,315 |
+| `transfer` at the module cap (the 3 deployed rules plus 22 country rules, 25 modules) | 335,359 |
+
 ---
 
 ## Invariant Coverage Map
@@ -116,5 +134,5 @@ Every invariant from [Guide 5, Section 7](../05-implementation.md#7-invariants),
 - [Guide 3: Architecture](../03-architecture.md): the transfer gate and the binding graph
 - [Guide 4: Trade-offs](../04-tradeoffs.md): accepted risks the tests deliberately do not defend against
 - [Guide 5: Implementation](../05-implementation.md): conventions and the invariant table
-- [README review notes](../../README.md#review-notes): the findings the regression tests are numbered by
+- [Guide 8: Review Notes](../08-review-notes.md): the findings the regression tests are numbered by
 - [ROADMAP](../ROADMAP.md): phase status

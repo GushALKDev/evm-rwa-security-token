@@ -19,7 +19,7 @@
 
 ## 1. How to read this guide
 
-Every decision here is a *deliberate* exclusion or a *deliberate* choice between defensible alternatives, and each one buys or costs a security property. The most consequential arguments (the ONCHAINID collapse, the lockup model, the access-control threat model) are made in full in the [README](../README.md); this guide is the compact register of *what was decided and what the alternative would have cost*, with a pointer to the full argument where one exists.
+Every decision here is a *deliberate* exclusion or a *deliberate* choice between defensible alternatives, and each one buys or costs a security property. The most consequential arguments are made in full elsewhere (the lockup model in the [README](../README.md#why-the-lockup-runs-from-initial-acquisition-not-from-each-acquisition) and [Guide 2](./02-mathematics.md#6-the-lockup-clock), the access-control threat model in [Guide 7](./07-security.md#threat-model)); this guide is the compact register of *what was decided and what the alternative would have cost*, with a pointer to the full argument where one exists.
 
 A recurring theme: **excluding a feature sometimes forces a different rule, and the two cannot be reasoned about separately.** The clearest case is partitions → lockup model, below.
 
@@ -34,7 +34,7 @@ What was left out of the ERC-3643 / ERC-1400 surface, and why the omission is sa
 The four-contract ERC-3643 identity hierarchy exists to let **one identity be reused across many tokens and issuers**. With a single token and a single issuer, it is ceremony without benefit. The part that carries the actual security value, that verification should not rest on trusting whoever writes to the registry, is preserved through the signed attestation path.
 
 - **Cost of collapsing:** an identity here cannot be shared across tokens.
-- **Preserved:** the cryptographic trust model (signature over caller). See [README](../README.md#what-was-deliberately-left-out-and-why).
+- **Preserved:** the cryptographic trust model (signature over caller). See the [README](../README.md#the-two-registration-paths).
 
 ### 2.2 `TrustedIssuersRegistry` reduced to a single claim signer
 
@@ -66,6 +66,28 @@ The strict "12 months from each acquisition" reading is only safe if each *parce
 ### 2.5 No upgradeability, proxies, or factory
 
 A real deployment needs all three. They are **orthogonal** to the identity and compliance architecture being demonstrated, and a proxy layer would add indirection to read through with no insight gained. Explicitly a scope decision, not an oversight.
+
+### 2.6 ERC-3643 surface: implemented and not implemented
+
+Compared against the interfaces in the [EIP text](https://eips.ethereum.org/EIPS/eip-3643) and the T-REX reference (`IToken`, `IIdentityRegistry`, `IModularCompliance`, `IModule`). Sections 2.1 to 2.5 say why each part was left out; this table says which functions exist.
+
+| Area | Implemented as in the standard | Implemented differently | Not implemented |
+|---|---|---|---|
+| Token | `pause`, `unpause`, `setAddressFrozen`, `freezePartialTokens`, `unfreezePartialTokens`, `isFrozen`, `paused`, `identityRegistry()`, `compliance()` (both return an address) | `transfer` / `transferFrom` also require the **sender** to be verified (the standard checks only the recipient). `mint` runs the modular rules and the freeze check (the standard lets `mint` bypass compliance). `mint` and `burn` are gated by `DEFAULT_ADMIN_ROLE`, not by an agent. `getFrozenTokens` is `frozenTokens`. `recoveryAddress(lost, new, onchainID)` is `forcedRecovery(lost, new)`: no ONCHAINID argument, the two wallets must share an `investorId`, it is gated by `CUSTODIAN_ROLE`, and it skips the pause and every compliance rule. A token-level `canTransfer` view is added | `forcedTransfer`, all seven `batch*` functions, `setIdentityRegistry`, `setCompliance` (both are fixed in the constructor), `onchainID`, `setOnchainID`, `version`, `setName`, `setSymbol` |
+| Agent role | | OpenZeppelin `AccessControl` with `AGENT_ROLE`, `CUSTODIAN_ROLE` and `DEFAULT_ADMIN_ROLE` instead of `IAgentRole` (`addAgent`, `removeAgent`, `isAgent`) | |
+| Identity registry | | `registerIdentity(user, country, accredited, kycExpiry[, investorId])` stores attributes instead of linking an `IIdentity` contract. `deleteIdentity` is `removeIdentity`. `isVerified` checks a stored flag and `kycExpiry`, not claims. `identity` returns the stored record. `investorCountry` is `country`. Re-registering overwrites a record, which stands in for `updateCountry` and `updateIdentity`. `registerIdentityWithAttestation` (EIP-712, one claim signer) is added | `batchRegisterIdentity`, `contains`, `identityStorage`, `issuersRegistry`, `topicsRegistry` and their setters |
+| Registry split | | `TrustedIssuersRegistry` is reduced to one `claimSigner` | `IdentityRegistryStorage`, `ClaimTopicsRegistry`, ONCHAINID |
+| Compliance | `addModule`, `removeModule`, `canTransfer`, `transferred`, `created`, `destroyed` | `bindToken` is one-shot and cannot be rebound. `getModules`, `getTokenBound` and `isModuleBound` are `modules`, `token` and `isModuleRegistered`. `addModule` also checks that the module names this engine, that `canComplianceBind` allows it, and that the module reads the bound token (`bindToken` checks the same for modules registered earlier). The engine accepts at most 25 modules, the T-REX limit | `unbindToken`, `isTokenBound`, `callModuleFunction` |
+| Module | `name`, `isPlugAndPlay`, `canComplianceBind`, `isComplianceBound`, `bindCompliance`, `unbindCompliance` (called by the engine from `addModule` and `removeModule`) | `moduleTransferAction`, `moduleMintAction` and `moduleBurnAction` are `moduleTransferred`, `moduleCreated` and `moduleDestroyed`. `moduleCheck` takes no compliance argument. A module serves one engine, fixed in its constructor, rather than a list of bound compliances. A `token()` view is added | |
+
+The last row follows T-REX for the reason T-REX has it. A stateful module such as T-REX's `MaxBalanceModule` reports `isPlugAndPlay() == false`, and its `canComplianceBind` refuses a compliance whose token already has supply. Here `MaxHoldersModule` and `LockupModule` refuse a token with supply, and every stateful module refuses to be attached a second time (see [Guide 3](./03-architecture.md#attaching-stateful-modules)). T-REX also gates `recoveryAddress` to an agent, where this repository uses a separate `CUSTODIAN_ROLE`.
+
+The conformance suites in [`test/conformance/`](../test/conformance/) pin the remaining differences, compared by event signature (topic0) against the EIP text, the T-REX interfaces and the ERC-1643 issue:
+
+- **Events that match:** `Paused`, `Unpaused`, `TokensFrozen`, `TokensUnfrozen`, `ModuleAdded`, `ModuleRemoved`, `ComplianceBound`, `ComplianceUnbound` and ERC-1643's `DocumentUpdated`.
+- **Events that differ:** `AddressFrozen(address,bool)` against the standard's `(address,bool,address)`, which also names the agent; `RecoverySuccess(address,address,uint256,uint256,bool)` against `(address,address,address)`, which names the ONCHAINID; `IdentityRegistered(address,uint16,bool,uint64,bytes32,bool)` and `IdentityRemoved(address)` against the forms carrying an `IIdentity`; `IdentityRegistrySet` and `ComplianceSet` against `IdentityRegistryAdded` and `ComplianceAdded`; `TokenBound(address)` has the same signature but an indexed argument; ERC-1643's `DocumentRemoved(bytes32)` against `(bytes32,string,bytes32)`.
+- **ERC-1643 behaviour:** the timestamp is a `uint64` (ABI-compatible with the issue's `uint256`), an empty hash or URI is refused although the issue calls the hash optional, and an unknown name reverts.
+- **ERC-20 behaviour:** a transfer the gate refuses reverts rather than returning false, which ERC-20 allows; as in OpenZeppelin v5, spending an allowance emits no `Approval` event and an allowance of `type(uint256).max` is never decreased. EIP-712 signing matches the standard; contract signers (EIP-1271) are not supported.
 
 ---
 
@@ -122,7 +144,7 @@ ISSUER holds `DEFAULT_ADMIN_ROLE` and can self-grant `AGENT` and `CUSTODIAN`. Th
 - **Accepted:** the issuer is the authority, not an adversary.
 - **Mitigation path (not built):** put `DEFAULT_ADMIN_ROLE` behind a multisig + timelock, so self-granting a role becomes a visible, delayed governance action. Governance infrastructure, orthogonal to the architecture.
 
-Full treatment: [README threat model §4.2](../README.md#42-issuer-level-authority-accepted-not-defended).
+Full treatment: [Guide 7, threat model §4.2](./07-security.md#42-issuer-level-authority-accepted-not-defended).
 
 ### 4.2 A compromised custodian key is deterred, not prevented
 
@@ -130,7 +152,7 @@ Full treatment: [README threat model §4.2](../README.md#42-issuer-level-authori
 
 Recovery also bypasses the pause and the transfer gate, so no compliance rule limits it: a lockup still running or a frozen destination will not stop a custodian. That is deliberate, since the alternative is a compromised position stranded on a wallet the investor no longer controls, but it does mean the modular rule set is not a second line of defence against this key. The lifecycle hook still fires, and `LockupModule` carries the lockup start across rather than starting a new clock, so recovery neither extends nor shortens the holding period.
 
-- **The mitigation is auditability, not prevention.** This is why `CUSTODIAN_ROLE` deserves the highest key-management standard, not the lowest because it is rarely used. Blast radius, not frequency, sets the standard. Full treatment: [README threat model §4.1](../README.md#41-operational-key-compromise-defended).
+- **The mitigation is auditability, not prevention.** This is why `CUSTODIAN_ROLE` deserves the highest key-management standard, not the lowest because it is rarely used. Blast radius, not frequency, sets the standard. Full treatment: [Guide 7, threat model §4.1](./07-security.md#41-operational-key-compromise-defended).
 
 ### 4.3 On-chain verification is a projection
 
@@ -193,4 +215,4 @@ Each row names the test that pins the behaviour. Tests in `EdgeCases`, `Regressi
 **See also:**
 - [Guide 5: Implementation](./05-implementation.md) - how these decisions look in code
 - [Guide 6: Improvements](./06-improvements.md) - what a production version would add back
-- [README: standards and scoping](../README.md#standards-and-scoping) - the full scoping argument
+- [Guide 7: Security](./07-security.md) - roles, threat model and trust assumptions

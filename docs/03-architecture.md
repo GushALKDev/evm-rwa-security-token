@@ -18,13 +18,13 @@
 
 ---
 
-> This guide describes how the parts wire together. The *rationale* for what was scoped out (ONCHAINID, partitions, proxies) and the access-control threat model are argued in full in the [README](../README.md) and are not repeated here.
+> This guide describes how the parts wire together. The *rationale* for what was scoped out (ONCHAINID, partitions, proxies) is argued in [Guide 4](./04-tradeoffs.md#2-scope-decisions) and the access-control threat model in [Guide 7](./07-security.md); neither is repeated here.
 
 ---
 
 ## 1. System overview
 
-Eight contracts (plus shared `Roles` and an abstract module base), all built and tested: the token, `IdentityRegistry`, `ModularCompliance`, `DocumentRegistry` and four modules (`MaxHolders`, `CountryRestriction`, `Lockup` and `DividendDistributor`). `Deploy.s.sol` deploys seven of them; `DividendDistributor` is not part of the script and is registered separately. The [README](../README.md#architecture) carries the top-level diagrams (component graph, transfer gate, recovery sequence, deployment order); this guide goes seam by seam.
+Eight contracts (plus shared `Roles` and an abstract module base), all built and tested: the token, `IdentityRegistry`, `ModularCompliance`, `DocumentRegistry` and four modules (`MaxHolders`, `CountryRestriction`, `Lockup` and `DividendDistributor`). `Deploy.s.sol` deploys seven of them; `DividendDistributor` is not part of the script and is registered separately. The [README](../README.md#architecture) carries the top-level component diagram; this guide goes seam by seam.
 
 ```
                               ┌───────────────────────────────┐
@@ -57,8 +57,8 @@ Eight contracts (plus shared `Roles` and an abstract module base), all built and
 
 Two invariants define the shape:
 
-1. **The token references the engine, never the modules.** The rule set is pluggable at the engine, so it changes by governance action, not token redeploy. A stateful module registered on a live token would start with empty state and miss every move made while it was not registered. The engine enforces this: `addModule` asks each module `canComplianceBind` and refuses the holder cap and the lockup once the token has supply, and any stateful module (those two and the dividend distributor) the second time it is offered. See the [README](../README.md#architecture).
-2. **Every module answers to exactly one engine, and every engine to exactly one token.** Both bindings are set once and never rebindable. This is what keeps stateful rules from being corrupted by a second caller. Nothing checks that a stateful module's own token address matches the token bound to the engine, so that pairing is a deployment-time responsibility.
+1. **The token references the engine, never the modules.** The rule set is pluggable at the engine, so it changes by governance action, not token redeploy. A stateful module registered on a live token would start with empty state and miss every move made while it was not registered. The engine enforces this: `addModule` asks each module `canComplianceBind` and refuses the holder cap and the lockup once the token has supply, and any stateful module (those two and the dividend distributor) the second time it is offered. See [Attaching stateful modules](#attaching-stateful-modules).
+2. **Every module answers to exactly one engine, and every engine to exactly one token.** Both bindings are set once and never rebindable. This is what keeps stateful rules from being corrupted by a second caller. A module that reads balances must also read the engine's own token: `addModule` and `bindToken` reject a mismatch (`ModuleTokenMismatch`).
 
 ---
 
@@ -126,6 +126,24 @@ The three rule modules are each one rule. A fourth module, `DividendDistributor`
 
 `CountryRestriction` is a blocklist on the recipient: a restricted holder can still exit (dispose), they just cannot receive. The registry already is the allowlist. See [Guide 2 §5-6](./02-mathematics.md#5-holder-count-transitions-without-enumeration) for the holder-count and lockup arithmetic.
 
+### The dividend distributor: a module, not a rule
+
+The module interface has two halves: `moduleCheck`, which decides whether a transfer is allowed, and the lifecycle hooks, which observe that one settled. The three rule modules use both. The distributor implements `moduleCheck` as an unconditional `true` and puts all of its logic in the hooks, using the fan-out as an on-chain event bus and giving up the power of veto. Withholding income from a sanctioned holder is a matter for the token's freeze and identity controls, not the transfer gate: `claim` reverts while the holder is fully frozen or not verified (an expired KYC counts), the entitlement keeps accruing, and it becomes claimable once the block is lifted. A partial freeze does not block a claim, since it immobilises tokens, not the holder.
+
+That choice is why income distribution required no change to `SecurityToken` beyond a single view, and why it can be registered on a live deployment with `addModule`. It also has a limit worth stating: `moduleTransferred(from, to, amount)` is byte-identical for a sale and for a forced recovery, and those mean opposite things for anything that accrues value to a holder. The distributor therefore has to ask the token which it is (`recovering()`), making it one of the two modules that depend on the token being a `SecurityToken` rather than any ERC-20 (`LockupModule` asks the same question, see below), and it reads the token's freeze state and identity registry in `claim`. A system with several value-accruing modules would want the transfer kind passed through the hook itself.
+
+### Attaching stateful modules
+
+The engine refuses to attach a stateful module it cannot keep in step. A module only sees the movements that happen while it is registered, and nothing reconciles its state with existing balances, so the engine asks the module first (`canComplianceBind`, the T-REX shape) and reverts with `ModuleCannotBind` when it says no:
+
+- `MaxHoldersModule` and `LockupModule` refuse while the token has supply. A holder count added late would start at zero and make the first existing holder's exit underflow; a lockup added late would have no clock for existing holders.
+- Every stateful module (those two and `DividendDistributor`) refuses a second attach after a removal, because it missed every movement made while it was out.
+- `DividendDistributor` may join a live token once: its accumulator starts at zero, so balances that predate it simply earn from the first deposit it sees. After a removal it rejects `deposit` (`DistributorNotAttached`) and keeps paying what accrued while it was attached.
+- `CountryRestrictionModule` is stateless (`isPlugAndPlay`) and can be removed and attached again at any time.
+- A module that reads balances must read the engine's own token: `addModule` and `bindToken` both reject a mismatch (`ModuleTokenMismatch`).
+
+Rules can change without redeploying the token; a stateful rule has to be in place before the balances it tracks. Adding one to an issued token means deploying the token again with it.
+
 ---
 
 ## 4. The transfer gate: a superset check
@@ -156,6 +174,50 @@ The gate has a single internal status-code function, shared by:
 - **`canTransfer`** (the public view): returns a bool.
 
 They share one implementation precisely so the on-chain enforcement and the off-chain pre-check **cannot drift** for ordinary transfers and mints. A front end calling `canTransfer` gets exactly the answer `_update` would enforce for those, because it is the same code. Burn and forced recovery do not pass through the gate, so `canTransfer` is not a pre-check for those two shapes. `_update` branches explicitly by shape (mint `from == 0`, burn `to == 0`, forced recovery, transfer) so each calls the correct engine hook. The recovery branch skips the gate entirely rather than relaxing it: a pause or a modular rule must not strand a compromised position on a wallet the investor no longer controls, and the checks that do matter there are performed inside `forcedRecovery` itself. The lifecycle hook still fires, so stateful modules keep tracking the movement even though their verdict on it is not consulted. Two modules cannot read a recovery from the hook arguments alone, because they look like a sale: `LockupModule` and `DividendDistributor` ask the token `recovering()` and move the lockup start and the unclaimed income with the position instead of treating the destination as a new buyer. The [README](../README.md#why-a-permissioned-token-is-not-an-erc-20) covers the semantics.
+
+### How `_update` branches
+
+Every mint, burn and transfer in OZ v5 funnels through `_update`, so the gate lives there and no ERC-20 entrypoint can go around it. It branches by shape, and each branch fires the engine hook matching what actually happened:
+
+```
+_update(from, to, amount)
+   │
+   ├─ paused && !_recovering ─────────────────► revert EnforcedPause
+   │
+   ├─ from == 0   MINT      →  _checkTransfer → move → compliance.created(to)
+   ├─ to   == 0   BURN      →  (no gate)      → move → compliance.destroyed(from)
+   ├─ _recovering RECOVERY  →  (gate skipped) → move → compliance.transferred(...)
+   └─ otherwise   TRANSFER  →  _checkTransfer → move → compliance.transferred(...)
+```
+
+The `canTransfer` view checks the pause itself before running the same status-code function. The two non-obvious branches:
+
+- **Burn runs no gate.** The issuer-facing `burn` has already reconciled the frozen portion, and there is no recipient to verify. A freeze must not shelter tokens from the issuer retiring a position under a court order or redemption.
+- **Recovery skips the gate entirely** rather than relaxing it, because every check it would run is either already checked inside `forcedRecovery` (destination verified, same `investorId`, sender's freeze cleared) or is the wrong question: an unexpired lockup or an exhausted holder cap must not strand a compromised position. The lifecycle hook still fires, so stateful modules keep tracking the move even though their verdict on it is not consulted.
+
+### The forced-recovery sequence
+
+The one flow that touches all three contracts, and the one with the largest blast radius:
+
+```
+CUSTODIAN ──► forcedRecovery(lostWallet, newWallet)          [nonReentrant]
+   │
+   ├─ 1. reject if same wallet
+   ├─ 2. registry.isVerified(newWallet)          destination must be onboarded
+   ├─ 3. investorId(lost) == investorId(new)     both wallets, one investor
+   ├─ 4. balance != 0
+   │
+   ├─ 5. snapshot freeze state (partial amount + full flag)
+   ├─ 6. clear lost wallet's freeze state        emits TokensUnfrozen / AddressFrozen(false)
+   ├─ 7. registry.removeIdentity(lostWallet)     skipped if the agent already removed it
+   │
+   ├─ 8. _recovering = true → _transfer → _recovering = false
+   │
+   ├─ 9. re-apply the snapshotted freeze on newWallet
+   └─ 10. emit RecoverySuccess(lost, new, amount, frozen, wasFullyFrozen)
+```
+
+Steps 5-9 are why recovery relocates a position without laundering a hold: a frozen lot arrives frozen at its new address, and the event log shows both halves. During step 8 the lifecycle hook fires, and the two modules that hold per-wallet state ask the token whether a recovery is in progress: `LockupModule` moves the lockup start instead of starting a fresh clock (the destination keeps the earlier of the two starts), and `DividendDistributor` moves the unclaimed income. Step 3 works on a wallet the agent already removed, because removal keeps the `investorId`. Step 3 is what keeps a compromised custodian key from recovering into an arbitrary verified wallet; see the [threat model](./07-security.md#3-recovery-abuse-constrained-and-auditable-not-prevented) for how far that constraint actually goes.
 
 ---
 
@@ -234,9 +296,11 @@ The order is worth stating because the intuitive one is wrong. "Engine, modules,
 
 The last grant is the one non-obvious edge: `forcedRecovery` calls `removeIdentity` on the registry, which is `AGENT`-gated, so the **token contract itself** holds `AGENT_ROLE` on the registry. The role is held by code, not a person. It would also permit both `registerIdentity` overloads, but the token's code calls only `removeIdentity`, and only inside recovery. `Deploy.s.sol` performs this wiring and reverts with `TermsHashMismatch` unless the terms file hashes to the pinned `TERMS_HASH`, so a drifted document fails the deployment; it then checks that the registry stored that hash. Its limitations: the wiring calls are admin-gated, so the executing account must be the issuer and a real deployment needs a deploy-then-handover step; the three operator roles default to the broadcasting account when the `RWA_ISSUER`, `RWA_AGENT` and `RWA_CUSTODIAN` environment variables are unset; and `DividendDistributor` is not deployed. See [Guide 5](./05-implementation.md) for the script and the invariant suite that exercises the assembled system.
 
+`Deploy.s.sol` pins the terms hash in `TERMS_HASH` and `DeployTest` pins the same value independently; `test_deploy_revertsWhenTermsDrift` shows a drifted document failing the deployment. Amending the terms before a deployment therefore means changing the file and both constants on purpose; after deployment, it goes through `setDocument` on the registry. The script wires the three rule modules only (`_verify` requires exactly three), and `test_run_defaultsEveryRoleToTheBroadcaster` and `test_run_readsOperatorsFromTheEnvironment` run `run()` end to end with the operator variables unset and set.
+
 ---
 
 **See also:**
 - [Guide 4: Trade-offs](./04-tradeoffs.md) - the scope decisions behind this shape
 - [Guide 5: Implementation](./05-implementation.md) - deployment script, invariants, gas notes
-- [README: role & permission matrix](../README.md#role-and-permission-matrix) - who can call what, and the threat model
+- [Guide 7: Security](./07-security.md) - who can call what, and the threat model

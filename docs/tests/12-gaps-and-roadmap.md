@@ -10,7 +10,7 @@
 
 ### Deployment handover
 
-`_deploy` requires the executing account to be the issuer, since the wiring calls are admin-gated. Passing a different issuer grants that address admin and then reverts on the first wiring call. A real deployment wants deploy-then-handover: the deployer wires everything, then transfers `DEFAULT_ADMIN_ROLE` to the real issuer. The script's NatSpec documents this and the README lists it under trust assumptions; it is untested because the handover step does not exist yet.
+`_deploy` requires the executing account to be the issuer, since the wiring calls are admin-gated. Passing a different issuer grants that address admin and then reverts on the first wiring call. A real deployment wants deploy-then-handover: the deployer wires everything, then transfers `DEFAULT_ADMIN_ROLE` to the real issuer. The script's NatSpec documents this and [Guide 7](../07-security.md#trust-assumptions-and-limitations) lists it under trust assumptions; it is untested because the handover step does not exist yet.
 
 ### Module addition and removal are not in the invariant handler
 
@@ -108,7 +108,7 @@ These are **accepted design positions**, not gaps. They are listed here because 
 | **A withdrawn identity leaves a suspended balance** | An unverified address can still *hold*, just not move. This is why the coverage map phrases the property as "no unverified address can increase its balance". Confiscation is the issuer's burn or the custodian's recovery, both deliberate acts |
 | **Modules are trusted code** | A registered module can revert every transfer or consume gas in the hook fan-out, which the engine bounds at 25 modules ([`test_addModule_capsTheModuleCount`](../../test/unit/ModularCompliance.t.sol#L195)). Vetting what gets registered is governance |
 
-Full treatment of each in [Guide 4: Trade-offs](../04-tradeoffs.md) and the [README threat model](../../README.md#threat-model).
+Full treatment of each in [Guide 4: Trade-offs](../04-tradeoffs.md) and the [threat model](../07-security.md#threat-model).
 
 ---
 

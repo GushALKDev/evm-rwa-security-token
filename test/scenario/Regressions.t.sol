@@ -27,7 +27,7 @@ import {ModularCompliance} from "../../src/compliance/ModularCompliance.sol";
  *      fix as well: `test_claim_allowedUnderPartialFreeze` (bug 5),
  *      `test_distributor_lateAttachSplitsLaterDeposits` and
  *      `test_addModule_statelessModuleCanBeReattached` (both bug 6). The "Bugs in the reviewed code"
- *      block of the README review notes gives each bug's cause, fix and commit.
+ *      block of docs/08-review-notes.md gives each bug's cause, fix and commit.
  */
 contract RegressionsTest is Test, Deploy {
     Deployment internal d;

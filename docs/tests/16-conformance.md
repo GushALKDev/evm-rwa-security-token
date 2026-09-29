@@ -1,7 +1,7 @@
 # Standards Conformance (Review)
 
 **Suites:** [`ERC20ConformanceTest`](../../test/conformance/ERC20Conformance.t.sol) (12) · [`ERC3643ConformanceTest`](../../test/conformance/ERC3643Conformance.t.sol) (10) · [`ERC1643ConformanceTest`](../../test/conformance/ERC1643Conformance.t.sol) (6) · [`EIP712ConformanceTest`](../../test/conformance/EIP712Conformance.t.sol) (6)
-**Covers:** the [README's standards section](../../README.md#standards-and-scoping) · ERC-20 · ERC-3643 (T-REX) · ERC-1643 · EIP-712
+**Covers:** [Guide 4 §2.6](../04-tradeoffs.md#26-erc-3643-surface-implemented-and-not-implemented) · ERC-20 · ERC-3643 (T-REX) · ERC-1643 · EIP-712
 
 ---
 
@@ -34,7 +34,7 @@ The zero-amount test is the standard's side of review findings 1 and 12: zero-va
 
 ## ERC-3643
 
-The suite checks the functions the README lists as implemented as in ERC-3643 against the EIP text, and compares each event this system emits for those operations with the one the EIP and the T-REX interfaces define.
+The suite checks the functions [Guide 4 §2.6](../04-tradeoffs.md#26-erc-3643-surface-implemented-and-not-implemented) lists as implemented as in ERC-3643 against the EIP text, and compares each event this system emits for those operations with the one the EIP and the T-REX interfaces define.
 
 | Test | Asserts |
 | :--- | :------ |
@@ -49,7 +49,7 @@ The suite checks the functions the README lists as implemented as in ERC-3643 ag
 | [`test_tokenBoundEvent_sameSignatureIndexedHere`](../../test/conformance/ERC3643Conformance.t.sol#L247) | `TokenBound` has the standard signature `TokenBound(address)`; the suite's comment notes the address is indexed here and not in the standard, which a `topic0` comparison cannot show |
 | [`test_moduleAttachmentApi`](../../test/conformance/ERC3643Conformance.t.sol#L253) | As in the T-REX `IModule`, `bindCompliance` from anyone but the engine reverts `OnlyCompliance`; the lockup reports not plug and play and cannot bind again, the country module reports plug and play and can |
 
-The differences are all listed in the README's ERC-3643 section. `IdentityRegistrySet` and `ComplianceSet` (emitted once, in the token constructor, where the standard has `IdentityRegistryAdded` and `ComplianceAdded` from its setters) are named in the suite's NatSpec but not asserted by a test.
+The differences are all listed in [Guide 4 §2.6](../04-tradeoffs.md#26-erc-3643-surface-implemented-and-not-implemented). `IdentityRegistrySet` and `ComplianceSet` (emitted once, in the token constructor, where the standard has `IdentityRegistryAdded` and `ComplianceAdded` from its setters) are named in the suite's NatSpec but not asserted by a test.
 
 ---
 

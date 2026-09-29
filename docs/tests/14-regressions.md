@@ -1,11 +1,11 @@
 # Regressions (Review)
 
 **Suites:** [`RegressionsTest`](../../test/scenario/Regressions.t.sol) (29 scenario)
-**Covers:** the [README review notes](../../README.md#bugs-in-the-reviewed-code), bugs 1 to 9 and 12
+**Covers:** the [review notes](../08-review-notes.md#bugs-in-the-reviewed-code), bugs 1 to 9 and 12
 
 ---
 
-> One test per bug found in the review rounds, run against the system [`Deploy`](../../script/Deploy.s.sol) produces. Each of these bugs was reproduced first, got a regression test that failed against the unfixed code, and was then fixed. The sections below follow the numbering and the wording of the "Bugs in the reviewed code" block of the README's review notes, so a bug can be traced from the README to its tests and back. Three tests are the exception: they pin paths a fix leaves open and passed before it too. They are `test_claim_allowedUnderPartialFreeze` in the section for bug 5, and `test_distributor_lateAttachSplitsLaterDeposits` and `test_addModule_statelessModuleCanBeReattached` in the section for bug 6.
+> One test per bug found in the review rounds, run against the system [`Deploy`](../../script/Deploy.s.sol) produces. Each of these bugs was reproduced first, got a regression test that failed against the unfixed code, and was then fixed. The sections below follow the numbering and the wording of the "Bugs in the reviewed code" block of the [review notes](../08-review-notes.md), so a bug can be traced from the review notes to its tests and back. Three tests are the exception: they pin paths a fix leaves open and passed before it too. They are `test_claim_allowedUnderPartialFreeze` in the section for bug 5, and `test_distributor_lateAttachSplitsLaterDeposits` and `test_addModule_statelessModuleCanBeReattached` in the section for bug 6.
 >
 > The other findings are about one contract or the deployment script, so their tests live in the unit suites. They are listed in [Findings tested in the unit suites](#findings-tested-in-the-unit-suites) at the end of this page.
 
@@ -88,7 +88,7 @@ A holder cap added to a token with holders started at zero and made the first ex
 | [`test_distributor_lateAttachSplitsLaterDeposits`](../../test/scenario/Regressions.t.sol#L426) | A distributor attached once to a token that already has holders at 1:3 splits its first deposit 200/600, each within one wei below |
 | [`test_addModule_statelessModuleCanBeReattached`](../../test/scenario/Regressions.t.sol#L461) | The country module, removed with supply present, is added back and registered |
 
-The last two are not in the README's list for this finding; they pin the two cases the fix deliberately still allows, so that it cannot be tightened into refusing them. The follow-up commit of the finding (the attachment events name the bound engine) is the entry under "Introduced and fixed during the review", tested in the unit suite, see [below](#findings-tested-in-the-unit-suites).
+The last two are not in the review notes' list for this finding; they pin the two cases the fix deliberately still allows, so that it cannot be tightened into refusing them. The follow-up commit of the finding (the attachment events name the bound engine) is the entry under "Introduced and fixed during the review", tested in the unit suite, see [below](#findings-tested-in-the-unit-suites).
 
 ---
 
@@ -142,7 +142,7 @@ The last test is the boundary: the modules step aside for a zero amount, the tok
 
 ## Findings tested in the unit suites
 
-These entries concern one contract or the deployment script, so their tests sit next to the rest of that contract's tests. The names and numbers are the README's, in its three blocks: bugs in the reviewed code, the defect introduced and fixed during the review, and hardening and documentation. Only the bugs have a regression test that failed against the unfixed code.
+These entries concern one contract or the deployment script, so their tests sit next to the rest of that contract's tests. The names and numbers are those of the review notes, in their three blocks: bugs in the reviewed code, the defect introduced and fixed during the review, and hardening and documentation. Only the bugs have a regression test that failed against the unfixed code.
 
 | Entry | Tested by | Documented in |
 | :---- | :-------- | :------------ |

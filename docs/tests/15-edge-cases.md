@@ -61,7 +61,7 @@ The two currency tests use `FlakyCurrency`, defined in the same file, which can 
 | :--- | :------ |
 | [`test_pause_againstEachRoleAction`](../../test/scenario/EdgeCases.t.sol#L289) | While paused: mint, burn, transfer and `transferFrom` each revert `EnforcedPause`. Agent administration (both freezes, set and cleared, identity registration and removal, the holder cap, the lockup period, the country list), issuer module removal, a distributor deposit and a claim all complete, and custodian recovery moves the whole balance |
 
-The pause stops every movement of the token except forced recovery, and nothing else. Freezes, identity changes and rule parameters stay available because they are how the desk responds to the incident the pause was called for; the distributor moves the settlement currency, not the token. This is the behaviour the README documents, pinned in one test so a change to it is visible.
+The pause stops every movement of the token except forced recovery, and nothing else. Freezes, identity changes and rule parameters stay available because they are how the desk responds to the incident the pause was called for; the distributor moves the settlement currency, not the token. This is the behaviour [Guide 7](../07-security.md#trust-assumptions-and-limitations) documents, pinned in one test so a change to it is visible.
 
 ---
 

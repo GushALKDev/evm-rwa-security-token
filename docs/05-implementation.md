@@ -40,7 +40,7 @@ src/
 └── SecurityToken.sol                  the gated ERC-20                 [built]
 ```
 
-As of the current state: **421 tests passing** in 18 suites (387 concrete, 22 fuzz, 12 stateful invariants; `forge test`), with 100% of branches and functions on every `src/` contract, and 100% of lines except one constant `return` line in each of the four modules (`forge coverage --report summary`, see the [README](../README.md#test-figures)).
+As of the current state: **421 tests passing** in 18 suites (387 concrete, 22 fuzz, 12 stateful invariants; `forge test`), with 100% of branches and functions on every `src/` contract, and 100% of lines except one constant `return` line in each of the four modules (`forge coverage --report summary`, see the [testing index](./tests/README.md#current-status)).
 
 ---
 
