@@ -39,3 +39,53 @@ jobs:
 
       - name: Run Forge tests
         run: forge test -vvv
+
+      # Testnet tooling (script/testnet), kept in its own profile so the protocol's test figures stay unchanged.
+      - name: Run testnet tooling tests
+        run: FOUNDRY_PROFILE=testnet forge test -vvv
+
+  app:
+    name: Demo app
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    defaults:
+      run:
+        working-directory: app
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          persist-credentials: false
+          # The parity step deploys the contracts to a local chain
+          submodules: recursive
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Install Foundry
+        uses: foundry-rs/foundry-toolchain@v1
+        with:
+          # Same version as the local toolchain used for the figures in the docs
+          version: v1.7.1
+
+      - name: Install
+        run: npm ci --no-audit --no-fund
+
+      - name: Type check
+        run: npm run typecheck
+
+      - name: Unit tests
+        run: npm test
+
+      # One step, so the anvil node lives through the tests. It is started here with its output detached:
+      # a background process that keeps the step's output open can keep the step from finishing.
+      - name: Parity with the contracts
+        run: |
+          anvil --silent --chain-id 31337 > /dev/null 2>&1 &
+          for _ in $(seq 1 50); do cast chain-id >/dev/null 2>&1 && break; sleep 0.2; done
+          ./scripts/local-chain.sh
+          LOCAL_RPC=http://127.0.0.1:8545 npx vitest run scripts
+
+      - name: Build
+        run: npm run build

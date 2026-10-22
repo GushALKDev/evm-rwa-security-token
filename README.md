@@ -7,7 +7,7 @@
 
 A proof-of-concept for compliant tokenization of a real-world financial asset (a real-estate-backed note) as a permissioned security token, modeling the identity, compliance, and custody architecture used by regulated digital-asset platforms.
 
-> **Proof of concept. Not audited and not deployed.** This code is educational and is not fit for production or for representing real financial instruments.
+> **Proof of concept. Not audited and not deployed on any mainnet.** This code is educational and is not fit for production or for representing real financial instruments.
 
 **Status.** All nine phases of the [roadmap](#roadmap) are complete: the identity registry, the compliance engine and its four modules, document anchoring, the token, deployment, the test suites, the documentation and the dividend distributor. The code was then reviewed in three rounds (see [Review](#review)).
 
@@ -22,6 +22,14 @@ A proof-of-concept for compliant tokenization of a real-world financial asset (a
 - **Recovery that relocates a position without laundering it.** A custodian can move a lost wallet's balance only to a verified wallet of the same investor, and freezes, the lockup start and unclaimed dividends travel with it.
 - **Dividends without enumeration.** A distributor module accrues income per holder with an accumulator, pays by pull, and rounds so that it stays solvent.
 - **Reviewed and tested.** 421 tests including 12 stateful invariants, 100% branch and function coverage on every `src/` contract, and three review rounds whose 13 bugs each have a regression test that failed against the unfixed code.
+
+---
+
+## Demo app
+
+A web app in [`app/`](app/) runs the token on Base Sepolia with testnet tokens. Without a wallet, anyone can walk every check of the transfer gate on a set of seeded wallets, each of which stops at a different check. With one, a visitor can verify their wallet at a testnet desk that stands in for the KYC provider, the issuer and the paying agent, receive notes, send them through the gate, pay a coupon and claim their share. The deployment in [`script/testnet/`](script/testnet/) runs `script/Deploy.s.sol`'s deployment unchanged, then, through the contracts' own functions, attaches the dividend distributor, restricts two jurisdictions and shortens the lockup from 365 days to 5 minutes so a visitor can see it lift. What each stand-in does and does not check, how to run the app against a local chain, and the deployment steps: [app/README.md](app/README.md).
+
+<!-- Live: https://rwa-poc.gushalk.workers.dev -->
 
 ---
 
@@ -178,7 +186,22 @@ forge build
 forge test
 ```
 
-Formatting is `forge fmt`, configured by the `[fmt]` section of `foundry.toml`. CI ([`.github/workflows/test.yml`](.github/workflows/test.yml)) runs `forge fmt --check`, `forge build --sizes` and `forge test -vvv` under `FOUNDRY_PROFILE=ci` on every push and pull request.
+Formatting is `forge fmt`, configured by the `[fmt]` section of `foundry.toml`. CI ([`.github/workflows/test.yml`](.github/workflows/test.yml)) runs `forge fmt --check`, `forge build --sizes` and `forge test -vvv` under `FOUNDRY_PROFILE=ci` on every push and pull request, then the testnet tooling's own tests, and the demo app's type check, unit tests, parity suite against a local deployment and build.
+
+The testnet tooling has its own suite, kept out of the protocol's figures below:
+
+```bash
+FOUNDRY_PROFILE=testnet forge test
+```
+
+```
+src/              the protocol: token, identity registry, compliance engine and modules, document registry
+script/           Deploy.s.sol, the deployment of the seven contracts
+script/testnet/   testnet-only stand-ins and the Base Sepolia deployment, with their tests in test/
+test/             unit, scenario, conformance, invariant and gas suites
+docs/             the guides, the test catalogue, the roadmap and the anchored terms
+app/              the demo app
+```
 
 | Area | Result |
 |---|---|
