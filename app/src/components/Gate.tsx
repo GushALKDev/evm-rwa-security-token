@@ -7,7 +7,7 @@ import { useParties, useRestricted, type PartyData } from '../hooks/useTokenData
 import { useTx } from '../hooks/useTx'
 import { securityTokenAbi, tokenAbi } from '../lib/abi'
 import { countryLabel } from '../lib/countries'
-import { formatDate, formatEurc, formatNotes, parseAmount, toInput } from '../lib/format'
+import { formatDate, formatEurc, formatNoteCount, formatNotes, parseAmount, toInput } from '../lib/format'
 import {
   evaluateGate,
   freeBalance,
@@ -94,7 +94,7 @@ function PartyField({
 /** One line on a wallet: what it holds and where its identity stands, at the chain's time. */
 function partySummary(p: PartyData | undefined, model: TokenModel): string {
   if (!p) return 'Reading the wallet…'
-  const notes = `${formatNotes(p.balance)} notes`
+  const notes = formatNoteCount(p.balance)
   const frozen = p.frozen ? ', wallet frozen' : p.frozenTokens > 0n ? `, ${formatNotes(p.frozenTokens)} frozen` : ''
   const why = identityWhy(p, model.chainTime)
   const id =
@@ -476,7 +476,7 @@ function Send({
           })
         }
       >
-        {busy ?? (result.ok === true ? `Send ${formatNotes(amount)} notes` : 'The gate stops this transfer')}
+        {busy ?? (result.ok === true ? `Send ${formatNoteCount(amount)}` : 'The gate stops this transfer')}
       </button>
     </div>
   )

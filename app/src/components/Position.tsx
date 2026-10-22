@@ -2,7 +2,7 @@ import { useConnection } from 'wagmi'
 import { chain, links } from '../config/chain'
 import { navigate } from '../hooks/useRoute'
 import { countryLabel } from '../lib/countries'
-import { formatDate, formatDuration, formatEurc, formatNotes, formatTimestamp, shortAddress } from '../lib/format'
+import { formatDate, formatDuration, formatEurc, formatNoteCount, formatNotes, formatTimestamp, shortAddress } from '../lib/format'
 import { identityWhy } from '../lib/gate'
 import type { AccountView, TokenModel } from '../lib/model'
 import { Link } from './Sections'
@@ -88,7 +88,7 @@ function Summary({ model, acc }: { model: TokenModel; acc: AccountView }) {
         {p.frozen || p.frozenTokens > 0n ? (
           <div className="row">
             <dt>Frozen</dt>
-            <dd className="tone-danger">{p.frozen ? 'The whole wallet' : `${formatNotes(p.frozenTokens)} notes`}</dd>
+            <dd className="tone-danger">{p.frozen ? 'The whole wallet' : formatNoteCount(p.frozenTokens)}</dd>
           </div>
         ) : null}
         <div className="row">

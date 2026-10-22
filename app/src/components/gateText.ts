@@ -1,6 +1,6 @@
 // Sentences for the gate's checks, from the mirror's structured reasons and the live values behind them.
 import { countryLabel } from '../lib/countries'
-import { formatDate, formatDuration, formatNotes, formatTimestamp, shortAddress } from '../lib/format'
+import { formatDate, formatDuration, formatNoteCount, formatNotes, formatTimestamp, shortAddress } from '../lib/format'
 import { freeBalance, unlocksAt, type Check, type PartyState, type Revert } from '../lib/gate'
 import type { TokenModel } from '../lib/model'
 
@@ -83,8 +83,8 @@ export function checkText(
       const frozen = p.frozenTokens > 0n ? `, ${formatNotes(p.frozenTokens)} frozen` : ''
       detail =
         c.why === 'enough'
-          ? `${formatNotes(freeBalance(p))} of ${formatNotes(p.balance)} notes free${frozen}.`
-          : `Only ${formatNotes(freeBalance(p))} of ${formatNotes(p.balance)} notes free${frozen}; ${formatNotes(amount)} requested.`
+          ? `${formatNotes(freeBalance(p))} of ${formatNoteCount(p.balance)} free${frozen}.`
+          : `Only ${formatNotes(freeBalance(p))} of ${formatNoteCount(p.balance)} free${frozen}; ${formatNotes(amount)} requested.`
       break
     }
     case 'zeroAmount':

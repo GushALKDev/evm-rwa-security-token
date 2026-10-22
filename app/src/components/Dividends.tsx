@@ -4,7 +4,7 @@ import { useCorrection } from '../hooks/useTokenData'
 import { useTx } from '../hooks/useTx'
 import { deskCallAbi, distributorCallAbi } from '../lib/abi'
 import { accumulated, couponAmount, depositEffect, perNote } from '../lib/dividends'
-import { formatDuration, formatEurc, formatNotes, formatTimestamp } from '../lib/format'
+import { formatDuration, formatEurc, formatNoteCount, formatTimestamp } from '../lib/format'
 import { identityWhy } from '../lib/gate'
 import { labelOf, type TokenModel } from '../lib/model'
 
@@ -60,7 +60,7 @@ function CouponCard({ model, onConnect }: { model: TokenModel; onConnect: () => 
           <div className="row">
             <dt>Deposits</dt>
             <dd>
-              {formatEurc(amount)} EURC <span className="faint">{formatEurc(st.couponPerNote)} for each of {formatNotes(live.totalSupply)} notes</span>
+              {formatEurc(amount)} EURC <span className="faint">{formatEurc(st.couponPerNote)} for each of {formatNoteCount(live.totalSupply)}</span>
             </dd>
           </div>
           {after ? (
@@ -138,7 +138,7 @@ function IncomeCard({ model }: { model: TokenModel }) {
         </span>
         <span className="hint">
           {p.balance > 0n
-            ? `Accrues to your ${formatNotes(p.balance)} notes with every coupon paid while you hold them.`
+            ? `Accrues to your ${formatNoteCount(p.balance)} with every coupon paid while you hold them.`
             : 'Hold notes when a coupon is paid to earn a share of it.'}
         </span>
       </div>

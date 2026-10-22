@@ -81,7 +81,8 @@ export function WalletButton({ onConnect }: { onConnect: () => void }) {
           'Connecting…'
         ) : (
           <>
-            Connect<span className="label-long"> wallet</span>
+            <span className="label-long">Connect wallet</span>
+            <span className="label-short">Connect</span>
           </>
         )}
       </button>

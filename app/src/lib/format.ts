@@ -25,6 +25,11 @@ export function formatNotes(value: bigint): string {
   return s.endsWith('.') ? `${s}0` : s
 }
 
+/** A note amount with its noun: 1 note, 2.5 notes. */
+export function formatNoteCount(value: bigint): string {
+  return `${formatNotes(value)} ${value === 10n ** 18n ? 'note' : 'notes'}`
+}
+
 /**
  * A settlement currency amount, 6 decimals. To the cent when it is a whole number of cents; otherwise every unit,
  * since the distributor rounds payouts down by a unit and a cent figure would hide that or overstate it.

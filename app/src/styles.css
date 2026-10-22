@@ -1437,9 +1437,16 @@ td .sub {
 }
 
 /* Below this width the wordmark and both header buttons only share a row with the shorter label. */
+.label-short {
+  display: none;
+}
+
 @media (max-width: 400px) {
   .header-actions .label-long {
     display: none;
+  }
+  .header-actions .label-short {
+    display: inline;
   }
 }
 

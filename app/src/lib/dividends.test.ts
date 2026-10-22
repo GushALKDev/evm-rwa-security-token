@@ -12,7 +12,7 @@ import {
   depositEffect,
   perNote,
 } from './dividends'
-import { formatEurc, formatNotes, parseAmount, toInput } from './format'
+import { formatEurc, formatNoteCount, formatNotes, parseAmount, toInput } from './format'
 
 describe('the accumulator', () => {
   it('pays a sole holder the deposit, rounded down by the scaling', () => {
@@ -90,6 +90,12 @@ describe('format', () => {
     expect(formatNotes(10n ** 18n - 1n)).toBe('0.9999')
     expect(formatNotes(1n)).toBe('< 0.0001')
     expect(formatNotes(1_500n * 10n ** 18n)).toBe('1,500')
+  })
+
+  it('names one note in the singular', () => {
+    expect(formatNoteCount(10n ** 18n)).toBe('1 note')
+    expect(formatNoteCount(2n * 10n ** 18n)).toBe('2 notes')
+    expect(formatNoteCount(10n ** 18n / 2n)).toBe('0.5 notes')
   })
 
   it('shows EURC to the cent when exact, and every unit otherwise', () => {
