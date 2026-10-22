@@ -121,7 +121,7 @@ contract Deploy is Script {
      *      never sends the wiring calls.
      * @return The deployed system.
      */
-    function run() external returns (Deployment memory) {
+    function run() external virtual returns (Deployment memory) {
         // tx.origin is read here only to find the broadcasting account, never for authorization:
         // this is a script executed off-chain by forge, and no deployed contract reads tx.origin.
         // A bare vm.startBroadcast() signs as tx.origin, so defaulting to it hands the roles to the
