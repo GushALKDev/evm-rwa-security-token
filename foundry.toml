@@ -5,13 +5,20 @@ libs = ["lib"]
 solc = "0.8.24"
 optimizer = true
 optimizer_runs = 200
-fs_permissions = [{ access = "read", path = "./docs" }]
+# Read access to the terms document the deploy scripts anchor. Read-write access to the deployment
+# files the testnet deployment writes for the demo app (script/testnet/DeployTestnet.s.sol).
+fs_permissions = [
+    { access = "read", path = "./docs" },
+    { access = "read-write", path = "./app/src/config/deployments" },
+]
 remappings = [
     "@openzeppelin/contracts/=lib/openzeppelin-contracts/contracts/",
     "forge-std/=lib/forge-std/src/",
 ]
-# Gas benchmarks are not tests: they are excluded here and run by the gas profile below.
-no_match_path = "test/gas/*"
+# Gas benchmarks are not tests: they are excluded here and run by the gas profile below. The testnet
+# tooling tests are excluded too: script/ is compiled with every build, so without this the default
+# run would pick them up and change the protocol's test count. The testnet profile runs them.
+no_match_path = "{test/gas/*,script/testnet/test/*}"
 
 # Gas benchmarks only: FOUNDRY_PROFILE=gas forge test --isolate --gas-report
 #
@@ -21,6 +28,15 @@ no_match_path = "test/gas/*"
 # local scratch tests, which keeps those out of a benchmark run and excludes nothing tracked.
 [profile.gas]
 match_path = "test/gas/*"
+no_match_path = "test/scratch/*"
+
+# Testnet tooling (script/testnet): its own suite, so the protocol's test figures stay unchanged.
+# FOUNDRY_PROFILE=testnet forge test
+#
+# Like the gas profile, it overrides the inherited no_match_path, which would exclude these tests.
+[profile.testnet]
+test = "script/testnet/test"
+match_path = "script/testnet/test/*"
 no_match_path = "test/scratch/*"
 
 [profile.ci]
