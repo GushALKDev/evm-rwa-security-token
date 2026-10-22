@@ -63,11 +63,11 @@ function Summary({ model, acc }: { model: TokenModel; acc: AccountView }) {
           {p.balance === 0n
             ? 'No notes yet.'
             : block === 'paused'
-              ? 'The agent has paused the token, so no notes can move.'
+              ? 'The agent has paused the token, so no notes can be sent.'
               : block === 'unverified'
-                ? 'Your wallet is not verified, so its notes cannot move until it is verified again.'
+                ? 'Your wallet is not verified, so its notes cannot be sent until it is verified again.'
                 : block === 'frozen'
-                  ? 'The agent froze your wallet, so its notes cannot move.'
+                  ? 'The agent froze your wallet, so its notes cannot be sent.'
                   : block === 'locked'
                     ? `Locked until ${formatTimestamp(acc.unlocksAt!)}${left > 0 ? `, ${formatDuration(left)} from now` : ''}. Your lockup runs from your first notes.`
                     : `${formatNoteCount(acc.free)} free to send.`}

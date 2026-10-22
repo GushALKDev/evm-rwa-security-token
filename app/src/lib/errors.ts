@@ -48,15 +48,15 @@ export function describeError(err: unknown, ctx: ErrorContext): string {
   switch (name) {
     // The transfer gate (SecurityToken)
     case 'EnforcedPause':
-      return 'The agent has paused the token, so no notes can move until it is unpaused.'
+      return 'The agent has paused the token, so no notes can be sent until it is unpaused.'
     case 'RecipientNotVerified':
       return `${capital(who(a[0]))} is not a verified investor, so it cannot receive notes.`
     case 'SenderNotVerified':
-      return `${capital(who(a[0]))} is not verified (its identity was removed or its KYC lapsed), so its notes cannot move.`
+      return `${capital(who(a[0]))} is not verified (its identity was removed or its KYC lapsed), so its notes cannot be sent.`
     case 'RecipientAddressFrozen':
-      return `${capital(who(a[0]))} is frozen, so it cannot receive notes.`
+      return `${capital(who(a[0]))} is frozen, so transfers to it are refused.`
     case 'SenderAddressFrozen':
-      return `${capital(who(a[0]))} is frozen, so its notes cannot move.`
+      return `${capital(who(a[0]))} is frozen, so its notes cannot be sent.`
     case 'InsufficientUnfrozenBalance':
       return `Only ${formatNotes(a[1] as bigint)} notes of ${who(a[0])} are free to move, less than the ${formatNotes(a[2] as bigint)} requested.`
     case 'ComplianceCheckFailed': {
@@ -72,7 +72,7 @@ export function describeError(err: unknown, ctx: ErrorContext): string {
       return 'Notes cannot be sent to the zero address.'
     // The testnet desk
     case 'InvalidCountry':
-      return 'Choose a country: the code must be a three-digit ISO 3166-1 number.'
+      return 'Choose a country: the code must be between 1 and 999.'
     case 'ClaimTooSoon':
       return `The desk issues notes to each wallet once a day. Yours opens again on ${at(a[1])}.`
     case 'CouponTooSoon':

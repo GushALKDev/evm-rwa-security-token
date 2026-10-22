@@ -40,8 +40,11 @@ transfer, with the revert the token would raise. Checks after it read "Not reach
 evaluates them. Under the checks, the token's own `canTransfer` answers for the same inputs, so the drawing is
 cross-checked against the contract while it is read.
 
-The seeded wallets exist for this drawing: each one stops at a different check, so the whole gate can be walked
-without a wallet. Everything else on the page stays quiet.
+The seeded wallets exist for this drawing. Between them, and with the visitor's own wallet, they reach every check
+except the pause and the holder cap, which depend on the agent and on the register rather than on a wallet: the
+unverified and lapsed wallets stop at verification, the frozen holder at the freeze, the partly frozen one at the free
+balance, the investor in Iran at the jurisdiction rule, and a wallet in its first five minutes at the lockup.
+Everything else on the page stays quiet.
 
 ## Layout
 

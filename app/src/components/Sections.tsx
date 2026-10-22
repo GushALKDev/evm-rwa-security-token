@@ -85,8 +85,9 @@ export function HowItWorks({ model }: { model: TokenModel }) {
               token is not paused, the recipient is verified and not frozen, the sender is verified, not frozen and holds
               enough unfrozen notes, and then each compliance module in the order the engine registered it. The first
               failure reverts the transfer. A mint runs the same checks on the recipient only. The public{' '}
-              <span className="mono">canTransfer</span> runs the same function, so what the page reads cannot drift from
-              what a transfer enforces.
+              <span className="mono">canTransfer</span> runs the same function as the transfer itself, plus the pause, so
+              the contract's answer to whether a transfer would pass and its enforcement come from one place. This page
+              mirrors that function to draw each check, and reads <span className="mono">canTransfer</span> alongside.
             </p>
           </div>
           <div className="mechanic">
@@ -110,8 +111,8 @@ export function HowItWorks({ model }: { model: TokenModel }) {
             <h3>Holders counted, never listed</h3>
             <p>
               The holder cap keeps a counter that the transfer hooks update from the balances after each move, so checking
-              it costs the same at five holders as at five hundred. It only stops a transfer that would add a holder: an
-              existing holder can always receive, and at the cap one holder can replace another.
+              it costs the same at five holders as at five hundred. It only stops a transfer that would add a holder: the
+              cap never stops an existing holder from receiving, and at the cap one holder can replace another.
             </p>
           </div>
           <div className="mechanic">
@@ -143,17 +144,21 @@ export function HowItWorks({ model }: { model: TokenModel }) {
               <a href={explorerAddress(d.desk)} target="_blank" rel="noreferrer">
                 TestnetDesk
               </a>
-              , stands in for all three. It holds one role for each and uses it only on the wallet that calls it, and it
-              has no other function.
+              , stands in for all three. It holds one role for each. Verifying and getting notes act only on the wallet
+              that calls them; a coupon pays every holder, as any coupon does. Its only other functions are its owner's:
+              wiring the distributor, once, and handing over or renouncing ownership. None of them uses those roles.
             </p>
             <p>
-              Everything else is the repository's own contracts, unchanged. The lockup is shortened to {lockup} through its
-              own setter and the holder cap stays at {model.live.maxHolders.toString()}, the production value. Someone with
-              many addresses could fill the register; the agent can then raise the cap.
+              Everything else is the repository's own contracts, unchanged, deployed with the production script's
+              parameters. Three settings are made on top, through the contracts' own functions: the lockup is shortened to{' '}
+              {lockup}, North Korea and Iran are restricted, and the dividend distributor is attached. The holder cap is
+              deployed at the production value, 499. Someone with many addresses could fill the register; the agent can
+              then raise the cap.
             </p>
             <p>
               The seeded wallets have addresses derived from a hash rather than from a key, so nobody can sign for them:
-              each keeps the state it was seeded with and shows one outcome of the gate.
+              they never send, and only the agent can change their identity or freeze. Anyone can still send them notes.
+              Each shows an outcome of the gate; the lapsed one was written to lapse an hour after deployment.
             </p>
           </div>
           <div className="flow" aria-label="The desk's three functions">

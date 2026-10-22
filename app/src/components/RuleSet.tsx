@@ -39,8 +39,9 @@ export function RuleSetCard({ model }: { model: TokenModel }) {
         </a>
       </div>
       <p className="card-sub" style={{ marginBottom: 6 }}>
-        Modules on the engine, in the order it asks them. Every one must pass; the order only decides which one a
-        failing transfer reports.
+        Modules on the engine, in the order it asks them. Every one must pass, and the engine stops at the first that
+        refuses. The token reports any refusal as the same ComplianceCheckFailed, so the gate above evaluates each
+        module's own check to show which one it was.
       </p>
       <ol className="modules">
         {g.modules.map((m) => (
