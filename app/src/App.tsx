@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import { useBytecode } from 'wagmi'
 import { DeskDialog } from './components/DeskDialog'
 import { DividendsPage } from './components/Dividends'
 import { ErrorBoundary } from './components/ErrorBoundary'
@@ -28,6 +29,10 @@ function NotDeployed() {
 
 function Token() {
   const { model, error } = useModel()
+  // forge writes the deployment file while it simulates, before anything is sent, so a broadcast that fails after
+  // that leaves a file naming contracts with no code. Say so, rather than blaming the RPC.
+  const code = useBytecode({ address: deployment!.token, query: { staleTime: Infinity } })
+  const noCode = code.isSuccess && (!code.data || code.data === '0x')
   const { page, url } = useRoute()
   const ready = model !== null
   // A fragment's target only exists once the page has rendered, so a direct link waits for the first read.
@@ -67,7 +72,12 @@ function Token() {
         </ErrorBoundary>
       ) : (
         <main className="wrap hero">
-          {error ? (
+          {noCode ? (
+            <div className="callout" data-tone="warn" role="alert">
+              The deployment file names a token with no code on {chain.name}, so the deployment it describes never
+              landed. Run the testnet deployment again; it rewrites the file.
+            </div>
+          ) : error ? (
             <div className="callout" data-tone="warn" role="alert">
               The token could not be read from {chain.name}. The RPC may be rate limiting requests; the page retries on
               its own.
