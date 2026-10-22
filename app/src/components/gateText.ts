@@ -1,6 +1,6 @@
 // Sentences for the gate's checks, from the mirror's structured reasons and the live values behind them.
 import { countryLabel } from '../lib/countries'
-import { formatDate, formatDuration, formatNoteCount, formatNotes, formatTimestamp, shortAddress } from '../lib/format'
+import { formatDate, formatDuration, formatTokenCount, formatTokens, formatTimestamp, shortAddress } from '../lib/format'
 import { freeBalance, unlocksAt, type Check, type PartyState, type Revert } from '../lib/gate'
 import type { TokenModel } from '../lib/model'
 
@@ -60,7 +60,7 @@ export function checkText(
       detail = `Its KYC lapsed on ${formatTimestamp(party!.kycExpiry)}.`
       break
     case 'removed':
-      detail = 'The agent removed its identity. The investor id is kept, and so are any notes.'
+      detail = 'The agent removed its identity. The investor id is kept, and so are any tokens.'
       break
     case 'neverRegistered':
       detail = 'Not in the identity registry.'
@@ -80,18 +80,18 @@ export function checkText(
     case 'enough':
     case 'notEnough': {
       const p = from!
-      const frozen = p.frozenTokens > 0n ? `, ${formatNotes(p.frozenTokens)} frozen` : ''
+      const frozen = p.frozenTokens > 0n ? `, ${formatTokens(p.frozenTokens)} frozen` : ''
       detail =
         c.why === 'enough'
-          ? `${formatNotes(freeBalance(p))} of ${formatNoteCount(p.balance)} free${frozen}.`
-          : `Only ${formatNotes(freeBalance(p))} of ${formatNoteCount(p.balance)} free${frozen}; ${formatNotes(amount)} requested.`
+          ? `${formatTokens(freeBalance(p))} of ${formatTokenCount(p.balance)} free${frozen}.`
+          : `Only ${formatTokens(freeBalance(p))} of ${formatTokenCount(p.balance)} free${frozen}; ${formatTokens(amount)} requested.`
       break
     }
     case 'zeroAmount':
       detail = 'A zero amount moves no value, so the module lets it through.'
       break
     case 'alreadyHolds':
-      detail = `The recipient already holds notes, so the count stays at ${count}.`
+      detail = `The recipient already holds tokens, so the count stays at ${count}.`
       break
     case 'replaces':
       detail = `The sender empties out, so one holder replaces another: ${count}.`

@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import {
   MAGNITUDE,
-  ONE_NOTE,
+  ONE_TOKEN,
   accumulated,
   claimable,
   correctionAfterMint,
@@ -11,19 +11,19 @@ import {
   couponPreview,
   decodeInt256,
   depositEffect,
-  perNote,
+  perToken,
 } from './dividends'
-import { formatEurc, formatNoteCount, formatNotes, parseAmount, toInput } from './format'
+import { formatEurc, formatTokenCount, formatTokens, parseAmount, toInput } from './format'
 
 describe('the accumulator', () => {
   it('pays a sole holder the deposit, rounded down by the scaling', () => {
-    // 5,000 EURC over 1,000 notes: 5e9 * 2^128 / 1e21 is not a whole number, so the accumulator floors it and the
+    // 5,000 EURC over 1,000 tokens: 5e9 * 2^128 / 1e21 is not a whole number, so the accumulator floors it and the
     // holder is owed one unit less, the direction that keeps the distributor solvent.
-    const supply = 1_000n * ONE_NOTE
+    const supply = 1_000n * ONE_TOKEN
     const { dividendsPerShare, residue } = depositEffect(0n, 0n, supply, 5_000_000_000n)
     expect(accumulated(supply, dividendsPerShare, 0n)).toBe(4_999_999_999n)
     expect(residue).toBeGreaterThan(0n)
-    expect(perNote(dividendsPerShare)).toBe(4_999_999n)
+    expect(perToken(dividendsPerShare)).toBe(4_999_999n)
   })
 
   it('carries the remainder in scaled units and never pays out more than was deposited', () => {
@@ -45,15 +45,15 @@ describe('the accumulator', () => {
   })
 
   it('a mint earns nothing from past deposits, and a transfer moves no income', () => {
-    const { dividendsPerShare: dps } = depositEffect(0n, 0n, 100n * ONE_NOTE, 777_777n)
-    const corr = correctionAfterMint(0n, 10n * ONE_NOTE, dps)
-    expect(accumulated(10n * ONE_NOTE, dps, corr)).toBe(0n)
+    const { dividendsPerShare: dps } = depositEffect(0n, 0n, 100n * ONE_TOKEN, 777_777n)
+    const corr = correctionAfterMint(0n, 10n * ONE_TOKEN, dps)
+    expect(accumulated(10n * ONE_TOKEN, dps, corr)).toBe(0n)
 
-    const seller = accumulated(100n * ONE_NOTE, dps, 0n)
-    const moved = correctionsAfterTransfer(0n, corr, 40n * ONE_NOTE, dps, false)
-    expect(accumulated(60n * ONE_NOTE, dps, moved.from)).toBe(seller)
-    expect(accumulated(50n * ONE_NOTE, dps, moved.to)).toBe(0n)
-    expect(correctionsAfterTransfer(5n, 7n, ONE_NOTE, dps, true)).toEqual({ from: 5n, to: 7n })
+    const seller = accumulated(100n * ONE_TOKEN, dps, 0n)
+    const moved = correctionsAfterTransfer(0n, corr, 40n * ONE_TOKEN, dps, false)
+    expect(accumulated(60n * ONE_TOKEN, dps, moved.from)).toBe(seller)
+    expect(accumulated(50n * ONE_TOKEN, dps, moved.to)).toBe(0n)
+    expect(correctionsAfterTransfer(5n, 7n, ONE_TOKEN, dps, true)).toEqual({ from: 5n, to: 7n })
   })
 
   it('refuses a negative entitlement instead of wrapping it', () => {
@@ -61,10 +61,10 @@ describe('the accumulator', () => {
     expect(claimable(10n, 4n)).toBe(6n)
   })
 
-  it('sizes the coupon at five EURC per whole note, rounded down', () => {
-    expect(couponAmount(1_000n * ONE_NOTE, 5_000_000n)).toBe(5_000_000_000n)
-    expect(couponAmount(1_000n * ONE_NOTE + 1n, 5_000_000n)).toBe(5_000_000_000n)
-    expect(couponAmount(ONE_NOTE / 5_000_000n - 1n, 5_000_000n)).toBe(0n)
+  it('sizes the coupon at five EURC per whole token, rounded down', () => {
+    expect(couponAmount(1_000n * ONE_TOKEN, 5_000_000n)).toBe(5_000_000_000n)
+    expect(couponAmount(1_000n * ONE_TOKEN + 1n, 5_000_000n)).toBe(5_000_000_000n)
+    expect(couponAmount(ONE_TOKEN / 5_000_000n - 1n, 5_000_000n)).toBe(0n)
   })
 
   it('reads the correction slot as a signed word', () => {
@@ -80,23 +80,23 @@ describe('the accumulator', () => {
 })
 
 describe('format', () => {
-  it('parses and writes back note amounts', () => {
+  it('parses and writes back token amounts', () => {
     expect(parseAmount('1.5', 18)).toBe(1_500_000_000_000_000_000n)
     expect(parseAmount('1,000', 18)).toBe(1_000n * 10n ** 18n)
     expect(parseAmount('abc', 18)).toBeNull()
     expect(toInput(1_500_000_000_000_000_000n, 18)).toBe('1.5')
   })
 
-  it('never shows a note amount higher than it is', () => {
-    expect(formatNotes(10n ** 18n - 1n)).toBe('0.9999')
-    expect(formatNotes(1n)).toBe('< 0.0001')
-    expect(formatNotes(1_500n * 10n ** 18n)).toBe('1,500')
+  it('never shows a token amount higher than it is', () => {
+    expect(formatTokens(10n ** 18n - 1n)).toBe('0.9999')
+    expect(formatTokens(1n)).toBe('< 0.0001')
+    expect(formatTokens(1_500n * 10n ** 18n)).toBe('1,500')
   })
 
-  it('names one note in the singular', () => {
-    expect(formatNoteCount(10n ** 18n)).toBe('1 note')
-    expect(formatNoteCount(2n * 10n ** 18n)).toBe('2 notes')
-    expect(formatNoteCount(10n ** 18n / 2n)).toBe('0.5 notes')
+  it('names one token in the singular', () => {
+    expect(formatTokenCount(10n ** 18n)).toBe('1 token')
+    expect(formatTokenCount(2n * 10n ** 18n)).toBe('2 tokens')
+    expect(formatTokenCount(10n ** 18n / 2n)).toBe('0.5 tokens')
   })
 
   it('shows EURC to the cent when exact, and every unit otherwise', () => {
@@ -112,12 +112,12 @@ describe('the coupon preview', () => {
   // The reviewer's case: a balance read before a mint landed and a correction read after it. On one block they can
   // never disagree; the page must still not throw while rendering if they ever do.
   it('returns nothing, rather than throwing, when its inputs come from different blocks', () => {
-    const minted = 10n * ONE_NOTE
-    const dps = depositEffect(0n, 0n, 1_000n * ONE_NOTE, 5_000_000_000n).dividendsPerShare
+    const minted = 10n * ONE_TOKEN
+    const dps = depositEffect(0n, 0n, 1_000n * ONE_TOKEN, 5_000_000_000n).dividendsPerShare
     const mixed = {
       blockNumber: 1n,
       balance: 0n,
-      supply: 1_010n * ONE_NOTE,
+      supply: 1_010n * ONE_TOKEN,
       dividendsPerShare: dps,
       residue: 0n,
       correction: correctionAfterMint(0n, minted, dps),
@@ -127,11 +127,11 @@ describe('the coupon preview', () => {
   })
 
   it('previews the share of a holder from a consistent snapshot', () => {
-    const supply = 1_000n * ONE_NOTE
-    const s = { blockNumber: 1n, balance: 10n * ONE_NOTE, supply, dividendsPerShare: 0n, residue: 0n, correction: 0n }
+    const supply = 1_000n * ONE_TOKEN
+    const s = { blockNumber: 1n, balance: 10n * ONE_TOKEN, supply, dividendsPerShare: 0n, residue: 0n, correction: 0n }
     const p = couponPreview(s, 5_000_000n)!
     expect(p.amount).toBe(5_000_000_000n)
-    expect(p.share).toBe(accumulated(10n * ONE_NOTE, p.dividendsPerShareAfter, 0n))
+    expect(p.share).toBe(accumulated(10n * ONE_TOKEN, p.dividendsPerShareAfter, 0n))
     expect(p.earned).toBe(0n)
   })
 })

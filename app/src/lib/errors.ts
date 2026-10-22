@@ -6,7 +6,7 @@ import {
   UserRejectedRequestError,
 } from 'viem'
 import { chain } from '../config/chain'
-import { formatNotes, formatTimestamp } from './format'
+import { formatTokens, formatTimestamp } from './format'
 
 export interface ErrorContext {
   /** Names an address for the sentence: "your wallet", a seeded wallet's label, or a short address */
@@ -48,17 +48,17 @@ export function describeError(err: unknown, ctx: ErrorContext): string {
   switch (name) {
     // The transfer gate (SecurityToken)
     case 'EnforcedPause':
-      return 'The agent has paused the token, so no notes can be sent until it is unpaused.'
+      return 'The agent has paused the token, so no tokens can be sent until it is unpaused.'
     case 'RecipientNotVerified':
-      return `${capital(who(a[0]))} is not a verified investor, so it cannot receive notes.`
+      return `${capital(who(a[0]))} is not a verified investor, so it cannot receive tokens.`
     case 'SenderNotVerified':
-      return `${capital(who(a[0]))} is not verified (its identity was removed or its KYC lapsed), so its notes cannot be sent.`
+      return `${capital(who(a[0]))} is not verified (its identity was removed or its KYC lapsed), so its tokens cannot be sent.`
     case 'RecipientAddressFrozen':
       return `${capital(who(a[0]))} is frozen, so transfers to it are refused.`
     case 'SenderAddressFrozen':
-      return `${capital(who(a[0]))} is frozen, so its notes cannot be sent.`
+      return `${capital(who(a[0]))} is frozen, so its tokens cannot be sent.`
     case 'InsufficientUnfrozenBalance':
-      return `Only ${formatNotes(a[1] as bigint)} notes of ${who(a[0])} are free to move, less than the ${formatNotes(a[2] as bigint)} requested.`
+      return `Only ${formatTokens(a[1] as bigint)} tokens of ${who(a[0])} are free to move, less than the ${formatTokens(a[2] as bigint)} requested.`
     case 'ComplianceCheckFailed': {
       // A zero sender is a mint: the desk's issue runs the same rules as a transfer.
       const what = (a[0] as string)?.toLowerCase() === '0x0000000000000000000000000000000000000000' ? 'the issue' : 'the transfer'
@@ -69,19 +69,19 @@ export function describeError(err: unknown, ctx: ErrorContext): string {
     case 'ERC20InsufficientBalance':
       return 'The balance is too low for this amount.'
     case 'ERC20InvalidReceiver':
-      return 'Notes cannot be sent to the zero address.'
+      return 'Tokens cannot be sent to the zero address.'
     // The testnet desk
     case 'InvalidCountry':
       return 'Choose a country: the code must be between 1 and 999.'
     case 'ClaimTooSoon':
-      return `The desk issues notes to each wallet once a day. Yours opens again on ${at(a[1])}.`
+      return `The desk issues tokens to each wallet once a day. Yours opens again on ${at(a[1])}.`
     case 'CouponTooSoon':
       return `A coupon was paid less than ten minutes ago. The next one can be paid from ${at(a[0])}.`
     case 'DistributorNotSet':
       return 'The desk has no distributor wired yet, so it cannot pay coupons.'
     // The dividend distributor
     case 'NothingToClaim':
-      return 'Nothing to claim yet. Income accrues to the notes you hold when a coupon is paid.'
+      return 'Nothing to claim yet. Income accrues to the tokens you hold when a coupon is paid.'
     case 'ClaimantFrozen':
       return 'Your wallet is frozen, so the distributor withholds its income until the freeze is lifted.'
     case 'ClaimantNotVerified':
@@ -89,7 +89,7 @@ export function describeError(err: unknown, ctx: ErrorContext): string {
     case 'ZeroDeposit':
       return 'At the current supply the coupon would be zero.'
     case 'NoSupply':
-      return 'No notes are outstanding, so a coupon would accrue to nobody.'
+      return 'No tokens are outstanding, so a coupon would accrue to nobody.'
     case 'DistributorNotAttached':
       return 'The distributor has been removed from the compliance engine, so it accepts no new coupons.'
     // Roles and the rest

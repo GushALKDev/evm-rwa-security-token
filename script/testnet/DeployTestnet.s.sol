@@ -21,7 +21,7 @@ import {TestnetEURC} from "./TestnetEURC.sol";
  *        executing account, so the issuer must be the deployer anyway; on a demo, agent and
  *        custodian follow it.
  *      - The lockup is shortened to TESTNET_LOCKUP_PERIOD after `_deploy`, through the module's own
- *        `setLockupPeriod`: the 365 days Deploy.s.sol sets would keep every visitor's notes locked
+ *        `setLockupPeriod`: the 365 days Deploy.s.sol sets would keep every visitor's tokens locked
  *        for a year. The holder cap stays at Deploy.s.sol's value (see TestnetDesk).
  *      - The distributor is attached with `addModule` after `_deploy`, as the scenario suites do.
  *        It pays in TestnetEURC, which only the desk mints.
@@ -29,7 +29,7 @@ import {TestnetEURC} from "./TestnetEURC.sol";
  *        on its members to apply countermeasures to (FATF statement of June 2026).
  *      - The seeded wallets have addresses derived from a hash, not from a key, so nobody can sign
  *        for them: they never send, and only the agent can change their identity or freeze state.
- *        Anyone can still send them notes. Each one exercises an outcome of the transfer gate
+ *        Anyone can still send them tokens. Each one exercises an outcome of the transfer gate
  *        (see `_seed`); the lapsed one lapses an hour after deployment by design.
  *
  *      Nothing here depends on an external feed or on a time window, so there is no second script.
@@ -66,13 +66,13 @@ contract DeployTestnet is Deploy {
     uint64 internal constant SEED_KYC_VALIDITY = 3_650 days;
     uint64 internal constant LAPSING_KYC_VALIDITY = 1 hours;
 
-    /// @dev Seeded positions, in whole notes (18 decimals).
-    uint256 internal constant SETTLED_NOTES = 500e18;
-    uint256 internal constant PARTLY_FROZEN_NOTES = 250e18;
+    /// @dev Seeded positions, in whole tokens (18 decimals).
+    uint256 internal constant SETTLED_TOKENS = 500e18;
+    uint256 internal constant PARTLY_FROZEN_TOKENS = 250e18;
     uint256 internal constant PARTLY_FROZEN_LOCKED = 100e18;
-    uint256 internal constant FROZEN_NOTES = 100e18;
-    uint256 internal constant SUSPENDED_NOTES = 100e18;
-    uint256 internal constant LAPSED_NOTES = 50e18;
+    uint256 internal constant FROZEN_TOKENS = 100e18;
+    uint256 internal constant SUSPENDED_TOKENS = 100e18;
+    uint256 internal constant LAPSED_TOKENS = 50e18;
 
     /*//////////////////////////////////////////////////////////////
                                  TYPES
@@ -80,7 +80,7 @@ contract DeployTestnet is Deploy {
 
     /// @notice The seeded wallets, one per outcome of the transfer gate.
     struct Seeds {
-        address settled; // verified, unrestricted, holds notes: transfers from it pass once the lockup ends
+        address settled; // verified, unrestricted, holds tokens: transfers from it pass once the lockup ends
         address partlyFrozen; // part of its balance frozen: InsufficientUnfrozenBalance above the free part
         address frozen; // wallet frozen: SenderAddressFrozen and RecipientAddressFrozen
         address suspended; // identity removed, balance kept: SenderNotVerified
@@ -165,31 +165,31 @@ contract DeployTestnet is Deploy {
     }
 
     /**
-     * @dev Seeds one wallet per outcome of the transfer gate. Supply after seeding: 1,000 notes.
+     * @dev Seeds one wallet per outcome of the transfer gate. Supply after seeding: 1,000 tokens.
      */
     function _seed(Deployment memory d) internal {
         Seeds memory s = seeds();
         uint64 longKyc = uint64(block.timestamp) + SEED_KYC_VALIDITY;
 
         d.identityRegistry.registerIdentity(s.settled, SPAIN, true, longKyc);
-        d.token.mint(s.settled, SETTLED_NOTES);
+        d.token.mint(s.settled, SETTLED_TOKENS);
 
         d.identityRegistry.registerIdentity(s.partlyFrozen, GERMANY, true, longKyc);
-        d.token.mint(s.partlyFrozen, PARTLY_FROZEN_NOTES);
+        d.token.mint(s.partlyFrozen, PARTLY_FROZEN_TOKENS);
         d.token.freezePartialTokens(s.partlyFrozen, PARTLY_FROZEN_LOCKED);
 
         d.identityRegistry.registerIdentity(s.frozen, FRANCE, true, longKyc);
-        d.token.mint(s.frozen, FROZEN_NOTES);
+        d.token.mint(s.frozen, FROZEN_TOKENS);
         d.token.setAddressFrozen(s.frozen, true);
 
         d.identityRegistry.registerIdentity(s.suspended, PORTUGAL, true, longKyc);
-        d.token.mint(s.suspended, SUSPENDED_NOTES);
+        d.token.mint(s.suspended, SUSPENDED_TOKENS);
         d.identityRegistry.removeIdentity(s.suspended);
 
         d.identityRegistry.registerIdentity(s.restricted, IRAN, true, longKyc);
 
         d.identityRegistry.registerIdentity(s.lapsed, ITALY, true, uint64(block.timestamp) + LAPSING_KYC_VALIDITY);
-        d.token.mint(s.lapsed, LAPSED_NOTES);
+        d.token.mint(s.lapsed, LAPSED_TOKENS);
     }
 
     /**
@@ -275,7 +275,7 @@ contract DeployTestnet is Deploy {
         require(d.identityRegistry.isVerified(s.restricted), "restricted: should be verified");
         require(!d.token.canTransfer(address(0), s.suspended, one), "suspended: can receive");
         require(!d.identityRegistry.isVerified(s.suspended), "suspended: still verified");
-        require(d.token.balanceOf(s.suspended) == SUSPENDED_NOTES, "suspended: balance not kept");
+        require(d.token.balanceOf(s.suspended) == SUSPENDED_TOKENS, "suspended: balance not kept");
         require(d.token.frozenTokens(s.partlyFrozen) == PARTLY_FROZEN_LOCKED, "partlyFrozen: frozen amount");
         require(d.token.isFrozen(s.frozen), "frozen: not frozen");
         require(d.identityRegistry.isVerified(s.lapsed), "lapsed: should start verified");

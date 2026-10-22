@@ -79,7 +79,7 @@ describe.skipIf(!rpc)('the write path on a local chain', () => {
 
   it('reports a transaction that lands and reverts as reverted, not as unknown', async () => {
     // An unverified caller: the desk's mint reverts in the gate. A fixed gas limit skips the estimate, so it lands.
-    const hash = await wallet.writeContract({ account: sender, address: d.desk, abi: deskCallAbi, functionName: 'claimNotes', gas: 400_000n } as never)
+    const hash = await wallet.writeContract({ account: sender, address: d.desk, abi: deskCallAbi, functionName: 'claimTokens', gas: 400_000n } as never)
     const outcome = await waitForOutcome(config(), local.id, hash, 10_000)
     expect(outcome.kind).toBe('reverted')
   }, 20_000)

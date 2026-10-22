@@ -78,52 +78,52 @@ contract TestnetDeskTest is Test {
     }
 
     /*//////////////////////////////////////////////////////////////
-                              CLAIM NOTES
+                              CLAIM TOKENS
     //////////////////////////////////////////////////////////////*/
 
-    function test_claimNotes_mintsTenNotesOnceADay() public {
+    function test_claimTokens_mintsTenTokensOnceADay() public {
         vm.startPrank(visitor);
         desk.onboard(SPAIN);
-        desk.claimNotes();
+        desk.claimTokens();
         vm.stopPrank();
 
-        assertEq(d.token.balanceOf(visitor), 10e18, "ten notes");
+        assertEq(d.token.balanceOf(visitor), 10e18, "ten tokens");
         assertEq(desk.nextClaimAt(visitor), block.timestamp + 1 days, "next claim in a day");
 
         uint256 next = block.timestamp + 1 days;
         vm.warp(next - 1);
         vm.prank(visitor);
         vm.expectRevert(abi.encodeWithSelector(TestnetDesk.ClaimTooSoon.selector, visitor, next));
-        desk.claimNotes();
+        desk.claimTokens();
 
         vm.warp(next);
         vm.prank(visitor);
-        desk.claimNotes();
+        desk.claimTokens();
         assertEq(d.token.balanceOf(visitor), 20e18, "second claim");
     }
 
     /// @dev The mint runs the token's full gate, and a rejected mint reverts the whole call, so the
     ///      day is not used up: the visitor can onboard and claim straight away.
-    function test_claimNotes_anUnverifiedCallerIsRejectedByTheGateAndKeepsItsDay() public {
+    function test_claimTokens_anUnverifiedCallerIsRejectedByTheGateAndKeepsItsDay() public {
         vm.prank(visitor);
         vm.expectRevert(abi.encodeWithSelector(ISecurityToken.RecipientNotVerified.selector, visitor));
-        desk.claimNotes();
+        desk.claimTokens();
         assertEq(desk.nextClaimAt(visitor), 0, "cooldown not consumed");
 
         vm.startPrank(visitor);
         desk.onboard(SPAIN);
-        desk.claimNotes();
+        desk.claimTokens();
         vm.stopPrank();
         assertEq(d.token.balanceOf(visitor), 10e18, "claimed after onboarding");
     }
 
-    function test_claimNotes_aRestrictedCountryIsRejectedByTheCountryRule() public {
+    function test_claimTokens_aRestrictedCountryIsRejectedByTheCountryRule() public {
         vm.startPrank(visitor);
         desk.onboard(IRAN);
         vm.expectRevert(
             abi.encodeWithSelector(ISecurityToken.ComplianceCheckFailed.selector, address(0), visitor, 10e18)
         );
-        desk.claimNotes();
+        desk.claimTokens();
         vm.stopPrank();
 
         assertFalse(
@@ -135,7 +135,7 @@ contract TestnetDeskTest is Test {
                               PAY COUPON
     //////////////////////////////////////////////////////////////*/
 
-    function test_payCoupon_depositsFiveEurcPerNoteOutstanding() public {
+    function test_payCoupon_depositsFiveEurcPerTokenOutstanding() public {
         vm.warp(desk.nextCouponAt());
         uint256 dpsBefore = distributor.dividendsPerShare();
         uint256 heldBefore = eurc.balanceOf(address(distributor));
@@ -143,7 +143,7 @@ contract TestnetDeskTest is Test {
         vm.prank(stranger);
         desk.payCoupon();
 
-        // 1,000 seeded notes at 5 EURC each.
+        // 1,000 seeded tokens at 5 EURC each.
         assertEq(eurc.balanceOf(address(distributor)) - heldBefore, 5_000e6, "coupon deposited");
         assertGt(distributor.dividendsPerShare(), dpsBefore, "accumulator moved");
         assertEq(eurc.balanceOf(address(desk)), 0, "the desk keeps nothing");
@@ -159,9 +159,9 @@ contract TestnetDeskTest is Test {
         desk.payCoupon();
     }
 
-    /// @dev Rounds down, like every amount the desk derives: the coupon never exceeds 5 EURC per note.
+    /// @dev Rounds down, like every amount the desk derives: the coupon never exceeds 5 EURC per token.
     function test_couponAmount_roundsDown() public {
-        // One base unit of note on top of the 1,000 seeded: worth far less than a unit of EURC.
+        // One base unit of token on top of the 1,000 seeded: worth far less than a unit of EURC.
         vm.prank(tx.origin);
         d.token.mint(seeds.settled, 1);
         assertEq(desk.couponAmount(), 5_000e6, "rounded down to whole units");

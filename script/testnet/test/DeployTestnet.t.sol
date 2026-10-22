@@ -21,13 +21,13 @@ import {Roles} from "../../../src/Roles.sol";
  *      needs no mocks. Outside a broadcast the script writes no file.
  *
  *      The app-flow tests build every call exactly as the app does: `onboard(country)`,
- *      `claimNotes()`, `transfer(to, amount)` on the token, `payCoupon()` and `claim(account)` with
+ *      `claimTokens()`, `transfer(to, amount)` on the token, `payCoupon()` and `claim(account)` with
  *      the connected account as the recipient.
  */
 contract DeployTestnetTest is Test {
     uint16 internal constant SPAIN = 724;
     uint16 internal constant IRAN = 364;
-    uint256 internal constant NOTES = 10e18;
+    uint256 internal constant TOKENS = 10e18;
 
     address internal visitor = makeAddr("visitor");
     address internal other = makeAddr("other visitor");
@@ -58,7 +58,7 @@ contract DeployTestnetTest is Test {
     function _join(address who, uint16 country) internal {
         vm.startPrank(who);
         desk.onboard(country);
-        desk.claimNotes();
+        desk.claimTokens();
         vm.stopPrank();
     }
 
@@ -164,10 +164,10 @@ contract DeployTestnetTest is Test {
         assertFalse(d.identityRegistry.hasRole(Roles.CUSTODIAN_ROLE, a), "no custodian role anywhere");
     }
 
-    function test_run_seedsAThousandNotesAndPaysTheFirstCoupon() public view {
+    function test_run_seedsAThousandTokensAndPaysTheFirstCoupon() public view {
         assertEq(d.token.totalSupply(), 1_000e18, "seeded supply");
         assertEq(d.maxHolders.holderCount(), 5, "five seeded holders");
-        assertEq(eurc.balanceOf(address(distributor)), 5_000e6, "first coupon: 5 EURC per note");
+        assertEq(eurc.balanceOf(address(distributor)), 5_000e6, "first coupon: 5 EURC per token");
         assertEq(desk.nextCouponAt(), deployedAt + 10 minutes, "next coupon in ten minutes");
         assertTrue(d.countryRestriction.isRestricted(408), "North Korea restricted");
         assertTrue(d.countryRestriction.isRestricted(IRAN), "Iran restricted");
@@ -183,7 +183,7 @@ contract DeployTestnetTest is Test {
         // Settled: passes every check.
         assertTrue(d.token.canTransfer(seeds.settled, visitor, 1e18), "settled passes");
 
-        // Partly frozen: 150 of 250 notes are free.
+        // Partly frozen: 150 of 250 tokens are free.
         vm.prank(seeds.partlyFrozen);
         vm.expectRevert(
             abi.encodeWithSelector(
@@ -246,7 +246,7 @@ contract DeployTestnetTest is Test {
 
     function test_appFlow_joinWaitForTheLockupThenTransfer() public {
         _join(visitor, SPAIN);
-        assertEq(d.token.balanceOf(visitor), NOTES, "ten notes");
+        assertEq(d.token.balanceOf(visitor), TOKENS, "ten tokens");
         assertEq(d.lockup.unlocksAt(visitor), block.timestamp + 5 minutes, "locked for five minutes");
         assertEq(d.maxHolders.holderCount(), 6, "one more holder");
 
@@ -275,11 +275,11 @@ contract DeployTestnetTest is Test {
         vm.warp(desk.nextCouponAt());
 
         uint256 amount = desk.couponAmount();
-        assertEq(amount, 5_050e6, "1,010 notes at 5 EURC");
+        assertEq(amount, 5_050e6, "1,010 tokens at 5 EURC");
         vm.prank(visitor);
         desk.payCoupon();
 
-        // 10 of 1,010 notes: 50 EURC, rounded down by at most one unit per holder.
+        // 10 of 1,010 tokens: 50 EURC, rounded down by at most one unit per holder.
         uint256 owed = distributor.claimable(visitor);
         assertLe(owed, 50e6, "never more than the pro-rata share");
         assertGe(owed, 50e6 - 1, "at most one unit under");
@@ -290,14 +290,14 @@ contract DeployTestnetTest is Test {
         assertEq(distributor.claimable(visitor), 0, "nothing left");
     }
 
-    /// @dev Entitlement does not move with the notes: the seller keeps what accrued while holding.
+    /// @dev Entitlement does not move with the tokens: the seller keeps what accrued while holding.
     function test_appFlow_aTransferLeavesUnclaimedIncomeWithTheSender() public {
         _join(visitor, SPAIN);
         vm.warp(desk.nextCouponAt());
         desk.payCoupon();
         uint256 owed = distributor.claimable(visitor);
 
-        _transfer(visitor, seeds.settled, NOTES);
+        _transfer(visitor, seeds.settled, TOKENS);
         assertEq(distributor.claimable(visitor), owed, "still owed after selling out");
         assertEq(d.token.balanceOf(visitor), 0, "sold out");
     }
@@ -306,14 +306,14 @@ contract DeployTestnetTest is Test {
         vm.startPrank(visitor);
         desk.onboard(IRAN);
         vm.expectRevert(
-            abi.encodeWithSelector(ISecurityToken.ComplianceCheckFailed.selector, address(0), visitor, NOTES)
+            abi.encodeWithSelector(ISecurityToken.ComplianceCheckFailed.selector, address(0), visitor, TOKENS)
         );
-        desk.claimNotes();
+        desk.claimTokens();
         vm.stopPrank();
 
         // Declaring another country releases it, which on a real deployment only the agent could do.
         _join(visitor, SPAIN);
-        assertEq(d.token.balanceOf(visitor), NOTES, "received after the country change");
+        assertEq(d.token.balanceOf(visitor), TOKENS, "received after the country change");
     }
 
     /*//////////////////////////////////////////////////////////////
@@ -328,13 +328,13 @@ contract DeployTestnetTest is Test {
         vm.startPrank(griefer);
         desk.onboard(IRAN);
         vm.expectRevert(
-            abi.encodeWithSelector(ISecurityToken.ComplianceCheckFailed.selector, address(0), griefer, NOTES)
+            abi.encodeWithSelector(ISecurityToken.ComplianceCheckFailed.selector, address(0), griefer, TOKENS)
         );
-        desk.claimNotes();
+        desk.claimTokens();
         vm.stopPrank();
 
         assertEq(keccak256(abi.encode(d.identityRegistry.identity(visitor))), before, "visitor's record untouched");
-        assertEq(d.token.balanceOf(visitor), NOTES, "visitor's notes untouched");
+        assertEq(d.token.balanceOf(visitor), TOKENS, "visitor's tokens untouched");
         assertEq(desk.nextClaimAt(visitor), block.timestamp + 1 days, "visitor's cooldown untouched");
     }
 
@@ -347,7 +347,7 @@ contract DeployTestnetTest is Test {
 
         _transfer(griefer, visitor, 1);
         assertEq(d.lockup.unlocksAt(visitor), unlocksAt, "clock unchanged");
-        assertTrue(d.token.canTransfer(visitor, seeds.settled, NOTES), "still free to send");
+        assertTrue(d.token.canTransfer(visitor, seeds.settled, TOKENS), "still free to send");
     }
 
     /// @dev A full-balance self-transfer leaves the holder count alone, so it cannot fill the cap.
@@ -356,7 +356,7 @@ contract DeployTestnetTest is Test {
         vm.warp(block.timestamp + 5 minutes);
         uint256 count = d.maxHolders.holderCount();
         for (uint256 i; i < 5; ++i) {
-            _transfer(griefer, griefer, NOTES);
+            _transfer(griefer, griefer, TOKENS);
         }
         assertEq(d.maxHolders.holderCount(), count, "count unchanged");
     }
@@ -375,9 +375,9 @@ contract DeployTestnetTest is Test {
         desk.onboard(SPAIN);
         vm.prank(visitor);
         vm.expectRevert(
-            abi.encodeWithSelector(ISecurityToken.ComplianceCheckFailed.selector, address(0), visitor, NOTES)
+            abi.encodeWithSelector(ISecurityToken.ComplianceCheckFailed.selector, address(0), visitor, TOKENS)
         );
-        desk.claimNotes();
+        desk.claimTokens();
 
         // An existing holder can still receive and send: the cap only stops new holders.
         vm.warp(block.timestamp + 5 minutes);
@@ -386,8 +386,8 @@ contract DeployTestnetTest is Test {
         vm.prank(tx.origin);
         d.maxHolders.setMaxHolders(1_000);
         vm.prank(visitor);
-        desk.claimNotes();
-        assertEq(d.token.balanceOf(visitor), NOTES, "reopened by the agent");
+        desk.claimTokens();
+        assertEq(d.token.balanceOf(visitor), TOKENS, "reopened by the agent");
     }
 
     function test_grief_couponsCannotBeRushed() public {

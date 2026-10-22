@@ -13,7 +13,7 @@ import {TestnetEURC} from "./TestnetEURC.sol";
  * @title TestnetDesk
  * @notice Testnet-only stand-in for the three off-chain parties an investor deals with: the KYC
  *         provider, the issuer's primary issuance and the paying agent. It lets a stranger's wallet
- *         hold and trade the note on a public demo. Never deploy it on a network with real value.
+ *         hold and trade the token on a public demo. Never deploy it on a network with real value.
  * @dev The protocol keeps every one of these powers behind a role, so the desk holds the roles and
  *      exposes each one through a single function:
  *
@@ -25,12 +25,12 @@ import {TestnetEURC} from "./TestnetEURC.sol";
  *        KYC_VALIDITY. Calling it again changes the country and renews the expiry. Like any agent
  *        write it replaces the whole record, so it also undoes an agent's removal of the caller and
  *        resets a custom investor id to the default one.
- *      - `claimNotes` (DEFAULT_ADMIN_ROLE on the token, the only role that can mint) mints
- *        NOTES_PER_CLAIM to the caller at most once per CLAIM_COOLDOWN. The mint runs the token's
+ *      - `claimTokens` (DEFAULT_ADMIN_ROLE on the token, the only role that can mint) mints
+ *        TOKENS_PER_CLAIM to the caller at most once per CLAIM_COOLDOWN. The mint runs the token's
  *        full gate, so an unverified, frozen or restricted-country caller, or a register already
- *        at its holder cap, makes it revert. Nothing is paid for the notes: there is no sale.
- *      - `payCoupon` (AGENT on the distributor, which gates deposits) mints COUPON_PER_NOTE EURC
- *        for every note outstanding and deposits it for every holder, as any coupon does, at most
+ *        at its holder cap, makes it revert. Nothing is paid for the tokens: there is no sale.
+ *      - `payCoupon` (AGENT on the distributor, which gates deposits) mints COUPON_PER_TOKEN EURC
+ *        for every token outstanding and deposits it for every holder, as any coupon does, at most
  *        once per COUPON_INTERVAL whoever calls it. It does not model collections on the property,
  *        a payment schedule or maturity.
  *
@@ -40,7 +40,7 @@ import {TestnetEURC} from "./TestnetEURC.sol";
  *
  *      What a stranger can still do on a shared deployment, and why it does not brick the demo:
  *      the per-address cooldown does not stop one person using many addresses, so the holder cap
- *      can be filled at two transactions per address (onboard, then claimNotes). The cap is the
+ *      can be filled at two transactions per address (onboard, then claimTokens). The cap is the
  *      protocol's own rule, kept at the value Deploy.s.sol sets; the agent reopens a full register
  *      with `MaxHoldersModule.setMaxHolders`. Paying coupons early or often only pays holders.
  */
@@ -50,11 +50,11 @@ contract TestnetDesk is Ownable {
     //////////////////////////////////////////////////////////////*/
 
     /**
-     * @notice Emitted when the desk mints notes to a caller.
-     * @param account The caller, who receives the notes.
+     * @notice Emitted when the desk mints tokens to a caller.
+     * @param account The caller, who receives the tokens.
      * @param amount The amount minted.
      */
-    event NotesClaimed(address indexed account, uint256 amount);
+    event TokensClaimed(address indexed account, uint256 amount);
 
     /**
      * @notice Emitted when a coupon is deposited into the distributor.
@@ -79,7 +79,7 @@ contract TestnetDesk is Ownable {
     /// @notice Thrown when a country code is outside 1 to 999, the range of ISO 3166-1 numeric codes.
     error InvalidCountry(uint16 country);
 
-    /// @notice Thrown when an address claims notes again before its cooldown has passed.
+    /// @notice Thrown when an address claims tokens again before its cooldown has passed.
     error ClaimTooSoon(address account, uint256 nextClaimAt);
 
     /// @notice Thrown when a coupon is paid again before the interval has passed.
@@ -101,8 +101,8 @@ contract TestnetDesk is Ownable {
     /// @notice How long an attestation written by `onboard` stays valid.
     uint64 public constant KYC_VALIDITY = 30 days;
 
-    /// @notice Notes minted per claim: ten notes, 18 decimals.
-    uint256 public constant NOTES_PER_CLAIM = 10e18;
+    /// @notice Tokens minted per claim: ten tokens, 18 decimals.
+    uint256 public constant TOKENS_PER_CLAIM = 10e18;
 
     /// @notice Minimum time between two claims from the same address.
     uint256 public constant CLAIM_COOLDOWN = 1 days;
@@ -110,11 +110,11 @@ contract TestnetDesk is Ownable {
     /// @notice Minimum time between two coupon payments, whoever triggers them.
     uint256 public constant COUPON_INTERVAL = 10 minutes;
 
-    /// @notice EURC paid per whole note outstanding on each coupon: 5 EURC, 6 decimals.
-    uint256 public constant COUPON_PER_NOTE = 5e6;
+    /// @notice EURC paid per whole token outstanding on each coupon: 5 EURC, 6 decimals.
+    uint256 public constant COUPON_PER_TOKEN = 5e6;
 
-    /// @dev One whole note in base units.
-    uint256 private constant _ONE_NOTE = 1e18;
+    /// @dev One whole token in base units.
+    uint256 private constant _ONE_TOKEN = 1e18;
 
     /*//////////////////////////////////////////////////////////////
                                  STORAGE
@@ -123,7 +123,7 @@ contract TestnetDesk is Ownable {
     /// @dev The registry `onboard` writes to.
     IIdentityRegistry private immutable _identityRegistry;
 
-    /// @dev The token `claimNotes` mints and whose supply sizes each coupon.
+    /// @dev The token `claimTokens` mints and whose supply sizes each coupon.
     ISecurityToken private immutable _token;
 
     /// @dev The settlement currency, deployed by this desk so that only the desk can mint it.
@@ -134,7 +134,7 @@ contract TestnetDesk is Ownable {
     IDividendDistributor private _distributor; // 20 bytes -┐  Slot 1 (28/32)
     uint64 private _lastCouponAt; //               8 bytes -┘
 
-    /// @dev Timestamp of each address's last note claim.
+    /// @dev Timestamp of each address's last token claim.
     mapping(address account => uint256 timestamp) private _lastClaim;
 
     /*//////////////////////////////////////////////////////////////
@@ -147,7 +147,7 @@ contract TestnetDesk is Ownable {
      *      and wired with `setDistributor`.
      * @param owner_ The account allowed to wire the distributor.
      * @param identityRegistry_ The registry `onboard` writes to.
-     * @param token_ The token `claimNotes` mints.
+     * @param token_ The token `claimTokens` mints.
      */
     constructor(address owner_, address identityRegistry_, address token_) Ownable(owner_) {
         if (identityRegistry_ == address(0) || token_ == address(0)) revert ZeroAddress();
@@ -202,19 +202,19 @@ contract TestnetDesk is Ownable {
     //////////////////////////////////////////////////////////////*/
 
     /**
-     * @notice Mints NOTES_PER_CLAIM to the caller, at most once per CLAIM_COOLDOWN.
+     * @notice Mints TOKENS_PER_CLAIM to the caller, at most once per CLAIM_COOLDOWN.
      * @dev The cooldown is recorded before the mint, and a mint the gate rejects reverts the whole
      *      call, so a rejected claim does not use up the day.
      */
-    function claimNotes() external {
+    function claimTokens() external {
         uint256 next = nextClaimAt(msg.sender);
         if (block.timestamp < next) revert ClaimTooSoon(msg.sender, next);
 
         _lastClaim[msg.sender] = block.timestamp;
 
-        emit NotesClaimed(msg.sender, NOTES_PER_CLAIM);
+        emit TokensClaimed(msg.sender, TOKENS_PER_CLAIM);
 
-        _token.mint(msg.sender, NOTES_PER_CLAIM);
+        _token.mint(msg.sender, TOKENS_PER_CLAIM);
     }
 
     /*//////////////////////////////////////////////////////////////
@@ -222,7 +222,7 @@ contract TestnetDesk is Ownable {
     //////////////////////////////////////////////////////////////*/
 
     /**
-     * @notice Deposits a coupon of COUPON_PER_NOTE per note outstanding, at most once per
+     * @notice Deposits a coupon of COUPON_PER_TOKEN per token outstanding, at most once per
      *         COUPON_INTERVAL. Anyone can trigger it.
      * @dev The EURC is minted here and pulled by the distributor in the same call. The distributor
      *      reverts on a zero amount or a zero supply rather than accepting funds nobody can claim.
@@ -248,7 +248,7 @@ contract TestnetDesk is Ownable {
     //////////////////////////////////////////////////////////////*/
 
     /**
-     * @notice Earliest timestamp at which an address can claim notes again.
+     * @notice Earliest timestamp at which an address can claim tokens again.
      * @param account The address.
      * @return The timestamp, zero if it never claimed.
      */
@@ -271,7 +271,7 @@ contract TestnetDesk is Ownable {
      * @return The amount, 6 decimals.
      */
     function couponAmount() public view returns (uint256) {
-        return _token.totalSupply() * COUPON_PER_NOTE / _ONE_NOTE;
+        return _token.totalSupply() * COUPON_PER_TOKEN / _ONE_TOKEN;
     }
 
     /**
@@ -283,7 +283,7 @@ contract TestnetDesk is Ownable {
     }
 
     /**
-     * @notice Timestamp of an address's last note claim.
+     * @notice Timestamp of an address's last token claim.
      * @param account The address.
      * @return The timestamp, zero if it never claimed.
      */

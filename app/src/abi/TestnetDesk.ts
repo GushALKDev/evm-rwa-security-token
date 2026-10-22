@@ -49,7 +49,7 @@ export const deskAbi = [
   },
   {
     "type": "function",
-    "name": "COUPON_PER_NOTE",
+    "name": "COUPON_PER_TOKEN",
     "inputs": [],
     "outputs": [
       {
@@ -75,7 +75,7 @@ export const deskAbi = [
   },
   {
     "type": "function",
-    "name": "NOTES_PER_CLAIM",
+    "name": "TOKENS_PER_CLAIM",
     "inputs": [],
     "outputs": [
       {
@@ -88,7 +88,7 @@ export const deskAbi = [
   },
   {
     "type": "function",
-    "name": "claimNotes",
+    "name": "claimTokens",
     "inputs": [],
     "outputs": [],
     "stateMutability": "nonpayable"
@@ -322,25 +322,6 @@ export const deskAbi = [
   },
   {
     "type": "event",
-    "name": "NotesClaimed",
-    "inputs": [
-      {
-        "name": "account",
-        "type": "address",
-        "indexed": true,
-        "internalType": "address"
-      },
-      {
-        "name": "amount",
-        "type": "uint256",
-        "indexed": false,
-        "internalType": "uint256"
-      }
-    ],
-    "anonymous": false
-  },
-  {
-    "type": "event",
     "name": "OwnershipTransferred",
     "inputs": [
       {
@@ -354,6 +335,25 @@ export const deskAbi = [
         "type": "address",
         "indexed": true,
         "internalType": "address"
+      }
+    ],
+    "anonymous": false
+  },
+  {
+    "type": "event",
+    "name": "TokensClaimed",
+    "inputs": [
+      {
+        "name": "account",
+        "type": "address",
+        "indexed": true,
+        "internalType": "address"
+      },
+      {
+        "name": "amount",
+        "type": "uint256",
+        "indexed": false,
+        "internalType": "uint256"
       }
     ],
     "anonymous": false

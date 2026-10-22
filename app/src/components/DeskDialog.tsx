@@ -4,7 +4,7 @@ import { chain, links } from '../config/chain'
 import { useTx } from '../hooks/useTx'
 import { deskCallAbi } from '../lib/abi'
 import { countries, countryLabel } from '../lib/countries'
-import { formatDate, formatDuration, formatNotes, formatTimestamp } from '../lib/format'
+import { formatDate, formatDuration, formatTokens, formatTimestamp } from '../lib/format'
 import { evaluateGate, identityWhy } from '../lib/gate'
 import { labelOf, type TokenModel } from '../lib/model'
 import { checkText } from './gateText'
@@ -17,8 +17,8 @@ export function DeskDialog({ model, onClose, onConnect }: { model: TokenModel; o
   const acc = model.account
   const [country, setCountry] = useState(() => (acc?.party.country && acc.party.country !== 0 ? acc.party.country : 724))
   // The desk's mint runs the token's full gate: the same mirror the transfer gate draws decides whether it would pass.
-  const mint = acc ? evaluateGate(model.gate, null, acc.party, st.notesPerClaim, model.chainTime) : null
-  const stop = mint && mint.stoppedAt !== null ? checkText(mint.checks[mint.stoppedAt], model, null, acc!.party, st.notesPerClaim) : null
+  const mint = acc ? evaluateGate(model.gate, null, acc.party, st.tokensPerClaim, model.chainTime) : null
+  const stop = mint && mint.stoppedAt !== null ? checkText(mint.checks[mint.stoppedAt], model, null, acc!.party, st.tokensPerClaim) : null
   const { run, busy } = useTx({
     labelOf: (a) => labelOf(d, address, a),
     rejectingRule: stop ? `${stop.title}. ${stop.detail}` : undefined,
@@ -32,13 +32,13 @@ export function DeskDialog({ model, onClose, onConnect }: { model: TokenModel; o
   const claimOpen = model.chainTime >= nextClaim
   const restrictedOwn = acc ? model.gate.restricted.get(acc.party.country) === true : false
   const restrictedPick = model.gate.restricted.get(country) === true
-  const notes = formatNotes(st.notesPerClaim)
+  const tokens = formatTokens(st.tokensPerClaim)
 
   return (
-    <Dialog title="Test notes" onClose={onClose}>
+    <Dialog title="Test tokens" onClose={onClose}>
       <p className="muted">
         The desk is a testnet stand-in for the KYC provider and the issuer. It verifies your wallet with the country you
-        declare, checking nothing else, and issues {notes} notes a day. Transactions also need a little {chain.name} ETH for
+        declare, checking nothing else, and issues {tokens} tokens a day. Transactions also need a little {chain.name} ETH for
         gas.
       </p>
 
@@ -110,7 +110,7 @@ export function DeskDialog({ model, onClose, onConnect }: { model: TokenModel; o
               {restrictedPick ? (
                 <p className="hint" data-tone="warn">
                   {countryLabel(country)} is restricted here. The desk will verify you, and the jurisdiction rule will
-                  then stop every note sent to you, including the desk's own issue.
+                  then stop every token sent to you, including the desk's own issue.
                 </p>
               ) : null}
             </div>
@@ -119,17 +119,17 @@ export function DeskDialog({ model, onClose, onConnect }: { model: TokenModel; o
           <div className="flow-step">
             <b aria-hidden="true">2</b>
             <div className="desk-step">
-              <h3>Get {notes} notes</h3>
+              <h3>Get {tokens} tokens</h3>
               <p className="hint">
                 {why !== 'verified'
                   ? 'The mint runs the full gate, so your wallet has to be verified first.'
                   : restrictedOwn
-                    ? `Your country, ${countryLabel(acc.party.country)}, is restricted, so the jurisdiction rule stops the mint. Verify again with another country to receive notes.`
+                    ? `Your country, ${countryLabel(acc.party.country)}, is restricted, so the jurisdiction rule stops the mint. Verify again with another country to receive tokens.`
                     : stop
                       ? `The mint would stop at check ${mint!.stoppedAt! + 1}, ${stop.title.toLowerCase()}: ${stop.detail}`
                       : !claimOpen
                         ? `The desk issues to each wallet once a day. Yours opens again on ${formatTimestamp(nextClaim)}.`
-                        : `Minted through the issuer role the desk holds. Your lockup clock starts on the first notes you receive.`}
+                        : `Minted through the issuer role the desk holds. Your lockup clock starts on the first tokens you receive.`}
               </p>
               <div className="inline-form">
                 <button
@@ -137,14 +137,14 @@ export function DeskDialog({ model, onClose, onConnect }: { model: TokenModel; o
                   disabled={!!busy || noGas || wrongChain || why !== 'verified' || restrictedOwn || !!stop || !claimOpen}
                   onClick={() =>
                     run(
-                      `Get ${notes} notes`,
-                      `${notes} notes received`,
-                      { address: d.desk, abi: deskCallAbi, functionName: 'claimNotes' },
+                      `Get ${tokens} tokens`,
+                      `${tokens} tokens received`,
+                      { address: d.desk, abi: deskCallAbi, functionName: 'claimTokens' },
                       { afterPrevious: true },
                     )
                   }
                 >
-                  Get {notes} notes
+                  Get {tokens} tokens
                 </button>
                 <button
                   className="btn btn-quiet"
@@ -160,8 +160,8 @@ export function DeskDialog({ model, onClose, onConnect }: { model: TokenModel; o
 
           <dl className="rows">
             <div className="row">
-              <dt>Your notes</dt>
-              <dd>{formatNotes(acc.party.balance)}</dd>
+              <dt>Your tokens</dt>
+              <dd>{formatTokens(acc.party.balance)}</dd>
             </div>
           </dl>
         </div>

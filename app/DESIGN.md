@@ -27,7 +27,7 @@ danger and warn colors, spacing, radii and components.
 
 A permissioned security token for a real-estate-backed note, on a testnet. Visitors are protocol founders, CTOs
 and engineers judging the engineering behind it, plus anyone who wants to try holding a regulated instrument. The
-page has two jobs: let them onboard, receive and send notes and claim income without friction, and make the
+page has two jobs: let them onboard, receive and send tokens and claim income without friction, and make the
 token's defining mechanic visible: a transfer is allowed only when identity, freeze state and every compliance
 rule agree, in a fixed order.
 
@@ -49,7 +49,7 @@ Everything else on the page stays quiet.
 ## Layout
 
 ```
-header        wordmark (links to the token page), network, pages, test notes, wallet
+header        wordmark (links to the token page), network, pages, test tokens, wallet
               pages: Token, Dividends, How it works, on a second header row below 1024 px
 notice        one line: testnet, for educational purposes, not audited, what the desk stands in for
 
@@ -70,10 +70,10 @@ only.
 
 ## Rules
 
-- Copy names what the user does: Verify, Get notes, Send, Pay the coupon, Claim. The button that says Send
-  produces a toast that says Notes sent.
-- Every preview shows before and after, computed with the contract's own rules and rounding: notes, holders,
-  lockup clocks and unclaimed income for a transfer; the deposit, the per-note total and your share for a coupon.
+- Copy names what the user does: Verify, Get tokens, Send, Pay the coupon, Claim. The button that says Send
+  produces a toast that says Tokens sent.
+- Every preview shows before and after, computed with the contract's own rules and rounding: tokens, holders,
+  lockup clocks and unclaimed income for a transfer; the deposit, the per-token total and your share for a coupon.
 - Rules that depend on time (the lockup, KYC expiry, the desk's cooldowns) are evaluated at the latest block's
   timestamp, which is what the call's simulation sees; the visitor's clock only drives countdowns.
 - Errors say what happened and what to do, decoded from the custom errors of every contract the call reaches.

@@ -8,7 +8,7 @@ import { useTx } from '../hooks/useTx'
 import { securityTokenAbi, tokenAbi } from '../lib/abi'
 import { parseTypedAddress } from '../lib/address'
 import { countryLabel } from '../lib/countries'
-import { formatDate, formatEurc, formatNoteCount, formatNotes, parseAmount, toInput } from '../lib/format'
+import { formatDate, formatEurc, formatTokenCount, formatTokens, parseAmount, toInput } from '../lib/format'
 import {
   evaluateGate,
   freeBalance,
@@ -24,7 +24,7 @@ import { OutcomeIcon } from './icons'
 
 type Choice = 'you' | 'mint' | 'custom' | SeedKey
 
-const NOTE_DECIMALS = 18
+const TOKEN_DECIMALS = 18
 
 function useCustomParty(input: string) {
   const typed = parseTypedAddress(input)
@@ -97,8 +97,8 @@ function PartyField({
 /** One line on a wallet: what it holds and where its identity stands, at the chain's time. */
 function partySummary(p: PartyData | undefined, model: TokenModel): string {
   if (!p) return 'Reading the wallet…'
-  const notes = formatNoteCount(p.balance)
-  const frozen = p.frozen ? ', wallet frozen' : p.frozenTokens > 0n ? `, ${formatNotes(p.frozenTokens)} frozen` : ''
+  const tokens = formatTokenCount(p.balance)
+  const frozen = p.frozen ? ', wallet frozen' : p.frozenTokens > 0n ? `, ${formatTokens(p.frozenTokens)} frozen` : ''
   const why = identityWhy(p, model.chainTime)
   const id =
     why === 'verified'
@@ -108,7 +108,7 @@ function partySummary(p: PartyData | undefined, model: TokenModel): string {
         : why === 'removed'
           ? 'identity removed'
           : 'not verified'
-  return `${notes}${frozen}, ${id}.`
+  return `${tokens}${frozen}, ${id}.`
 }
 
 export function Gate({ model, onConnect, onDesk }: { model: TokenModel; onConnect: () => void; onDesk: () => void }) {
@@ -144,7 +144,7 @@ export function Gate({ model, onConnect, onDesk }: { model: TokenModel; onConnec
   }
   const from = resolve(fromChoice, customFrom)
   const to = resolve(toChoice, customTo) as PartyData | undefined
-  const amount = parseAmount(input, NOTE_DECIMALS)
+  const amount = parseAmount(input, TOKEN_DECIMALS)
 
   const gateState = useMemo(() => {
     if (!extraRestricted.data) return model.gate
@@ -168,7 +168,7 @@ export function Gate({ model, onConnect, onDesk }: { model: TokenModel; onConnec
   const maxFrom = from ? freeBalance(from) : null
   const summary = (choice: Choice, p: PartyData | null | undefined) =>
     choice === 'mint'
-      ? 'Primary issuance: the issuer mints to the recipient. The desk issues test notes this way.'
+      ? 'Primary issuance: the issuer mints to the recipient. The desk issues test tokens this way.'
       : partySummary(p ?? undefined, model)
 
   return (
@@ -219,9 +219,9 @@ export function Gate({ model, onConnect, onDesk }: { model: TokenModel; onConnec
               value={input}
               onChange={(e) => setInput(e.target.value)}
             />
-            <span className="unit">notes</span>
+            <span className="unit">tokens</span>
             {maxFrom !== null && maxFrom > 0n ? (
-              <button className="max" onClick={() => setInput(toInput(maxFrom, NOTE_DECIMALS))}>
+              <button className="max" onClick={() => setInput(toInput(maxFrom, TOKEN_DECIMALS))}>
                 Max
               </button>
             ) : null}
@@ -230,7 +230,7 @@ export function Gate({ model, onConnect, onDesk }: { model: TokenModel; onConnec
             {input !== '' && amount === null
               ? 'Enter a number with at most 18 decimals.'
               : maxFrom !== null
-                ? `Free to move: ${formatNotes(maxFrom)}.`
+                ? `Free to move: ${formatTokens(maxFrom)}.`
                 : 'A new issue has no sender balance to draw on.'}
           </span>
         </div>
@@ -252,11 +252,11 @@ export function Gate({ model, onConnect, onDesk }: { model: TokenModel; onConnec
         <Send model={model} result={result} to={to} amount={amount} onDesk={onDesk} />
       ) : !connected && status !== 'connected' ? (
         <p className="hint gate-foot">
-          To send notes of your own,{' '}
+          To send tokens of your own,{' '}
           <button className="link-button" onClick={onConnect}>
             connect a wallet
           </button>{' '}
-          and get test notes from the desk. The seeded wallets above are there to try every check without one.
+          and get test tokens from the desk. The seeded wallets above are there to try every check without one.
         </p>
       ) : null}
     </div>
@@ -332,7 +332,7 @@ function Verdict({
       <p className="verdict-main">
         {result.ok === true ? (
           <>
-            <strong>Clears the gate.</strong> {amount === 0n ? 'A zero amount passes the modules but still needs both parties verified and unfrozen.' : 'The token would move the notes.'}
+            <strong>Clears the gate.</strong> {amount === 0n ? 'A zero amount passes the modules but still needs both parties verified and unfrozen.' : 'The contract would move the tokens.'}
           </>
         ) : result.ok === false && stopped && stoppedText ? (
           <>
@@ -382,9 +382,9 @@ function Send({
   if (acc.party.balance === 0n) {
     return (
       <div className="gate-foot callout">
-        You hold no notes yet.{' '}
+        You hold no tokens yet.{' '}
         <button className="link-button" onClick={onDesk}>
-          Get test notes from the desk
+          Get test tokens from the desk
         </button>{' '}
         and come back to send some.
       </div>
@@ -400,20 +400,20 @@ function Send({
       {result.ok === true && amount > 0n ? (
         <dl className="rows">
           <div className="row">
-            <dt>Your notes</dt>
+            <dt>Your tokens</dt>
             <dd>
-              <span className="faint">{formatNotes(acc.party.balance)}</span>
+              <span className="faint">{formatTokens(acc.party.balance)}</span>
               <span className="arrow">to</span>
-              {formatNotes(self ? acc.party.balance : acc.party.balance - amount)}
+              {formatTokens(self ? acc.party.balance : acc.party.balance - amount)}
             </dd>
           </div>
           {!self ? (
             <div className="row">
-              <dt>Recipient's notes</dt>
+              <dt>Recipient's tokens</dt>
               <dd>
-                <span className="faint">{formatNotes(to.balance)}</span>
+                <span className="faint">{formatTokens(to.balance)}</span>
                 <span className="arrow">to</span>
-                {formatNotes(to.balance + amount)}
+                {formatTokens(to.balance + amount)}
               </dd>
             </div>
           ) : null}
@@ -467,7 +467,7 @@ function Send({
         className="btn btn-primary btn-block"
         disabled={!canSend}
         onClick={() =>
-          run('Send notes', 'Notes sent', {
+          run('Send tokens', 'Tokens sent', {
             address: d.token,
             abi: tokenAbi,
             functionName: 'transfer',
@@ -475,7 +475,7 @@ function Send({
           })
         }
       >
-        {busy ?? (result.ok === true ? `Send ${formatNoteCount(amount)}` : 'The gate stops this transfer')}
+        {busy ?? (result.ok === true ? `Send ${formatTokenCount(amount)}` : 'The gate stops this transfer')}
       </button>
     </div>
   )

@@ -2,7 +2,7 @@
 
 A web app for the permissioned security token in this repository, running on Base Sepolia with testnet tokens.
 Without a wallet, visitors can walk every check of the transfer gate on a set of seeded wallets. With one, they
-can verify their wallet at a testnet desk, receive notes, send them through the gate, pay a coupon and claim
+can verify their wallet at a testnet desk, receive tokens, send them through the gate, pay a coupon and claim
 their share of it.
 
 Proof of concept, not audited, for educational purposes. The tokens are testnet stand-ins with no value.
@@ -23,7 +23,7 @@ Proof of concept, not audited, for educational purposes. The tokens are testnet 
   or clears and the seller's unclaimed income before and after; a coupon shows the deposit and your exact share.
   Each call is simulated before the wallet asks for a signature, so a revert arrives as a sentence
   (`src/lib/errors.ts`) instead of a failed transaction.
-- **Income by accumulator.** The dividends page shows what a note has been paid since issuance, what the
+- **Income by accumulator.** The dividends page shows what a token has been paid since issuance, what the
   distributor holds unclaimed, and the formula behind your figure with your wallet's own values, including the
   correction the contract keeps in storage.
 - **The anchored terms.** The page fetches the published terms document and hashes it in the browser, to compare
@@ -35,7 +35,7 @@ against a local deployment (`scripts/parity.test.ts`).
 
 ## The testnet stand-ins
 
-On a real issuance a KYC provider verifies investors, the issuer sells the notes and a paying agent passes on the
+On a real issuance a KYC provider verifies investors, the issuer sells the tokens and a paying agent passes on the
 income. None of them can work on a public testnet, so [`TestnetDesk`](../script/testnet/TestnetDesk.sol), a
 testnet-only contract, stands in for all three. It holds one role for each:
 
@@ -44,11 +44,11 @@ testnet-only contract, stands in for all three. It holds one role for each:
   does not check who the caller is, where they live or whether they are accredited, and it records them as not
   accredited (no module reads that flag). Like any agent write it replaces the whole record, so it also undoes an
   agent's removal of the caller and resets a custom investor id to the default one.
-- `claimNotes()` mints 10 notes to the caller, and only the caller, once a day, through the issuer role (the only
+- `claimTokens()` mints 10 tokens to the caller, and only the caller, once a day, through the issuer role (the only
   role that can mint).
   The mint runs the token's full gate, so an unverified, frozen or restricted-country wallet is refused. Nothing
-  is paid for the notes.
-- `payCoupon()` mints 5 testnet EURC for each note outstanding and deposits it in the distributor for every holder,
+  is paid for the tokens.
+- `payCoupon()` mints 5 testnet EURC for each token outstanding and deposits it in the distributor for every holder,
   through the agent role there, at most once every 10 minutes, whoever calls it.
 
 Its only other functions are its owner's: `setDistributor`, which wires the distributor once and checks its
@@ -67,7 +67,7 @@ many addresses could fill it at two transactions per address; the agent then reo
 `setMaxHolders`.
 
 The seeded wallets have addresses derived from a hash rather than from a key, so nobody can sign for them: they
-never send, and only the agent can change their identity or freeze state. Anyone can still send them notes, and the
+never send, and only the agent can change their identity or freeze state. Anyone can still send them tokens, and the
 lapsed one was written to lapse an hour after deployment.
 
 ## Run it locally

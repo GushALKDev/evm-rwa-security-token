@@ -32,7 +32,7 @@ export function useTx(errorContext: ErrorContext) {
       setBusy(label)
       const id = toasts.push({ tone: 'pending', title: label, body: 'Checking the call against the chain…' })
       try {
-        // A public RPC spreads requests over several nodes, so a call right after another one (claiming notes
+        // A public RPC spreads requests over several nodes, so a call right after another one (claiming tokens
         // right after onboarding) can reach a node that has not imported that block yet and revert on the old
         // state. Such a call retries a revert for a few blocks before reporting it.
         let prepared

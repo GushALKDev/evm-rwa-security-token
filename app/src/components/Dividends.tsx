@@ -3,8 +3,8 @@ import { chain, explorerAddress, links } from '../config/chain'
 import { useAccumulator } from '../hooks/useTokenData'
 import { useTx } from '../hooks/useTx'
 import { deskCallAbi, distributorCallAbi } from '../lib/abi'
-import { accumulated, couponAmount, couponPreview, depositEffect, perNote } from '../lib/dividends'
-import { formatDuration, formatEurc, formatNoteCount, formatTimestamp } from '../lib/format'
+import { accumulated, couponAmount, couponPreview, depositEffect, perToken } from '../lib/dividends'
+import { formatDuration, formatEurc, formatTokenCount, formatTimestamp } from '../lib/format'
 import { identityWhy } from '../lib/gate'
 import { labelOf, type TokenModel } from '../lib/model'
 
@@ -18,12 +18,12 @@ function CouponCard({ model, onConnect }: { model: TokenModel; onConnect: () => 
   const { run, busy } = useTx({ labelOf: (a) => labelOf(d, acc?.address, a) })
   const snapshot = useAccumulator(acc?.address)
 
-  const amount = couponAmount(live.totalSupply, st.couponPerNote)
+  const amount = couponAmount(live.totalSupply, st.couponPerToken)
   const open = model.chainTime >= live.nextCouponAt
   const wait = Number(live.nextCouponAt - model.now)
   const after = live.totalSupply > 0n && amount > 0n ? depositEffect(live.dividendsPerShare, live.residue, live.totalSupply, amount) : null
   // The share comes from one snapshot of the account's inputs, read at a single block.
-  const preview = snapshot.data && snapshot.data.balance > 0n ? couponPreview(snapshot.data, st.couponPerNote) : null
+  const preview = snapshot.data && snapshot.data.balance > 0n ? couponPreview(snapshot.data, st.couponPerToken) : null
   const share = preview?.share ?? null
   const noGas = acc?.extras?.eth === 0n
 
@@ -37,8 +37,8 @@ function CouponCard({ model, onConnect }: { model: TokenModel; onConnect: () => 
       </div>
       <div className="figures figures-flush">
         <div className="figure">
-          <div className="figure-value tone-accent">{formatEurc(perNote(live.dividendsPerShare))}</div>
-          <div className="figure-label">EURC paid per note since issuance</div>
+          <div className="figure-value tone-accent">{formatEurc(perToken(live.dividendsPerShare))}</div>
+          <div className="figure-label">EURC paid per token since issuance</div>
         </div>
         <div className="figure">
           <div className="figure-value">{formatEurc(live.distributorHeld)}</div>
@@ -59,16 +59,16 @@ function CouponCard({ model, onConnect }: { model: TokenModel; onConnect: () => 
           <div className="row">
             <dt>Deposits</dt>
             <dd>
-              {formatEurc(amount)} EURC <span className="faint">{formatEurc(st.couponPerNote)} for each of {formatNoteCount(live.totalSupply)}</span>
+              {formatEurc(amount)} EURC <span className="faint">{formatEurc(st.couponPerToken)} for each of {formatTokenCount(live.totalSupply)}</span>
             </dd>
           </div>
           {after ? (
             <div className="row">
-              <dt>Paid per note since issuance</dt>
+              <dt>Paid per token since issuance</dt>
               <dd>
-                <span className="faint">{formatEurc(perNote(live.dividendsPerShare))}</span>
+                <span className="faint">{formatEurc(perToken(live.dividendsPerShare))}</span>
                 <span className="arrow">to</span>
-                {formatEurc(perNote(after.dividendsPerShare))} EURC
+                {formatEurc(perToken(after.dividendsPerShare))} EURC
               </dd>
             </div>
           ) : null}
@@ -80,7 +80,7 @@ function CouponCard({ model, onConnect }: { model: TokenModel; onConnect: () => 
           ) : null}
         </dl>
         <p className="hint">
-          The testnet desk stands in for the paying agent: it mints {formatEurc(st.couponPerNote)} testnet EURC per note
+          The testnet desk stands in for the paying agent: it mints {formatEurc(st.couponPerToken)} testnet EURC per token
           outstanding and deposits it, at most once every {formatDuration(Number(st.couponInterval))}, whoever asks.
           {open ? null : ` The next one opens on ${formatTimestamp(live.nextCouponAt)}.`}
         </p>
@@ -146,13 +146,13 @@ function IncomeCard({ model }: { model: TokenModel }) {
         </span>
         <span className="hint">
           {p.balance > 0n
-            ? `Accrues to your ${formatNoteCount(p.balance)} with every coupon paid while you hold them.`
-            : 'Hold notes when a coupon is paid to earn a share of it.'}
+            ? `Accrues to your ${formatTokenCount(p.balance)} with every coupon paid while you hold them.`
+            : 'Hold tokens when a coupon is paid to earn a share of it.'}
         </span>
       </div>
       <dl className="rows">
         <div className="row">
-          <dt>Earned since you first held notes</dt>
+          <dt>Earned since you first held tokens</dt>
           <dd>{formatEurc(total)} EURC</dd>
         </div>
         <div className="row">
@@ -195,13 +195,13 @@ function IncomeCard({ model }: { model: TokenModel }) {
         <details className="formula">
           <summary>How this figure is computed</summary>
           <p>
-            Earned = ⌊(notes × dividends per share − correction) / 2<sup>128</sup>⌋, with the contract's own values for
+            Earned = ⌊(tokens × dividends per share − correction) / 2<sup>128</sup>⌋, with the contract's own values for
             your wallet, all read at block {s.blockNumber.toString()}. The floor rounds each wallet's figure down, never
             up, which keeps the distributor able to pay every claim.
           </p>
           <dl className="rows mono-rows">
             <div className="row">
-              <dt>notes (base units)</dt>
+              <dt>tokens (base units)</dt>
               <dd className="mono">{s.balance.toString()}</dd>
             </div>
             <div className="row">
@@ -248,7 +248,7 @@ export function DividendsPage({ model, onConnect }: { model: TokenModel; onConne
                 <div className="card-title">
                   <h3>Your income</h3>
                 </div>
-                <p className="muted">Connect a wallet to see what your notes have earned and claim it.</p>
+                <p className="muted">Connect a wallet to see what your tokens have earned and claim it.</p>
               </div>
             )}
           </div>

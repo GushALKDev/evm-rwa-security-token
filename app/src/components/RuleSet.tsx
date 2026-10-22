@@ -2,7 +2,7 @@ import { useState } from 'react'
 import { hexToString, keccak256, type Hex } from 'viem'
 import { explorerAddress, links } from '../config/chain'
 import { countryLabel } from '../lib/countries'
-import { perNote } from '../lib/dividends'
+import { perToken } from '../lib/dividends'
 import { formatDate, formatDuration, formatEurc, shortAddress } from '../lib/format'
 import type { ModuleRef } from '../lib/gate'
 import type { TokenModel } from '../lib/model'
@@ -15,13 +15,13 @@ function moduleLine(m: ModuleRef, model: TokenModel): string {
     case 'country': {
       const restricted = [...g.restricted].filter(([, r]) => r).map(([code]) => countryLabel(code))
       return restricted.length
-        ? `Stops notes sent to a wallet resident in a restricted jurisdiction: ${restricted.join(', ')}.`
-        : 'Stops notes sent to a wallet resident in a restricted jurisdiction. None is restricted today.'
+        ? `Stops tokens sent to a wallet resident in a restricted jurisdiction: ${restricted.join(', ')}.`
+        : 'Stops tokens sent to a wallet resident in a restricted jurisdiction. None is restricted today.'
     }
     case 'lockup':
-      return `Stops a sender within ${formatDuration(Number(g.lockupPeriod))} of its first notes. The production script sets 365 days; this deployment shortened it through the module's own setter.`
+      return `Stops a sender within ${formatDuration(Number(g.lockupPeriod))} of its first tokens. The production script sets 365 days; this deployment shortened it through the module's own setter.`
     case 'distributor':
-      return `Never stops anything: it watches transfers to split income. ${formatEurc(perNote(model.live.dividendsPerShare))} EURC paid per note since issuance.`
+      return `Never stops anything: it watches transfers to split income. ${formatEurc(perToken(model.live.dividendsPerShare))} EURC paid per token since issuance.`
     default:
       return 'A module this page does not know.'
   }

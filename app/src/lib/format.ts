@@ -17,17 +17,17 @@ export function formatFixed(value: bigint, decimals: number, shown: number): str
   return negative ? `-${out}` : out
 }
 
-/** A note amount: whole notes when the amount is whole, otherwise up to four decimals. */
-export function formatNotes(value: bigint): string {
+/** A token amount: whole tokens when the amount is whole, otherwise up to four decimals. */
+export function formatTokens(value: bigint): string {
   if (value % 10n ** 18n === 0n) return formatFixed(value, 18, 0)
   if (value > 0n && value < 10n ** 14n) return '< 0.0001'
   const s = formatFixed(value, 18, 4).replace(/0+$/, '')
   return s.endsWith('.') ? `${s}0` : s
 }
 
-/** A note amount with its noun: 1 note, 2.5 notes. */
-export function formatNoteCount(value: bigint): string {
-  return `${formatNotes(value)} ${value === 10n ** 18n ? 'note' : 'notes'}`
+/** A token amount with its noun: 1 token, 2.5 tokens. */
+export function formatTokenCount(value: bigint): string {
+  return `${formatTokens(value)} ${value === 10n ** 18n ? 'token' : 'tokens'}`
 }
 
 /**

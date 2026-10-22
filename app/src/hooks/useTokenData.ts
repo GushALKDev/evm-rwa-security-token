@@ -24,10 +24,10 @@ export interface StaticData {
   tokenName: string
   tokenSymbol: string
   kycValidity: bigint
-  notesPerClaim: bigint
+  tokensPerClaim: bigint
   claimCooldown: bigint
   couponInterval: bigint
-  couponPerNote: bigint
+  couponPerToken: bigint
   currencySymbol: string
   terms: { uri: string; contentHash: Hex; lastModified: bigint }
   domainSeparator: Hex
@@ -91,10 +91,10 @@ function useStatic(d: Deployment) {
       { address: d.token, abi: securityTokenAbi, functionName: 'name' },
       { address: d.token, abi: securityTokenAbi, functionName: 'symbol' },
       { address: d.desk, abi: deskAbi, functionName: 'KYC_VALIDITY' },
-      { address: d.desk, abi: deskAbi, functionName: 'NOTES_PER_CLAIM' },
+      { address: d.desk, abi: deskAbi, functionName: 'TOKENS_PER_CLAIM' },
       { address: d.desk, abi: deskAbi, functionName: 'CLAIM_COOLDOWN' },
       { address: d.desk, abi: deskAbi, functionName: 'COUPON_INTERVAL' },
-      { address: d.desk, abi: deskAbi, functionName: 'COUPON_PER_NOTE' },
+      { address: d.desk, abi: deskAbi, functionName: 'COUPON_PER_TOKEN' },
       { address: d.currency, abi: currencyAbi, functionName: 'symbol' },
       { address: d.documentRegistry, abi: documentRegistryAbi, functionName: 'getDocument', args: [d.termsName] },
       { address: d.identityRegistry, abi: identityRegistryAbi, functionName: 'domainSeparator' },
@@ -112,10 +112,10 @@ function useStatic(d: Deployment) {
       tokenName: r[0] as string,
       tokenSymbol: r[1] as string,
       kycValidity: BigInt(r[2] as bigint),
-      notesPerClaim: r[3] as bigint,
+      tokensPerClaim: r[3] as bigint,
       claimCooldown: r[4] as bigint,
       couponInterval: r[5] as bigint,
-      couponPerNote: r[6] as bigint,
+      couponPerToken: r[6] as bigint,
       currencySymbol: r[7] as string,
       terms: { uri, contentHash, lastModified: BigInt(lastModified) },
       domainSeparator: r[9] as Hex,

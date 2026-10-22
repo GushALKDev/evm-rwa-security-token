@@ -50,7 +50,7 @@ import {
 } from '../src/lib/gate'
 
 const rpc = process.env.LOCAL_RPC
-const NOTE = 10n ** 18n
+const TOKEN = 10n ** 18n
 const SPAIN = 724
 const IRAN = 364
 // anvil's default accounts 0 to 5, unlocked on a local node. Account 0 deployed and holds every role.
@@ -208,8 +208,8 @@ describe.skipIf(!rpc)('parity with the contracts on a local chain', () => {
     let cases = 0
     for (const from of [null, ...parties]) {
       const amounts = from
-        ? [...new Set([0n, 1n, NOTE, freeBalance(from), freeBalance(from) + 1n, from.balance])]
-        : [0n, 1n, NOTE]
+        ? [...new Set([0n, 1n, TOKEN, freeBalance(from), freeBalance(from) + 1n, from.balance])]
+        : [0n, 1n, TOKEN]
       for (const to of parties) {
         for (const amount of amounts) {
           const mirror = evaluateGate(gate, from, to, amount, block.timestamp)
@@ -250,11 +250,11 @@ describe.skipIf(!rpc)('parity with the contracts on a local chain', () => {
   /* ---------------------------------------------------------------- */
 
   it('sets up visitors the way the app does', async () => {
-    // alice: verified, with notes, locked. bob: never verified. carol: verified, in a restricted country.
+    // alice: verified, with tokens, locked. bob: never verified. carol: verified, in a restricted country.
     await sendOk(alice, d.desk, deskCallAbi, 'onboard', [SPAIN])
-    await sendOk(alice, d.desk, deskCallAbi, 'claimNotes')
+    await sendOk(alice, d.desk, deskCallAbi, 'claimTokens')
     await sendOk(carol, d.desk, deskCallAbi, 'onboard', [IRAN])
-    expect(await pub.readContract({ address: d.token, abi: securityTokenAbi, functionName: 'balanceOf', args: [alice] })).toBe(10n * NOTE)
+    expect(await pub.readContract({ address: d.token, abi: securityTokenAbi, functionName: 'balanceOf', args: [alice] })).toBe(10n * TOKEN)
   })
 
   it('matches canTransfer, every moduleCheck and the token revert while lockups run', async () => {
@@ -277,17 +277,17 @@ describe.skipIf(!rpc)('parity with the contracts on a local chain', () => {
     const block = await latest()
     const parties = await Promise.all([alice, d.seeds.settled].map((a) => readParty(a, block.number)))
     const gate = await readGate(parties, block.number)
-    const mirror = evaluateGate(gate, parties[0], parties[1], NOTE, block.timestamp)
+    const mirror = evaluateGate(gate, parties[0], parties[1], TOKEN, block.timestamp)
     expect(mirror.revert).toEqual({ name: 'EnforcedPause', args: [] })
-    expect(await revertOf(alice, 'transfer', [d.seeds.settled, NOTE], block.number)).toEqual(mirror.revert)
-    expect(await pub.readContract({ address: d.token, abi: securityTokenAbi, functionName: 'canTransfer', args: [alice, d.seeds.settled, NOTE] })).toBe(false)
+    expect(await revertOf(alice, 'transfer', [d.seeds.settled, TOKEN], block.number)).toEqual(mirror.revert)
+    expect(await pub.readContract({ address: d.token, abi: securityTokenAbi, functionName: 'canTransfer', args: [alice, d.seeds.settled, TOKEN] })).toBe(false)
     await sendOk(deployer, d.token, securityTokenAbi, 'unpause')
   })
 
   it('evaluates the lockup at the latest block timestamp, one second either side of the unlock', async () => {
     // erin joins now, so her clock starts at a known block.
     await sendOk(erin, d.desk, deskCallAbi, 'onboard', [SPAIN])
-    const receipt = await sendOk(erin, d.desk, deskCallAbi, 'claimNotes')
+    const receipt = await sendOk(erin, d.desk, deskCallAbi, 'claimTokens')
     const start = (await pub.getBlock({ blockNumber: receipt.blockNumber })).timestamp
     const period = BigInt(await pub.readContract({ address: d.lockup, abi: lockupAbi, functionName: 'lockupPeriod' }))
 
@@ -299,11 +299,11 @@ describe.skipIf(!rpc)('parity with the contracts on a local chain', () => {
       const block = await latest()
       const parties = await Promise.all([erin, d.seeds.settled].map((a) => readParty(a, block.number)))
       const gate = await readGate(parties, block.number)
-      const mirror = evaluateGate(gate, parties[0], parties[1], NOTE, block.timestamp)
+      const mirror = evaluateGate(gate, parties[0], parties[1], TOKEN, block.timestamp)
       expect(mirror.ok, `at ${t}`).toBe(open)
       // A call made now runs at the latest block's timestamp, the same one the page evaluates at.
-      expect(await pub.readContract({ address: d.token, abi: securityTokenAbi, functionName: 'canTransfer', args: [erin, d.seeds.settled, NOTE] })).toBe(open)
-      expect(await revertOf(erin, 'transfer', [d.seeds.settled, NOTE], block.number)).toEqual(mirror.revert)
+      expect(await pub.readContract({ address: d.token, abi: securityTokenAbi, functionName: 'canTransfer', args: [erin, d.seeds.settled, TOKEN] })).toBe(open)
+      expect(await revertOf(erin, 'transfer', [d.seeds.settled, TOKEN], block.number)).toEqual(mirror.revert)
     }
   })
 
@@ -312,10 +312,10 @@ describe.skipIf(!rpc)('parity with the contracts on a local chain', () => {
     await sendOk(bob, d.desk, deskCallAbi, 'onboard', [SPAIN])
     await sendOk(dave, d.desk, deskCallAbi, 'onboard', [SPAIN])
     const cases: [Address, Address, bigint][] = [
-      [alice, dave, NOTE], // a new holder
-      [alice, d.seeds.settled, NOTE], // an existing holder
-      [alice, alice, NOTE], // a self-transfer
-      [dave, bob, NOTE], // dave exits to zero and bob joins: one replaces the other
+      [alice, dave, TOKEN], // a new holder
+      [alice, d.seeds.settled, TOKEN], // an existing holder
+      [alice, alice, TOKEN], // a self-transfer
+      [dave, bob, TOKEN], // dave exits to zero and bob joins: one replaces the other
     ]
     for (const [from, to, amount] of cases) {
       const before = await latest()
@@ -344,14 +344,14 @@ describe.skipIf(!rpc)('parity with the contracts on a local chain', () => {
     if (block.timestamp < next) await mineAt(next)
     const pre = await latest()
     const n = pre.number
-    const [supply, dps, residue, perNote, quoted] = await Promise.all([
+    const [supply, dps, residue, perToken, quoted] = await Promise.all([
       pub.readContract({ address: d.token, abi: securityTokenAbi, functionName: 'totalSupply', blockNumber: n }),
       pub.readContract({ address: d.distributor, abi: distributorAbi, functionName: 'dividendsPerShare', blockNumber: n }),
       pub.readContract({ address: d.distributor, abi: distributorAbi, functionName: 'residue', blockNumber: n }),
-      pub.readContract({ address: d.desk, abi: deskAbi, functionName: 'COUPON_PER_NOTE', blockNumber: n }),
+      pub.readContract({ address: d.desk, abi: deskAbi, functionName: 'COUPON_PER_TOKEN', blockNumber: n }),
       pub.readContract({ address: d.desk, abi: deskAbi, functionName: 'couponAmount', blockNumber: n }),
     ])
-    const amount = couponAmount(supply, perNote)
+    const amount = couponAmount(supply, perToken)
     expect(amount).toBe(quoted)
     const after = depositEffect(dps, residue, supply, amount)
 
@@ -381,12 +381,12 @@ describe.skipIf(!rpc)('parity with the contracts on a local chain', () => {
     const [ca, cs] = await Promise.all([correctionOf(alice), correctionOf(d.seeds.settled)])
     const [owedA, owedS] = await Promise.all([claimableOf(alice), claimableOf(d.seeds.settled)])
 
-    await sendOk(alice, d.token, tokenAbi, 'transfer', [d.seeds.settled, 2n * NOTE])
-    const moved = correctionsAfterTransfer(ca, cs, 2n * NOTE, dps, false)
+    await sendOk(alice, d.token, tokenAbi, 'transfer', [d.seeds.settled, 2n * TOKEN])
+    const moved = correctionsAfterTransfer(ca, cs, 2n * TOKEN, dps, false)
     expect(await correctionOf(alice)).toBe(moved.from)
     expect(await correctionOf(d.seeds.settled)).toBe(moved.to)
-    expect(accumulated(a.balance - 2n * NOTE, dps, moved.from)).toBe(await accumulatedOf(alice))
-    expect(accumulated(s.balance + 2n * NOTE, dps, moved.to)).toBe(await accumulatedOf(d.seeds.settled))
+    expect(accumulated(a.balance - 2n * TOKEN, dps, moved.from)).toBe(await accumulatedOf(alice))
+    expect(accumulated(s.balance + 2n * TOKEN, dps, moved.to)).toBe(await accumulatedOf(d.seeds.settled))
     expect(await claimableOf(alice)).toBe(owedA)
     expect(await claimableOf(d.seeds.settled)).toBe(owedS)
 
@@ -394,8 +394,8 @@ describe.skipIf(!rpc)('parity with the contracts on a local chain', () => {
     const fresh = '0xa0Ee7A142d267C1f36714E4a8F75612F20a79720' as Address
     await sendOk(fresh, d.desk, deskCallAbi, 'onboard', [SPAIN])
     const c0 = await correctionOf(fresh)
-    await sendOk(fresh, d.desk, deskCallAbi, 'claimNotes')
-    expect(await correctionOf(fresh)).toBe(correctionAfterMint(c0, 10n * NOTE, dps))
+    await sendOk(fresh, d.desk, deskCallAbi, 'claimTokens')
+    expect(await correctionOf(fresh)).toBe(correctionAfterMint(c0, 10n * TOKEN, dps))
     expect(await claimableOf(fresh)).toBe(0n)
 
     // The dividends page reads these inputs as one snapshot, at one block: it agrees with the contract there.
@@ -423,22 +423,22 @@ describe.skipIf(!rpc)('parity with the contracts on a local chain', () => {
   /* ---------------------------------------------------------------- */
 
   it('covers a recipient that empties its wallet between the estimate and the block', async () => {
-    // Estimated while dave holds notes; by the time the transfer lands he holds none, so it writes his balance,
+    // Estimated while dave holds tokens; by the time the transfer lands he holds none, so it writes his balance,
     // lockup clock and correction from zero and moves the holder count.
-    await sendOk(alice, d.token, tokenAbi, 'transfer', [dave, NOTE])
+    await sendOk(alice, d.token, tokenAbi, 'transfer', [dave, TOKEN])
     const block = await latest()
     await mineAt(block.timestamp + 3_600n)
-    const data = encodeFunctionData({ abi: tokenAbi, functionName: 'transfer', args: [dave, NOTE] })
+    const data = encodeFunctionData({ abi: tokenAbi, functionName: 'transfer', args: [dave, TOKEN] })
     const estimate = await pub.estimateGas({ account: alice, to: d.token, data })
-    const daveNotes = await pub.readContract({ address: d.token, abi: securityTokenAbi, functionName: 'balanceOf', args: [dave] })
-    await sendOk(dave, d.token, tokenAbi, 'transfer', [bob, daveNotes])
+    const daveTokens = await pub.readContract({ address: d.token, abi: securityTokenAbi, functionName: 'balanceOf', args: [dave] })
+    await sendOk(dave, d.token, tokenAbi, 'transfer', [bob, daveTokens])
 
     // The lending demo app's margin (25% plus 25,000) runs out of gas here; this app's margin does not.
     const snap = await pub.request({ method: 'evm_snapshot' as never })
-    const short = await send(alice, d.token, tokenAbi, 'transfer', [dave, NOTE], (estimate * 125n) / 100n + 25_000n)
+    const short = await send(alice, d.token, tokenAbi, 'transfer', [dave, TOKEN], (estimate * 125n) / 100n + 25_000n)
     expect(short.status).toBe('reverted')
     await pub.request({ method: 'evm_revert' as never, params: [snap] as never })
-    const enough = await send(alice, d.token, tokenAbi, 'transfer', [dave, NOTE], withGasMargin(estimate))
+    const enough = await send(alice, d.token, tokenAbi, 'transfer', [dave, TOKEN], withGasMargin(estimate))
     expect(enough.status).toBe('success')
     expect(enough.gasUsed).toBeGreaterThan(estimate)
   })

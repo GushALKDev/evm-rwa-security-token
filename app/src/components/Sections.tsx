@@ -2,7 +2,7 @@ import type { ComponentProps } from 'react'
 import { zeroAddress } from 'viem'
 import { chain, explorerAddress, links } from '../config/chain'
 import { navigate, pages, type Page } from '../hooks/useRoute'
-import { formatDuration, formatEurc, formatNotes, shortAddress } from '../lib/format'
+import { formatDuration, formatEurc, formatTokens, shortAddress } from '../lib/format'
 import type { TokenModel } from '../lib/model'
 import { Mark } from './icons'
 import { WalletButton } from './Wallet'
@@ -39,8 +39,8 @@ export function Header({ page, onConnect, onDesk }: { page: Page; onConnect: () 
           ))}
         </nav>
         <div className="header-actions">
-          <button className="btn btn-faucet" onClick={onDesk} aria-label="Get test notes">
-            <span>Test notes</span>
+          <button className="btn btn-faucet" onClick={onDesk} aria-label="Get test tokens">
+            <span>Test tokens</span>
             <svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true">
               <path d="M8 2.5c2 2.6 3.5 4.6 3.5 6.6a3.5 3.5 0 0 1-7 0c0-2 1.5-4 3.5-6.6z" fill="none" stroke="currentColor" strokeWidth="1.4" />
             </svg>
@@ -83,7 +83,7 @@ export function HowItWorks({ model }: { model: TokenModel }) {
             <p>
               Every transfer goes through the token's <span className="mono">_update</span>, which checks, in order: the
               token is not paused, the recipient is verified and not frozen, the sender is verified, not frozen and holds
-              enough unfrozen notes, and then each compliance module in the order the engine registered it. The first
+              enough unfrozen tokens, and then each compliance module in the order the engine registered it. The first
               failure reverts the transfer. A mint runs the same checks on the recipient only. The public{' '}
               <span className="mono">canTransfer</span> runs the same function as the transfer itself, plus the pause, so
               the contract's answer to whether a transfer would pass and its enforcement come from one place. This page
@@ -95,7 +95,7 @@ export function HowItWorks({ model }: { model: TokenModel }) {
             <p>
               A wallet must be verified to receive and to send. Verification is a record in the identity registry with an
               expiry, so a lapsed KYC stops a wallet just as a removed identity does. Removing an identity suspends the
-              position without seizing it: the notes stay, and they cannot move until the wallet is verified again, the
+              position without seizing it: the tokens stay, and they cannot move until the wallet is verified again, the
               issuer burns them or a custodian recovers them.
             </p>
           </div>
@@ -103,7 +103,7 @@ export function HowItWorks({ model }: { model: TokenModel }) {
             <h3>Lockup from the first acquisition</h3>
             <p>
               The clock starts when a wallet goes from zero to a balance, by mint or by transfer, and later receipts never
-              reset it, so nobody can lock your notes again by sending you dust. It clears when the wallet exits to zero.
+              reset it, so nobody can lock your tokens again by sending you dust. It clears when the wallet exits to zero.
               This deployment runs it for {lockup}; the production script sets 365 days.
             </p>
           </div>
@@ -139,12 +139,12 @@ export function HowItWorks({ model }: { model: TokenModel }) {
           <div>
             <h3>What the testnet desk stands in for</h3>
             <p>
-              On a real issuance a KYC provider verifies investors, the issuer sells the notes and a paying agent passes on
+              On a real issuance a KYC provider verifies investors, the issuer sells the tokens and a paying agent passes on
               the income. None of them can work on a public testnet, so a testnet-only contract,{' '}
               <a href={explorerAddress(d.desk)} target="_blank" rel="noreferrer">
                 TestnetDesk
               </a>
-              , stands in for all three. It holds one role for each. Verifying and getting notes act only on the wallet
+              , stands in for all three. It holds one role for each. Verifying and getting tokens act only on the wallet
               that calls them; a coupon pays every holder, as any coupon does. Its only other functions are its owner's:
               wiring the distributor, once, and handing over or renouncing ownership. None of them uses those roles.
             </p>
@@ -157,7 +157,7 @@ export function HowItWorks({ model }: { model: TokenModel }) {
             </p>
             <p>
               The seeded wallets have addresses derived from a hash rather than from a key, so nobody can sign for them:
-              they never send, and only the agent can change their identity or freeze. Anyone can still send them notes.
+              they never send, and only the agent can change their identity or freeze. Anyone can still send them tokens.
               Each shows an outcome of the gate; the lapsed one was written to lapse an hour after deployment.
             </p>
           </div>
@@ -173,7 +173,7 @@ export function HowItWorks({ model }: { model: TokenModel }) {
             <div className="flow-step">
               <b>2</b>
               <span>
-                <strong>Get notes.</strong> Mints {formatNotes(st.notesPerClaim)} notes to your wallet once a day, through
+                <strong>Get tokens.</strong> Mints {formatTokens(st.tokensPerClaim)} tokens to your wallet once a day, through
                 the issuer role. The mint goes through the full gate, so an unverified or restricted-country wallet is
                 refused. Nothing is paid for them.
               </span>
@@ -181,7 +181,7 @@ export function HowItWorks({ model }: { model: TokenModel }) {
             <div className="flow-step">
               <b>3</b>
               <span>
-                <strong>Pay a coupon.</strong> Mints {formatEurc(st.couponPerNote)} testnet EURC for each note outstanding
+                <strong>Pay a coupon.</strong> Mints {formatEurc(st.couponPerToken)} testnet EURC for each token outstanding
                 and deposits it in the distributor, through the agent role there, at most once every{' '}
                 {formatDuration(Number(st.couponInterval))}, whoever asks.
               </span>

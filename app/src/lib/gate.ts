@@ -272,7 +272,7 @@ export function lockupEffect(
   }
 }
 
-/** What stops a wallet's notes from moving at all, whatever the recipient: the sender side of the gate. */
+/** What stops a wallet's tokens from moving at all, whatever the recipient: the sender side of the gate. */
 export type SenderBlock = 'paused' | 'unverified' | 'frozen' | 'locked' | null
 
 export function senderBlock(state: GateState, p: PartyState, now: bigint): SenderBlock {

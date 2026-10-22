@@ -5,8 +5,8 @@ import { encodeAbiParameters, erc20Abi, hexToBigInt, keccak256, pad, parseAbi, t
 /** DividendDistributor._MAGNITUDE: the accumulator's fixed-point scale. */
 export const MAGNITUDE = 1n << 128n
 
-/** One whole note in base units: the token has 18 decimals. */
-export const ONE_NOTE = 10n ** 18n
+/** One whole token in base units: the token has 18 decimals. */
+export const ONE_TOKEN = 10n ** 18n
 
 /**
  * Storage slot of DividendDistributor._corrections, from `forge inspect DividendDistributor storageLayout`.
@@ -45,14 +45,14 @@ export function depositEffect(
   return { dividendsPerShare: dividendsPerShare + scaled / supply, residue: scaled % supply }
 }
 
-/** TestnetDesk.couponAmount: COUPON_PER_NOTE for every whole note outstanding, rounded down. */
-export function couponAmount(supply: bigint, couponPerNote: bigint): bigint {
-  return (supply * couponPerNote) / ONE_NOTE
+/** TestnetDesk.couponAmount: COUPON_PER_TOKEN for every whole token outstanding, rounded down. */
+export function couponAmount(supply: bigint, couponPerToken: bigint): bigint {
+  return (supply * couponPerToken) / ONE_TOKEN
 }
 
-/** Income paid per whole note held since the first deposit, in currency units, rounded down. */
-export function perNote(dividendsPerShare: bigint): bigint {
-  return (dividendsPerShare * ONE_NOTE) / MAGNITUDE
+/** Income paid per whole token held since the first deposit, in currency units, rounded down. */
+export function perToken(dividendsPerShare: bigint): bigint {
+  return (dividendsPerShare * ONE_TOKEN) / MAGNITUDE
 }
 
 /**
@@ -71,7 +71,7 @@ export function correctionsAfterTransfer(
   return { from: fromCorrection - delta, to: toCorrection + delta }
 }
 
-/** The correction after a mint (DividendDistributor.moduleCreated): new notes earn nothing from past deposits. */
+/** The correction after a mint (DividendDistributor.moduleCreated): new tokens earn nothing from past deposits. */
 export function correctionAfterMint(correction: bigint, amount: bigint, dividendsPerShare: bigint): bigint {
   return correction + amount * dividendsPerShare
 }
@@ -110,9 +110,9 @@ export interface CouponPreview {
  * The next coupon and the account's share of it, from one snapshot. Null when the inputs disagree (a negative
  * entitlement, or no supply): read from one block they cannot, and a page rendering them must not throw if they do.
  */
-export function couponPreview(s: AccumulatorSnapshot, couponPerNote: bigint): CouponPreview | null {
+export function couponPreview(s: AccumulatorSnapshot, couponPerToken: bigint): CouponPreview | null {
   if (s.supply === 0n || s.balance * s.dividendsPerShare < s.correction) return null
-  const amount = couponAmount(s.supply, couponPerNote)
+  const amount = couponAmount(s.supply, couponPerToken)
   const after = depositEffect(s.dividendsPerShare, s.residue, s.supply, amount)
   const earned = accumulated(s.balance, s.dividendsPerShare, s.correction)
   return {

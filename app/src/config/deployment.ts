@@ -52,12 +52,12 @@ export interface Deployment {
 // Order of the chips in the gate: the passing case first, then roughly the order of the checks they fail.
 // Amounts are left out on purpose: the gate shows each wallet's live state.
 const seedInfo: { key: SeedKey; label: string; seeded: string }[] = [
-  { key: 'settled', label: 'Settled holder', seeded: 'Verified in Spain and holds notes. Nothing stops it once its lockup ends.' },
+  { key: 'settled', label: 'Settled holder', seeded: 'Verified in Spain and holds tokens. Nothing stops it once its lockup ends.' },
   { key: 'unverified', label: 'Unverified wallet', seeded: 'Never registered in the identity registry.' },
-  { key: 'lapsed', label: 'Lapsed KYC', seeded: 'Holds notes; its attestation was written to lapse an hour after deployment.' },
-  { key: 'frozen', label: 'Frozen holder', seeded: 'Holds notes; the agent froze the whole wallet.' },
-  { key: 'suspended', label: 'Suspended holder', seeded: 'Holds notes; the agent removed its identity and the balance stayed.' },
-  { key: 'partlyFrozen', label: 'Partly frozen holder', seeded: 'Holds notes; the agent froze part of them.' },
+  { key: 'lapsed', label: 'Lapsed KYC', seeded: 'Holds tokens; its attestation was written to lapse an hour after deployment.' },
+  { key: 'frozen', label: 'Frozen holder', seeded: 'Holds tokens; the agent froze the whole wallet.' },
+  { key: 'suspended', label: 'Suspended holder', seeded: 'Holds tokens; the agent removed its identity and the balance stayed.' },
+  { key: 'partlyFrozen', label: 'Partly frozen holder', seeded: 'Holds tokens; the agent froze part of them.' },
   { key: 'restricted', label: 'Investor in Iran', seeded: 'Verified, and resident in a jurisdiction the deployment restricts.' },
 ]
 

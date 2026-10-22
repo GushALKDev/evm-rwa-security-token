@@ -2,7 +2,7 @@ import { useConnection } from 'wagmi'
 import { chain, links } from '../config/chain'
 import { navigate } from '../hooks/useRoute'
 import { countryLabel } from '../lib/countries'
-import { formatDate, formatDuration, formatEurc, formatNoteCount, formatNotes, formatTimestamp, shortAddress } from '../lib/format'
+import { formatDate, formatDuration, formatEurc, formatTokenCount, formatTokens, formatTimestamp, shortAddress } from '../lib/format'
 import { identityWhy, senderBlock } from '../lib/gate'
 import type { AccountView, TokenModel } from '../lib/model'
 import { Link } from './Sections'
@@ -11,7 +11,7 @@ function GetStarted({ model }: { model: TokenModel }) {
   return (
     <div className="card">
       <div className="card-title">
-        <h3>Hold and send a note in a few minutes</h3>
+        <h3>Hold and send tokens in a few minutes</h3>
       </div>
       <div className="flow">
         <div className="flow-step">
@@ -26,12 +26,12 @@ function GetStarted({ model }: { model: TokenModel }) {
         </div>
         <div className="flow-step">
           <b>2</b>
-          <span>Connect, then verify your wallet at the desk (the Test notes button at the top) and get test notes.</span>
+          <span>Connect, then verify your wallet at the desk (the Test tokens button at the top) and get test tokens.</span>
         </div>
         <div className="flow-step">
           <b>3</b>
           <span>
-            Wait out the {formatDuration(Number(model.live.lockupPeriod))} lockup, then send notes through the gate, to a
+            Wait out the {formatDuration(Number(model.live.lockupPeriod))} lockup, then send tokens through the gate, to a
             seeded wallet or to a second wallet of yours.
           </span>
         </div>
@@ -56,21 +56,21 @@ function Summary({ model, acc }: { model: TokenModel; acc: AccountView }) {
       <div className="position-main">
         <span className="position-state">{why === 'verified' ? 'Verified investor' : 'Not verified'}</span>
         <span className="position-amount">
-          {formatNotes(p.balance)}
+          {formatTokens(p.balance)}
           <small>{model.static.tokenSymbol}</small>
         </span>
         <span className="hint">
           {p.balance === 0n
-            ? 'No notes yet.'
+            ? 'No tokens yet.'
             : block === 'paused'
-              ? 'The agent has paused the token, so no notes can be sent.'
+              ? 'The agent has paused the token, so no tokens can be sent.'
               : block === 'unverified'
-                ? 'Your wallet is not verified, so its notes cannot be sent until it is verified again.'
+                ? 'Your wallet is not verified, so its tokens cannot be sent until it is verified again.'
                 : block === 'frozen'
-                  ? 'The agent froze your wallet, so its notes cannot be sent.'
+                  ? 'The agent froze your wallet, so its tokens cannot be sent.'
                   : block === 'locked'
-                    ? `Locked until ${formatTimestamp(acc.unlocksAt!)}${left > 0 ? `, ${formatDuration(left)} from now` : ''}. Your lockup runs from your first notes.`
-                    : `${formatNoteCount(acc.free)} free to send.`}
+                    ? `Locked until ${formatTimestamp(acc.unlocksAt!)}${left > 0 ? `, ${formatDuration(left)} from now` : ''}. Your lockup runs from your first tokens.`
+                    : `${formatTokenCount(acc.free)} free to send.`}
         </span>
       </div>
       <dl className="rows">
@@ -95,7 +95,7 @@ function Summary({ model, acc }: { model: TokenModel; acc: AccountView }) {
         {p.frozen || p.frozenTokens > 0n ? (
           <div className="row">
             <dt>Frozen</dt>
-            <dd className="tone-danger">{p.frozen ? 'The whole wallet' : formatNoteCount(p.frozenTokens)}</dd>
+            <dd className="tone-danger">{p.frozen ? 'The whole wallet' : formatTokenCount(p.frozenTokens)}</dd>
           </div>
         ) : null}
         <div className="row">
@@ -127,7 +127,7 @@ export function PositionCard({ model, onConnect, onDesk }: { model: TokenModel; 
           </div>
           <div className="empty">
             <p>
-              <strong>Connect a wallet to hold and send notes.</strong> The gate above runs on the seeded wallets without
+              <strong>Connect a wallet to hold and send tokens.</strong> The gate above runs on the seeded wallets without
               one.
             </p>
             <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
@@ -135,7 +135,7 @@ export function PositionCard({ model, onConnect, onDesk }: { model: TokenModel; 
                 Connect wallet
               </button>
               <button className="btn" onClick={onDesk}>
-                Get test notes
+                Get test tokens
               </button>
             </div>
           </div>
@@ -174,13 +174,13 @@ export function PositionCard({ model, onConnect, onDesk }: { model: TokenModel; 
         <div className="card-title">
           <h2>Your position</h2>
           <button className="link-button" onClick={onDesk}>
-            {verified ? 'Get test notes' : 'Verify at the desk'}
+            {verified ? 'Get test tokens' : 'Verify at the desk'}
           </button>
         </div>
         <Summary model={model} acc={acc} />
         {acc.party.balance > 0n ? (
           <button className="btn btn-block" style={{ marginTop: 18 }} onClick={() => navigate('/#gate')}>
-            Send notes through the gate
+            Send tokens through the gate
           </button>
         ) : null}
       </div>
