@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { DeskDialog } from './components/DeskDialog'
 import { DividendsPage } from './components/Dividends'
+import { ErrorBoundary } from './components/ErrorBoundary'
 import { Hero } from './components/Hero'
 import { PositionCard } from './components/Position'
 import { RuleSetCard, TermsCard } from './components/RuleSet'
@@ -44,24 +45,26 @@ function Token() {
       <Header page={page} onConnect={openConnect} onDesk={openDesk} />
       <Notice />
       {model ? (
-        <main>
-          {page === 'token' ? (
-            <>
-              <Hero model={model} onConnect={openConnect} onDesk={openDesk} />
-              <div className="wrap main-grid">
-                <div className="stack">
-                  <PositionCard model={model} onConnect={openConnect} onDesk={openDesk} />
+        <ErrorBoundary resetKey={page}>
+          <main>
+            {page === 'token' ? (
+              <>
+                <Hero model={model} onConnect={openConnect} onDesk={openDesk} />
+                <div className="wrap main-grid">
+                  <div className="stack">
+                    <PositionCard model={model} onConnect={openConnect} onDesk={openDesk} />
+                  </div>
+                  <div className="stack">
+                    <RuleSetCard model={model} />
+                    <TermsCard model={model} />
+                  </div>
                 </div>
-                <div className="stack">
-                  <RuleSetCard model={model} />
-                  <TermsCard model={model} />
-                </div>
-              </div>
-            </>
-          ) : null}
-          {page === 'dividends' ? <DividendsPage model={model} onConnect={openConnect} /> : null}
-          {page === 'how' ? <HowItWorks model={model} /> : null}
-        </main>
+              </>
+            ) : null}
+            {page === 'dividends' ? <DividendsPage model={model} onConnect={openConnect} /> : null}
+            {page === 'how' ? <HowItWorks model={model} /> : null}
+          </main>
+        </ErrorBoundary>
       ) : (
         <main className="wrap hero">
           {error ? (

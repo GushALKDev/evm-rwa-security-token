@@ -1,9 +1,9 @@
 import { useConnection } from 'wagmi'
 import { chain, explorerAddress, links } from '../config/chain'
-import { useCorrection } from '../hooks/useTokenData'
+import { useAccumulator } from '../hooks/useTokenData'
 import { useTx } from '../hooks/useTx'
 import { deskCallAbi, distributorCallAbi } from '../lib/abi'
-import { accumulated, couponAmount, depositEffect, perNote } from '../lib/dividends'
+import { accumulated, couponAmount, couponPreview, depositEffect, perNote } from '../lib/dividends'
 import { formatDuration, formatEurc, formatNoteCount, formatTimestamp } from '../lib/format'
 import { identityWhy } from '../lib/gate'
 import { labelOf, type TokenModel } from '../lib/model'
@@ -16,17 +16,15 @@ function CouponCard({ model, onConnect }: { model: TokenModel; onConnect: () => 
   const d = model.deployment
   const acc = model.account
   const { run, busy } = useTx({ labelOf: (a) => labelOf(d, acc?.address, a) })
-  const correction = useCorrection(acc?.address, `${live.dividendsPerShare}-${acc?.party.balance}`)
+  const snapshot = useAccumulator(acc?.address)
 
   const amount = couponAmount(live.totalSupply, st.couponPerNote)
   const open = model.chainTime >= live.nextCouponAt
   const wait = Number(live.nextCouponAt - model.now)
   const after = live.totalSupply > 0n && amount > 0n ? depositEffect(live.dividendsPerShare, live.residue, live.totalSupply, amount) : null
-  const bal = acc?.party.balance ?? 0n
-  const share =
-    after && acc && correction.data !== undefined && bal > 0n
-      ? accumulated(bal, after.dividendsPerShare, correction.data) - accumulated(bal, live.dividendsPerShare, correction.data)
-      : null
+  // The share comes from one snapshot of the account's inputs, read at a single block.
+  const preview = snapshot.data && snapshot.data.balance > 0n ? couponPreview(snapshot.data, st.couponPerNote) : null
+  const share = preview?.share ?? null
   const noGas = acc?.extras?.eth === 0n
 
   return (
@@ -127,7 +125,9 @@ function IncomeCard({ model }: { model: TokenModel }) {
   const p = acc.party
   const d = model.deployment
   const { run, busy } = useTx({ labelOf: (a) => labelOf(d, acc.address, a) })
-  const correction = useCorrection(acc.address, `${model.live.dividendsPerShare}-${p.balance}`)
+  const snapshot = useAccumulator(acc.address)
+  const s = snapshot.data
+  const earned = s && s.balance * s.dividendsPerShare >= s.correction ? accumulated(s.balance, s.dividendsPerShare, s.correction) : null
   const why = identityWhy(p, model.chainTime)
   const withheld = p.frozen ? 'frozen' : why !== 'verified' ? 'unverified' : null
   const noGas = acc.extras?.eth === 0n
@@ -191,30 +191,30 @@ function IncomeCard({ model }: { model: TokenModel }) {
       >
         {busy ?? (p.claimable > 0n ? `Claim ${formatEurc(p.claimable)} EURC` : 'Nothing to claim yet')}
       </button>
-      {correction.data !== undefined ? (
+      {s && earned !== null ? (
         <details className="formula">
           <summary>How this figure is computed</summary>
           <p>
             Earned = ⌊(notes × dividends per share − correction) / 2<sup>128</sup>⌋, with the contract's own values for
-            your wallet. The floor rounds each wallet's figure down, never up, which keeps the distributor able to pay every
-            claim.
+            your wallet, all read at block {s.blockNumber.toString()}. The floor rounds each wallet's figure down, never
+            up, which keeps the distributor able to pay every claim.
           </p>
           <dl className="rows mono-rows">
             <div className="row">
               <dt>notes (base units)</dt>
-              <dd className="mono">{p.balance.toString()}</dd>
+              <dd className="mono">{s.balance.toString()}</dd>
             </div>
             <div className="row">
               <dt>dividends per share</dt>
-              <dd className="mono">{model.live.dividendsPerShare.toString()}</dd>
+              <dd className="mono">{s.dividendsPerShare.toString()}</dd>
             </div>
             <div className="row">
               <dt>correction</dt>
-              <dd className="mono">{correction.data.toString()}</dd>
+              <dd className="mono">{s.correction.toString()}</dd>
             </div>
             <div className="row">
               <dt>earned (EURC units)</dt>
-              <dd className="mono">{accumulated(p.balance, model.live.dividendsPerShare, correction.data).toString()}</dd>
+              <dd className="mono">{earned.toString()}</dd>
             </div>
           </dl>
         </details>

@@ -32,8 +32,10 @@ import {
   correctionSlot,
   correctionsAfterTransfer,
   couponAmount,
+  couponPreview,
   decodeInt256,
   depositEffect,
+  readAccumulatorSnapshot,
 } from '../src/lib/dividends'
 import { withGasMargin } from '../src/lib/gas'
 import {
@@ -394,6 +396,15 @@ describe.skipIf(!rpc)('parity with the contracts on a local chain', () => {
     await sendOk(fresh, d.desk, deskCallAbi, 'claimNotes')
     expect(await correctionOf(fresh)).toBe(correctionAfterMint(c0, 10n * NOTE, dps))
     expect(await claimableOf(fresh)).toBe(0n)
+
+    // The dividends page reads these inputs as one snapshot, at one block: it agrees with the contract there.
+    for (const who of [fresh, alice, d.seeds.settled]) {
+      const snap = await readAccumulatorSnapshot(pub as never, d, who)
+      expect(accumulated(snap.balance, snap.dividendsPerShare, snap.correction), `snapshot of ${who}`).toBe(
+        await accumulatedOf(who, snap.blockNumber),
+      )
+      expect(couponPreview(snap, 5_000_000n)).not.toBeNull()
+    }
   })
 
   it('pays exactly the claimable amount and leaves nothing to claim', async () => {
@@ -421,7 +432,7 @@ describe.skipIf(!rpc)('parity with the contracts on a local chain', () => {
     const daveNotes = await pub.readContract({ address: d.token, abi: securityTokenAbi, functionName: 'balanceOf', args: [dave] })
     await sendOk(dave, d.token, tokenAbi, 'transfer', [bob, daveNotes])
 
-    // The money market's margin (25% plus 25,000) runs out of gas here; the app's margin does not.
+    // The lending demo app's margin (25% plus 25,000) runs out of gas here; this app's margin does not.
     const snap = await pub.request({ method: 'evm_snapshot' as never })
     const short = await send(alice, d.token, tokenAbi, 'transfer', [dave, NOTE], (estimate * 125n) / 100n + 25_000n)
     expect(short.status).toBe('reverted')

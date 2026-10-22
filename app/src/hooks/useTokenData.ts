@@ -17,7 +17,7 @@ import {
   securityTokenAbi,
 } from '../lib/abi'
 import { countries } from '../lib/countries'
-import { correctionSlot, decodeInt256 } from '../lib/dividends'
+import { readAccumulatorSnapshot } from '../lib/dividends'
 import type { PartyState } from '../lib/gate'
 
 export interface StaticData {
@@ -252,17 +252,18 @@ function useAccountExtras(d: Deployment, account: Address | undefined) {
 }
 
 /**
- * The distributor's correction for one account, read from storage: it has no getter, and the exact share of the
- * next coupon depends on its remainder modulo the accumulator's scale.
+ * The account's accumulator inputs, all read at one block: the balance, the supply, the accumulator, the remainder
+ * and the correction, which has no getter and is read from storage. Read separately, a balance from one block and
+ * a correction from the next can disagree and make the formula negative.
  */
-export function useCorrection(account: Address | undefined, refreshKey: unknown) {
+export function useAccumulator(account: Address | undefined) {
   const d = deployment as Deployment
   const client = usePublicClient()
   return useQuery({
-    queryKey: ['correction', d.distributor, account, refreshKey],
+    queryKey: ['accumulator', d.distributor, account],
     enabled: !!account && !!client,
     refetchInterval: REFRESH_MS,
-    queryFn: async () => decodeInt256(await client!.getStorageAt({ address: d.distributor, slot: correctionSlot(account!) })),
+    queryFn: () => readAccumulatorSnapshot(client! as never, { token: d.token, distributor: d.distributor }, account!),
   })
 }
 

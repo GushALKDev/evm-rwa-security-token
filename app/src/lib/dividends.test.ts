@@ -8,6 +8,7 @@ import {
   correctionSlot,
   correctionsAfterTransfer,
   couponAmount,
+  couponPreview,
   decodeInt256,
   depositEffect,
   perNote,
@@ -104,5 +105,33 @@ describe('format', () => {
     expect(formatEurc(4_999_999n)).toBe('4.999999')
     expect(formatEurc(49_999_990n)).toBe('49.99999')
     expect(formatEurc(0n)).toBe('0.00')
+  })
+})
+
+describe('the coupon preview', () => {
+  // The reviewer's case: a balance read before a mint landed and a correction read after it. On one block they can
+  // never disagree; the page must still not throw while rendering if they ever do.
+  it('returns nothing, rather than throwing, when its inputs come from different blocks', () => {
+    const minted = 10n * ONE_NOTE
+    const dps = depositEffect(0n, 0n, 1_000n * ONE_NOTE, 5_000_000_000n).dividendsPerShare
+    const mixed = {
+      blockNumber: 1n,
+      balance: 0n,
+      supply: 1_010n * ONE_NOTE,
+      dividendsPerShare: dps,
+      residue: 0n,
+      correction: correctionAfterMint(0n, minted, dps),
+    }
+    expect(() => couponPreview(mixed, 5_000_000n)).not.toThrow()
+    expect(couponPreview(mixed, 5_000_000n)).toBeNull()
+  })
+
+  it('previews the share of a holder from a consistent snapshot', () => {
+    const supply = 1_000n * ONE_NOTE
+    const s = { blockNumber: 1n, balance: 10n * ONE_NOTE, supply, dividendsPerShare: 0n, residue: 0n, correction: 0n }
+    const p = couponPreview(s, 5_000_000n)!
+    expect(p.amount).toBe(5_000_000_000n)
+    expect(p.share).toBe(accumulated(10n * ONE_NOTE, p.dividendsPerShareAfter, 0n))
+    expect(p.earned).toBe(0n)
   })
 })
