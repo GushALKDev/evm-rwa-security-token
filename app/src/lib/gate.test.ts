@@ -1,6 +1,6 @@
 import { zeroAddress, zeroHash, type Address } from 'viem'
 import { describe, expect, it } from 'vitest'
-import { evaluateGate, holderCountAfter, identityWhy, lockupEffect, moduleCheck, type GateState, type PartyState } from './gate'
+import { evaluateGate, holderCountAfter, identityWhy, lockupEffect, moduleCheck, senderBlock, type GateState, type PartyState } from './gate'
 
 const NOW = 1_800_000_000n
 const NOTE = 10n ** 18n
@@ -173,5 +173,19 @@ describe('effects', () => {
     expect(lockupEffect(alice, bob, alice.balance)).toEqual({ recipientStarts: false, senderCleared: true })
     expect(lockupEffect(alice, alice, alice.balance)).toEqual({ recipientStarts: false, senderCleared: false })
     expect(lockupEffect(null, empty, NOTE)).toEqual({ recipientStarts: true, senderCleared: false })
+  })
+})
+
+describe('senderBlock', () => {
+  // The position card says whether your notes can move. Only the lockup used to count, so a lapsed, removed or
+  // frozen wallet, or a paused token, read as free to send.
+  it('names every sender-side stop, in the gate order', () => {
+    const free = party(alice.address, { lockStart: NOW - 600n })
+    expect(senderBlock(state(), free, NOW)).toBeNull()
+    expect(senderBlock(state({ paused: true }), free, NOW)).toBe('paused')
+    expect(senderBlock(state(), party(alice.address, { kycExpiry: NOW }), NOW)).toBe('unverified')
+    expect(senderBlock(state(), party(alice.address, { verified: false }), NOW)).toBe('unverified')
+    expect(senderBlock(state(), party(alice.address, { frozen: true }), NOW)).toBe('frozen')
+    expect(senderBlock(state(), party(alice.address, { lockStart: NOW - 10n }), NOW)).toBe('locked')
   })
 })

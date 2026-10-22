@@ -1,11 +1,12 @@
 import { Fragment, useMemo, useState } from 'react'
-import { isAddress, zeroAddress, type Address } from 'viem'
+import { zeroAddress } from 'viem'
 import { useConnection, useReadContract } from 'wagmi'
 import { chain, explorerAddress, links } from '../config/chain'
 import type { SeedKey } from '../config/deployment'
 import { useParties, useRestricted, type PartyData } from '../hooks/useTokenData'
 import { useTx } from '../hooks/useTx'
 import { securityTokenAbi, tokenAbi } from '../lib/abi'
+import { parseTypedAddress } from '../lib/address'
 import { countryLabel } from '../lib/countries'
 import { formatDate, formatEurc, formatNoteCount, formatNotes, parseAmount, toInput } from '../lib/format'
 import {
@@ -26,10 +27,11 @@ type Choice = 'you' | 'mint' | 'custom' | SeedKey
 const NOTE_DECIMALS = 18
 
 function useCustomParty(input: string) {
-  const address = isAddress(input.trim()) ? (input.trim() as Address) : null
+  const typed = parseTypedAddress(input)
+  const address = typed && 'address' in typed ? typed.address : null
   const list = useMemo(() => (address ? [address] : []), [address])
   const parties = useParties(list)
-  return { address, party: address ? parties.data?.[0] : undefined }
+  return { address, party: address ? parties.data?.[0] : undefined, error: typed && 'error' in typed ? typed.error : null }
 }
 
 function PartyField({
@@ -55,7 +57,8 @@ function PartyField({
   summary: string
   model: TokenModel
 }) {
-  const invalid = choice === 'custom' && custom.trim() !== '' && !isAddress(custom.trim())
+  const typed = choice === 'custom' ? parseTypedAddress(custom) : null
+  const invalid = typed && 'error' in typed ? typed.error : null
   return (
     <div className="field">
       <label className="field-label" htmlFor={id}>
@@ -85,7 +88,7 @@ function PartyField({
         />
       ) : null}
       <span className="hint" data-tone={invalid ? 'danger' : undefined}>
-        {invalid ? 'Not an address.' : summary}
+        {invalid ?? summary}
       </span>
     </div>
   )
@@ -371,11 +374,7 @@ function Send({
 }) {
   const acc = model.account!
   const d = model.deployment
-  const stopped = result.stoppedAt !== null ? checkText(result.checks[result.stoppedAt], model, acc.party, to, amount) : null
-  const { run, busy } = useTx({
-    labelOf: (a) => labelOf(d, acc.address, a),
-    rejectingRule: stopped ? `${stopped.title}. ${stopped.detail}` : undefined,
-  })
+  const { run, busy } = useTx({ labelOf: (a) => labelOf(d, acc.address, a) })
   const noGas = acc.extras?.eth === 0n
   const self = to.address.toLowerCase() === acc.address.toLowerCase()
   const canSend = result.ok === true && amount > 0n && !busy && !noGas

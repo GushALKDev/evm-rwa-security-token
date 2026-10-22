@@ -5,8 +5,9 @@ import { useTx } from '../hooks/useTx'
 import { deskCallAbi } from '../lib/abi'
 import { countries, countryLabel } from '../lib/countries'
 import { formatDate, formatDuration, formatNotes, formatTimestamp } from '../lib/format'
-import { identityWhy } from '../lib/gate'
+import { evaluateGate, identityWhy } from '../lib/gate'
 import { labelOf, type TokenModel } from '../lib/model'
+import { checkText } from './gateText'
 import { Dialog } from './Wallet'
 
 export function DeskDialog({ model, onClose, onConnect }: { model: TokenModel; onClose: () => void; onConnect: () => void }) {
@@ -15,7 +16,13 @@ export function DeskDialog({ model, onClose, onConnect }: { model: TokenModel; o
   const st = model.static
   const acc = model.account
   const [country, setCountry] = useState(() => (acc?.party.country && acc.party.country !== 0 ? acc.party.country : 724))
-  const { run, busy } = useTx({ labelOf: (a) => labelOf(d, address, a) })
+  // The desk's mint runs the token's full gate: the same mirror the transfer gate draws decides whether it would pass.
+  const mint = acc ? evaluateGate(model.gate, null, acc.party, st.notesPerClaim, model.chainTime) : null
+  const stop = mint && mint.stoppedAt !== null ? checkText(mint.checks[mint.stoppedAt], model, null, acc!.party, st.notesPerClaim) : null
+  const { run, busy } = useTx({
+    labelOf: (a) => labelOf(d, address, a),
+    rejectingRule: stop ? `${stop.title}. ${stop.detail}` : undefined,
+  })
   const watch = useWatchAsset()
 
   const noGas = acc?.extras?.eth === 0n
@@ -118,14 +125,16 @@ export function DeskDialog({ model, onClose, onConnect }: { model: TokenModel; o
                   ? 'The mint runs the full gate, so your wallet has to be verified first.'
                   : restrictedOwn
                     ? `Your country, ${countryLabel(acc.party.country)}, is restricted, so the jurisdiction rule stops the mint. Verify again with another country to receive notes.`
-                    : !claimOpen
-                      ? `The desk issues to each wallet once a day. Yours opens again on ${formatTimestamp(nextClaim)}.`
-                      : `Minted through the issuer role the desk holds. Your lockup clock starts on the first notes you receive.`}
+                    : stop
+                      ? `The mint would stop at check ${mint!.stoppedAt! + 1}, ${stop.title.toLowerCase()}: ${stop.detail}`
+                      : !claimOpen
+                        ? `The desk issues to each wallet once a day. Yours opens again on ${formatTimestamp(nextClaim)}.`
+                        : `Minted through the issuer role the desk holds. Your lockup clock starts on the first notes you receive.`}
               </p>
               <div className="inline-form">
                 <button
                   className="btn btn-primary"
-                  disabled={!!busy || noGas || wrongChain || why !== 'verified' || restrictedOwn || !claimOpen}
+                  disabled={!!busy || noGas || wrongChain || why !== 'verified' || restrictedOwn || !!stop || !claimOpen}
                   onClick={() =>
                     run(
                       `Get ${notes} notes`,

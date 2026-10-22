@@ -59,10 +59,13 @@ export function describeError(err: unknown, ctx: ErrorContext): string {
       return `${capital(who(a[0]))} is frozen, so its notes cannot move.`
     case 'InsufficientUnfrozenBalance':
       return `Only ${formatNotes(a[1] as bigint)} notes of ${who(a[0])} are free to move, less than the ${formatNotes(a[2] as bigint)} requested.`
-    case 'ComplianceCheckFailed':
+    case 'ComplianceCheckFailed': {
+      // A zero sender is a mint: the desk's issue runs the same rules as a transfer.
+      const what = (a[0] as string)?.toLowerCase() === '0x0000000000000000000000000000000000000000' ? 'the issue' : 'the transfer'
       return ctx.rejectingRule
-        ? `A compliance rule rejected the transfer: ${ctx.rejectingRule}`
-        : 'A compliance rule rejected the transfer.'
+        ? `A compliance rule rejected ${what}: ${ctx.rejectingRule}`
+        : `A compliance rule rejected ${what}.`
+    }
     case 'ERC20InsufficientBalance':
       return 'The balance is too low for this amount.'
     case 'ERC20InvalidReceiver':

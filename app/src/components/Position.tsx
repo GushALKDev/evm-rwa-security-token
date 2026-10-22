@@ -3,7 +3,7 @@ import { chain, links } from '../config/chain'
 import { navigate } from '../hooks/useRoute'
 import { countryLabel } from '../lib/countries'
 import { formatDate, formatDuration, formatEurc, formatNoteCount, formatNotes, formatTimestamp, shortAddress } from '../lib/format'
-import { identityWhy } from '../lib/gate'
+import { identityWhy, senderBlock } from '../lib/gate'
 import type { AccountView, TokenModel } from '../lib/model'
 import { Link } from './Sections'
 
@@ -50,6 +50,7 @@ function Summary({ model, acc }: { model: TokenModel; acc: AccountView }) {
   const p = acc.party
   const why = identityWhy(p, model.chainTime)
   const left = acc.unlocksAt !== null ? Number(acc.unlocksAt - model.now) : 0
+  const block = senderBlock(model.gate, p, model.chainTime)
   return (
     <>
       <div className="position-main">
@@ -61,9 +62,15 @@ function Summary({ model, acc }: { model: TokenModel; acc: AccountView }) {
         <span className="hint">
           {p.balance === 0n
             ? 'No notes yet.'
-            : acc.locked
-              ? `Locked until ${formatTimestamp(acc.unlocksAt!)}${left > 0 ? `, ${formatDuration(left)} from now` : ''}. Your lockup runs from your first notes.`
-              : `${formatNotes(acc.free)} free to send.`}
+            : block === 'paused'
+              ? 'The agent has paused the token, so no notes can move.'
+              : block === 'unverified'
+                ? 'Your wallet is not verified, so its notes cannot move until it is verified again.'
+                : block === 'frozen'
+                  ? 'The agent froze your wallet, so its notes cannot move.'
+                  : block === 'locked'
+                    ? `Locked until ${formatTimestamp(acc.unlocksAt!)}${left > 0 ? `, ${formatDuration(left)} from now` : ''}. Your lockup runs from your first notes.`
+                    : `${formatNoteCount(acc.free)} free to send.`}
         </span>
       </div>
       <dl className="rows">

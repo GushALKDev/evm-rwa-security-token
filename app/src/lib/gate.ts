@@ -271,3 +271,14 @@ export function lockupEffect(
     senderCleared: from !== null && from.balance === amount && from.lockStart !== 0n,
   }
 }
+
+/** What stops a wallet's notes from moving at all, whatever the recipient: the sender side of the gate. */
+export type SenderBlock = 'paused' | 'unverified' | 'frozen' | 'locked' | null
+
+export function senderBlock(state: GateState, p: PartyState, now: bigint): SenderBlock {
+  if (state.paused) return 'paused'
+  if (!isVerified(p, now)) return 'unverified'
+  if (p.frozen) return 'frozen'
+  const end = unlocksAt(p, state.lockupPeriod)
+  return end !== null && now < end ? 'locked' : null
+}
