@@ -2,18 +2,27 @@ import { defineChain, type Chain } from 'viem'
 import { baseSepolia } from 'viem/chains'
 import { loadDeployment } from './deployment'
 
-const localChain = defineChain({
-  id: 31_337,
-  name: 'Local anvil',
-  nativeCurrency: { name: 'Ether', symbol: 'ETH', decimals: 18 },
-  rpcUrls: { default: { http: ['http://127.0.0.1:8545'] } },
-})
+const LOCAL_CHAIN_ID = 31_337
 
 export const chainId = Number(import.meta.env.VITE_CHAIN_ID ?? baseSepolia.id)
 
-export const chain: Chain = chainId === localChain.id ? localChain : baseSepolia
+const rpcOverride: string | undefined = import.meta.env.VITE_RPC_URL || undefined
 
-export const rpcUrl: string = import.meta.env.VITE_RPC_URL || chain.rpcUrls.default.http[0]
+// Wallets, and the mock connector of the end-to-end runs, send transactions to the chain's own RPC, not to the
+// app's transport. On a local chain the override is therefore the chain's RPC too, or a node on another port would
+// get the reads and not the transactions. On Base Sepolia it stays with the transport, so a provider key in it
+// never reaches a wallet's network list.
+export const chain: Chain =
+  chainId === LOCAL_CHAIN_ID
+    ? defineChain({
+        id: LOCAL_CHAIN_ID,
+        name: 'Local anvil',
+        nativeCurrency: { name: 'Ether', symbol: 'ETH', decimals: 18 },
+        rpcUrls: { default: { http: [rpcOverride ?? 'http://127.0.0.1:8545'] } },
+      })
+    : baseSepolia
+
+export const rpcUrl: string = rpcOverride ?? chain.rpcUrls.default.http[0]
 
 export const deployment = loadDeployment(chain.id)
 
