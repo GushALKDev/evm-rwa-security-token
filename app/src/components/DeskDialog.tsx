@@ -10,7 +10,7 @@ import { labelOf, type TokenModel } from '../lib/model'
 import { Dialog } from './Wallet'
 
 export function DeskDialog({ model, onClose, onConnect }: { model: TokenModel; onClose: () => void; onConnect: () => void }) {
-  const { address } = useConnection()
+  const { address, chainId, status } = useConnection()
   const d = model.deployment
   const st = model.static
   const acc = model.account
@@ -19,6 +19,7 @@ export function DeskDialog({ model, onClose, onConnect }: { model: TokenModel; o
   const watch = useWatchAsset()
 
   const noGas = acc?.extras?.eth === 0n
+  const wrongChain = status === 'connected' && chainId !== chain.id
   const why = acc ? identityWhy(acc.party, model.chainTime) : null
   const nextClaim = acc?.extras?.nextClaimAt ?? 0n
   const claimOpen = model.chainTime >= nextClaim
@@ -44,6 +45,11 @@ export function DeskDialog({ model, onClose, onConnect }: { model: TokenModel; o
         </p>
       ) : (
         <div className="desk-steps">
+          {wrongChain ? (
+            <div className="callout" data-tone="warn">
+              Your wallet is on another network. Switch to {chain.name} from the button at the top first.
+            </div>
+          ) : null}
           {noGas ? (
             <div className="callout" data-tone="warn">
               Your wallet has no {chain.name} ETH. Get some from a{' '}
@@ -81,7 +87,7 @@ export function DeskDialog({ model, onClose, onConnect }: { model: TokenModel; o
                 </select>
                 <button
                   className={why === 'verified' ? 'btn' : 'btn btn-primary'}
-                  disabled={!!busy || noGas}
+                  disabled={!!busy || noGas || wrongChain}
                   onClick={() =>
                     run('Verify wallet', 'Wallet verified', {
                       address: d.desk,
@@ -119,7 +125,7 @@ export function DeskDialog({ model, onClose, onConnect }: { model: TokenModel; o
               <div className="inline-form">
                 <button
                   className="btn btn-primary"
-                  disabled={!!busy || noGas || why !== 'verified' || restrictedOwn || !claimOpen}
+                  disabled={!!busy || noGas || wrongChain || why !== 'verified' || restrictedOwn || !claimOpen}
                   onClick={() =>
                     run(
                       `Get ${notes} notes`,

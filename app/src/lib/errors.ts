@@ -1,5 +1,6 @@
 import {
   BaseError,
+  ChainMismatchError,
   ContractFunctionRevertedError,
   InsufficientFundsError,
   UserRejectedRequestError,
@@ -27,6 +28,11 @@ export const LANDED_REVERT =
  */
 export function describeError(err: unknown, ctx: ErrorContext): string {
   if (err instanceof Error && err.message === LANDED_REVERT) return err.message
+  // A write names the app's chain (lib/tx.ts), so viem, or wagmi before it, refuses when the wallet is elsewhere.
+  const chainMismatch = (e: unknown) =>
+    e instanceof ChainMismatchError || (e as Error | undefined)?.name === 'ConnectorChainMismatchError'
+  if (chainMismatch(err) || (err instanceof BaseError && err.walk(chainMismatch)))
+    return `Your wallet is on another network. Switch it to ${chain.name} and try again.`
   if (!(err instanceof BaseError)) return err instanceof Error ? err.message : 'The request failed.'
 
   if (err.walk((e) => e instanceof UserRejectedRequestError)) return 'You rejected the request in your wallet.'

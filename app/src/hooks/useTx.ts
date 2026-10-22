@@ -1,41 +1,23 @@
 import { useQueryClient } from '@tanstack/react-query'
 import { useCallback, useState } from 'react'
-import type { Abi, Address } from 'viem'
+import { BaseError, ContractFunctionRevertedError, ExecutionRevertedError } from 'viem'
 import { useConnection } from 'wagmi'
-import { estimateGas, simulateContract, waitForTransactionReceipt, writeContract } from 'wagmi/actions'
-import { BaseError, ContractFunctionRevertedError, encodeFunctionData, ExecutionRevertedError } from 'viem'
-import { explorerTx } from '../config/chain'
+import { chain, explorerTx } from '../config/chain'
 import { describeError, LANDED_REVERT, type ErrorContext } from '../lib/errors'
-import { withGasMargin } from '../lib/gas'
+import { prepareCall, sendCall, waitForOutcome, type ContractCall } from '../lib/tx'
 import { wagmiConfig } from '../wagmi'
 import { useToasts } from './useToasts'
-
-export interface ContractCall {
-  address: Address
-  abi: Abi | readonly unknown[]
-  functionName: string
-  args?: readonly unknown[]
-}
 
 /** Tries, and the pause between them, for a call that depends on a transaction just mined while the RPC catches up. */
 const CATCH_UP_TRIES = 5
 const CATCH_UP_MS = 2_000
 
+/** How long to wait for a receipt before reporting the outcome as unknown. */
+const RECEIPT_TIMEOUT_MS = 180_000
+
 const isRevert = (err: unknown) =>
   err instanceof BaseError &&
   !!err.walk((e) => e instanceof ContractFunctionRevertedError || e instanceof ExecutionRevertedError)
-
-/** Builds, simulates and estimates a call: everything before the wallet asks for a signature. */
-async function prepare(call: ContractCall, account: Address) {
-  // Simulating first surfaces a revert, decoded, before the wallet asks for a signature.
-  const { request } = await simulateContract(wagmiConfig, { ...call, account } as never)
-  const estimate = await estimateGas(wagmiConfig, {
-    account,
-    to: call.address,
-    data: encodeFunctionData({ abi: call.abi as Abi, functionName: call.functionName, args: call.args as unknown[] }),
-  })
-  return { request, gas: withGasMargin(estimate) }
-}
 
 /** Simulates, sends and confirms one call at a time, reporting each step in a toast. */
 export function useTx(errorContext: ErrorContext) {
@@ -56,33 +38,48 @@ export function useTx(errorContext: ErrorContext) {
         let prepared
         for (let attempt = 1; !prepared; attempt++) {
           try {
-            prepared = await prepare(call, address)
+            prepared = await prepareCall(wagmiConfig, chain.id, call, address)
           } catch (err) {
             if (!opts.afterPrevious || attempt >= CATCH_UP_TRIES || !isRevert(err)) throw err
             await new Promise((r) => setTimeout(r, CATCH_UP_MS))
           }
         }
-        const { request, gas } = prepared
         toasts.update(id, { body: 'Confirm it in your wallet.' })
-        const hash = await writeContract(wagmiConfig, { ...(request as object), gas } as never)
+        const hash = await sendCall(wagmiConfig, chain.id, prepared.request, prepared.gas)
         toasts.update(id, { body: 'Waiting for the block…', href: explorerTx(hash) })
-        let receipt
-        try {
-          receipt = await waitForTransactionReceipt(wagmiConfig, { hash })
-        } catch {
-          // The transaction was sent, but its outcome could not be read: do not guess either way.
-          toasts.update(id, {
-            tone: 'error',
-            title: `${label}: outcome unknown`,
-            body: 'The transaction was sent but its result could not be read from the RPC. Check it on the explorer before trying again.',
-          })
-          await queryClient.invalidateQueries()
-          return false
-        }
-        if (receipt.status !== 'success') throw new Error(LANDED_REVERT)
-        toasts.update(id, { tone: 'success', title: done, body: undefined })
+        const outcome = await waitForOutcome(wagmiConfig, chain.id, hash, RECEIPT_TIMEOUT_MS)
         await queryClient.invalidateQueries()
-        return true
+        switch (outcome.kind) {
+          case 'success':
+            toasts.update(id, { tone: 'success', title: done, body: undefined })
+            return true
+          case 'reverted':
+            toasts.update(id, { tone: 'error', title: `${label} failed`, body: LANDED_REVERT })
+            return false
+          case 'cancelled':
+            toasts.update(id, {
+              tone: 'error',
+              title: `${label} cancelled`,
+              body: 'Your wallet replaced the transaction with a cancellation, so nothing changed.',
+            })
+            return false
+          case 'replaced':
+            toasts.update(id, {
+              tone: 'error',
+              title: `${label}: replaced`,
+              body: 'Your wallet replaced the transaction with a different one. Check it on the explorer before trying again.',
+              href: explorerTx(outcome.hash),
+            })
+            return false
+          case 'unknown':
+            // The transaction was sent, but its outcome could not be read: do not guess either way.
+            toasts.update(id, {
+              tone: 'error',
+              title: `${label}: outcome unknown`,
+              body: 'The transaction was sent but its result could not be read from the RPC. Check it on the explorer before trying again.',
+            })
+            return false
+        }
       } catch (err) {
         console.error(err)
         toasts.update(id, { tone: 'error', title: `${label} failed`, body: describeError(err, errorContext) })

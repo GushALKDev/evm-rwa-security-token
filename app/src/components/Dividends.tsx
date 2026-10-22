@@ -9,7 +9,8 @@ import { identityWhy } from '../lib/gate'
 import { labelOf, type TokenModel } from '../lib/model'
 
 function CouponCard({ model, onConnect }: { model: TokenModel; onConnect: () => void }) {
-  const { status } = useConnection()
+  const { status, chainId } = useConnection()
+  const wrongChain = status === 'connected' && chainId !== chain.id
   const live = model.live
   const st = model.static
   const d = model.deployment
@@ -92,7 +93,7 @@ function CouponCard({ model, onConnect }: { model: TokenModel; onConnect: () => 
         ) : (
           <button
             className="btn btn-primary btn-block"
-            disabled={!open || !!busy || noGas || amount === 0n}
+            disabled={!open || !!busy || noGas || wrongChain || amount === 0n}
             onClick={() =>
               run('Pay the coupon', 'Coupon paid', { address: d.desk, abi: deskCallAbi, functionName: 'payCoupon' })
             }
@@ -100,6 +101,11 @@ function CouponCard({ model, onConnect }: { model: TokenModel; onConnect: () => 
             {busy ?? (open ? `Pay ${formatEurc(amount)} EURC to holders` : 'The next coupon is not open yet')}
           </button>
         )}
+        {wrongChain ? (
+          <p className="hint" data-tone="warn">
+            Your wallet is on another network. Switch to {chain.name} from the button at the top first.
+          </p>
+        ) : null}
         {noGas ? (
           <p className="hint" data-tone="warn">
             Your wallet has no {chain.name} ETH for gas. Get some from a{' '}
@@ -115,6 +121,8 @@ function CouponCard({ model, onConnect }: { model: TokenModel; onConnect: () => 
 }
 
 function IncomeCard({ model }: { model: TokenModel }) {
+  const { chainId } = useConnection()
+  const wrongChain = chainId !== chain.id
   const acc = model.account!
   const p = acc.party
   const d = model.deployment
@@ -156,6 +164,11 @@ function IncomeCard({ model }: { model: TokenModel }) {
           <dd>{formatEurc(acc.extras?.eurc ?? 0n)} EURC</dd>
         </div>
       </dl>
+      {wrongChain ? (
+        <div className="callout" data-tone="warn" style={{ marginTop: 14 }}>
+          Your wallet is on another network. Switch to {chain.name} from the button at the top first.
+        </div>
+      ) : null}
       {withheld ? (
         <div className="callout" data-tone="warn" style={{ marginTop: 14 }}>
           {withheld === 'frozen'
@@ -166,7 +179,7 @@ function IncomeCard({ model }: { model: TokenModel }) {
       <button
         className="btn btn-primary btn-block"
         style={{ marginTop: 16 }}
-        disabled={p.claimable === 0n || !!withheld || !!busy || noGas}
+        disabled={p.claimable === 0n || !!withheld || !!busy || noGas || wrongChain}
         onClick={() =>
           run(`Claim ${formatEurc(p.claimable)} EURC`, 'Income claimed', {
             address: d.distributor,

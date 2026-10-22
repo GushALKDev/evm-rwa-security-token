@@ -16,5 +16,6 @@ export default defineConfig({
       },
     },
   },
-  test: { environment: 'node', include: ['src/**/*.test.ts', 'scripts/**/*.test.ts'] },
+  // One file at a time: the suites in scripts/ share one local chain and change it (snapshots, automine, time).
+  test: { environment: 'node', include: ['src/**/*.test.ts', 'scripts/**/*.test.ts'], fileParallelism: false },
 })
