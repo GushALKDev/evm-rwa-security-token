@@ -7,7 +7,7 @@ their share of it.
 
 Proof of concept, not audited, for educational purposes. The tokens are testnet stand-ins with no value.
 
-<!-- Live: https://rwa-poc.gushalk.workers.dev -->
+Live: https://rwa-poc.gushalk.workers.dev
 
 ## What it shows
 
