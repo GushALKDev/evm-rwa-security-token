@@ -15,24 +15,28 @@ import {TestnetEURC} from "./TestnetEURC.sol";
  *         provider, the issuer's primary issuance and the paying agent. It lets a stranger's wallet
  *         hold and trade the note on a public demo. Never deploy it on a network with real value.
  * @dev The protocol keeps every one of these powers behind a role, so the desk holds the roles and
- *      exposes each one through a single function that acts only on the caller:
+ *      exposes each one through a single function:
  *
  *      - `onboard` (AGENT on the identity registry) registers the caller, never another address.
- *        It checks only that the country is a three-digit ISO 3166-1 numeric code. It does not
- *        check who the caller is, where they live or whether they are accredited: the caller
- *        declares a country, the record is marked not accredited (no module reads that flag), and
- *        the attestation expires after KYC_VALIDITY. Calling it again changes the country and
- *        renews the expiry.
+ *        It checks only that the country code is between 1 and 999, the range of ISO 3166-1
+ *        numeric codes, not that the code is assigned. It does not check who the caller is, where
+ *        they live or whether they are accredited: the caller declares a country, the record is
+ *        marked not accredited (no module reads that flag), and the attestation expires after
+ *        KYC_VALIDITY. Calling it again changes the country and renews the expiry. Like any agent
+ *        write it replaces the whole record, so it also undoes an agent's removal of the caller and
+ *        resets a custom investor id to the default one.
  *      - `claimNotes` (DEFAULT_ADMIN_ROLE on the token, the only role that can mint) mints
  *        NOTES_PER_CLAIM to the caller at most once per CLAIM_COOLDOWN. The mint runs the token's
  *        full gate, so an unverified, frozen or restricted-country caller, or a register already
  *        at its holder cap, makes it revert. Nothing is paid for the notes: there is no sale.
  *      - `payCoupon` (AGENT on the distributor, which gates deposits) mints COUPON_PER_NOTE EURC
- *        for every note outstanding and deposits it, at most once per COUPON_INTERVAL for
- *        everyone. It does not model collections on the property, a payment schedule or maturity.
+ *        for every note outstanding and deposits it for every holder, as any coupon does, at most
+ *        once per COUPON_INTERVAL whoever calls it. It does not model collections on the property,
+ *        a payment schedule or maturity.
  *
- *      No function takes a target address or arbitrary calldata, so the roles cannot be exercised
- *      in any other way through this contract. The owner can only wire the distributor, once.
+ *      The only other functions are the owner's: `setDistributor`, which wires the distributor once
+ *      and checks its currency and token, and Ownable's ownership transfer and renouncement. None of
+ *      them uses the desk's roles, so the roles cannot be exercised in any other way.
  *
  *      What a stranger can still do on a shared deployment, and why it does not brick the demo:
  *      the per-address cooldown does not stop one person using many addresses, so the holder cap
@@ -72,7 +76,7 @@ contract TestnetDesk is Ownable {
     /// @notice Thrown when the zero address is supplied where a real account is required.
     error ZeroAddress();
 
-    /// @notice Thrown when a country is not a three-digit ISO 3166-1 numeric code.
+    /// @notice Thrown when a country code is outside 1 to 999, the range of ISO 3166-1 numeric codes.
     error InvalidCountry(uint16 country);
 
     /// @notice Thrown when an address claims notes again before its cooldown has passed.
@@ -182,8 +186,9 @@ contract TestnetDesk is Ownable {
 
     /**
      * @notice Registers the caller as a verified investor resident in `country`.
-     * @dev Checks nothing about the caller (see the contract notes). Writes through the registry's
-     *      agent path, which supersedes any attestation issued for the caller before.
+     * @dev Checks nothing about the caller and only the range of the code (see the contract notes).
+     *      Writes through the registry's agent path, which supersedes any attestation issued for the
+     *      caller before.
      * @param country ISO 3166-1 numeric country code, 1 to 999.
      */
     function onboard(uint16 country) external {

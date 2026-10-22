@@ -188,6 +188,15 @@ contract TestnetDeskTest is Test {
         fresh.setDistributor(address(distributor));
     }
 
+    /// @dev A distributor in the desk's currency that splits another token would pay a register the desk does not issue.
+    function test_setDistributor_rejectsADistributorOfAnotherToken() public {
+        TestnetDesk fresh = new TestnetDesk(address(this), address(d.identityRegistry), address(d.token));
+        DividendDistributor other =
+            new DividendDistributor(address(d.compliance), address(0xBEEF), fresh.currency(), address(this));
+        vm.expectRevert(abi.encodeWithSelector(TestnetDesk.DistributorMismatch.selector, address(other)));
+        fresh.setDistributor(address(other));
+    }
+
     function test_payCoupon_revertsUntilWired() public {
         TestnetDesk fresh = new TestnetDesk(address(this), address(d.identityRegistry), address(d.token));
         vm.expectRevert(TestnetDesk.DistributorNotSet.selector);

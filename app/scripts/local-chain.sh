@@ -12,8 +12,11 @@ KEY="0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80"
 cd "$ROOT"
 
 if ! cast chain-id --rpc-url "$RPC" >/dev/null 2>&1; then
+  # On the port RPC names, so a local chain on another port does not start a node on anvil's default one.
+  PORT="${RPC##*:}"
+  PORT="${PORT%%/*}"
   echo "Starting anvil on $RPC"
-  anvil --silent --chain-id 31337 &
+  anvil --silent --chain-id 31337 --port "$PORT" &
   for _ in $(seq 1 50); do cast chain-id --rpc-url "$RPC" >/dev/null 2>&1 && break; sleep 0.2; done
 fi
 

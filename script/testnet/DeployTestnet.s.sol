@@ -28,8 +28,9 @@ import {TestnetEURC} from "./TestnetEURC.sol";
  *      - Two jurisdictions are restricted: North Korea (408) and Iran (364), the two the FATF calls
  *        on its members to apply countermeasures to (FATF statement of June 2026).
  *      - The seeded wallets have addresses derived from a hash, not from a key, so nobody can sign
- *        for them and each keeps the state it was seeded with. Each one exercises a different
- *        outcome of the transfer gate (see `_seed`).
+ *        for them: they never send, and only the agent can change their identity or freeze state.
+ *        Anyone can still send them notes. Each one exercises an outcome of the transfer gate
+ *        (see `_seed`); the lapsed one lapses an hour after deployment by design.
  *
  *      Nothing here depends on an external feed or on a time window, so there is no second script.
  *      Before anything is sent, forge simulates the whole run, including `_verifyTestnet`, which
@@ -121,7 +122,8 @@ contract DeployTestnet is Deploy {
         vm.startBroadcast();
         d = _deploy(deployer, deployer, deployer);
         (TestnetDesk desk, DividendDistributor distributor) = _deployDemo(d, deployer);
-        _seed(d, desk);
+        _seed(d);
+        _openDesk(d, desk, distributor);
         vm.stopBroadcast();
 
         demo = TestnetDeployment({
@@ -144,8 +146,9 @@ contract DeployTestnet is Deploy {
     //////////////////////////////////////////////////////////////*/
 
     /**
-     * @dev Deploys the desk and the distributor, grants the desk its three roles, shortens the
-     *      lockup and restricts the two jurisdictions. Runs as the deployer, who holds every role.
+     * @dev Deploys the desk and the distributor, shortens the lockup and restricts the two
+     *      jurisdictions. Runs as the deployer, who holds every role. The desk gets its roles only
+     *      in `_openDesk`, once the register is seeded.
      */
     function _deployDemo(Deployment memory d, address deployer)
         internal
@@ -156,21 +159,15 @@ contract DeployTestnet is Deploy {
         d.compliance.addModule(address(distributor));
         desk.setDistributor(address(distributor));
 
-        // The desk's three powers: register its caller, mint to its caller, deposit coupons.
-        d.identityRegistry.grantRole(Roles.AGENT_ROLE, address(desk));
-        d.token.grantRole(d.token.DEFAULT_ADMIN_ROLE(), address(desk));
-        distributor.grantRole(Roles.AGENT_ROLE, address(desk));
-
         d.lockup.setLockupPeriod(TESTNET_LOCKUP_PERIOD);
         d.countryRestriction.setCountryRestricted(NORTH_KOREA, true);
         d.countryRestriction.setCountryRestricted(IRAN, true);
     }
 
     /**
-     * @dev Seeds one wallet per outcome of the transfer gate, then pays the first coupon so the
-     *      distributor does not start at zero. Supply after seeding: 1,000 notes.
+     * @dev Seeds one wallet per outcome of the transfer gate. Supply after seeding: 1,000 notes.
      */
-    function _seed(Deployment memory d, TestnetDesk desk) internal {
+    function _seed(Deployment memory d) internal {
         Seeds memory s = seeds();
         uint64 longKyc = uint64(block.timestamp) + SEED_KYC_VALIDITY;
 
@@ -193,13 +190,27 @@ contract DeployTestnet is Deploy {
 
         d.identityRegistry.registerIdentity(s.lapsed, ITALY, true, uint64(block.timestamp) + LAPSING_KYC_VALIDITY);
         d.token.mint(s.lapsed, LAPSED_NOTES);
+    }
+
+    /**
+     * @dev Grants the desk its three roles and pays the first coupon, so the distributor does not
+     *      start at zero. Last on purpose: a broadcast on a public network spans many blocks, and a
+     *      stranger can use the desk from the block its roles land in. By then only the first coupon
+     *      is left, and if someone else pays it first it pays the same holders; the run's own
+     *      payCoupon then reverts with CouponTooSoon and the deployment is still complete.
+     */
+    function _openDesk(Deployment memory d, TestnetDesk desk, DividendDistributor distributor) internal {
+        // The desk's three powers: register its caller, mint to its caller, deposit coupons.
+        d.identityRegistry.grantRole(Roles.AGENT_ROLE, address(desk));
+        d.token.grantRole(d.token.DEFAULT_ADMIN_ROLE(), address(desk));
+        distributor.grantRole(Roles.AGENT_ROLE, address(desk));
 
         desk.payCoupon();
     }
 
     /**
      * @notice The seeded wallets. Derived from a hash of a label rather than from a key, so nobody
-     *         holds a key for them and they keep the state `_seed` gives them.
+     *         holds a key for them and they never send.
      * @return s One address per gate outcome.
      */
     function seeds() public pure returns (Seeds memory s) {
@@ -250,17 +261,21 @@ contract DeployTestnet is Deploy {
         require(d.maxHolders.holderCount() == 5, "seed: holder count");
         require(distributor.dividendsPerShare() > 0, "seed: first coupon not paid");
 
-        // Each seed's outcome, as the app reads it. The lockup is still running at deployment, so
-        // a transfer out of a seeded position is checked against the lockup first.
+        // Each seed's outcome, as the app reads it. Every sender's lockup is still running at
+        // deployment and would reject any transfer out of a seed on its own, so the recipient side is
+        // read through the mint path, which no lockup applies to, and each line proves its own rule.
         uint256 one = 1e18;
         require(!d.lockup.moduleCheck(s.settled, s.partlyFrozen, one), "settled: lockup should be running");
         require(d.token.canTransfer(address(0), s.settled, one), "settled: cannot receive");
-        require(!d.token.canTransfer(s.settled, s.unverified, one), "unverified: accepted");
-        require(!d.token.canTransfer(s.settled, s.frozen, one), "frozen: accepted as recipient");
-        require(!d.token.canTransfer(s.settled, s.restricted, one), "restricted: accepted");
-        require(!d.countryRestriction.moduleCheck(s.settled, s.restricted, one), "restricted: country rule passes");
-        require(!d.token.canTransfer(s.suspended, s.settled, one), "suspended: can send");
+        require(!d.token.canTransfer(address(0), s.unverified, one), "unverified: accepted");
+        require(!d.token.canTransfer(address(0), s.frozen, one), "frozen: accepted as recipient");
+        require(d.identityRegistry.isVerified(s.frozen), "frozen: should be verified");
+        require(!d.token.canTransfer(address(0), s.restricted, one), "restricted: accepted");
+        require(!d.countryRestriction.moduleCheck(address(0), s.restricted, one), "restricted: country rule passes");
+        require(d.identityRegistry.isVerified(s.restricted), "restricted: should be verified");
         require(!d.token.canTransfer(address(0), s.suspended, one), "suspended: can receive");
+        require(!d.identityRegistry.isVerified(s.suspended), "suspended: still verified");
+        require(d.token.balanceOf(s.suspended) == SUSPENDED_NOTES, "suspended: balance not kept");
         require(d.token.frozenTokens(s.partlyFrozen) == PARTLY_FROZEN_LOCKED, "partlyFrozen: frozen amount");
         require(d.token.isFrozen(s.frozen), "frozen: not frozen");
         require(d.identityRegistry.isVerified(s.lapsed), "lapsed: should start verified");

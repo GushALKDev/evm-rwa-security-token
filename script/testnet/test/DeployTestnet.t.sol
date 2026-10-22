@@ -109,6 +109,37 @@ contract DeployTestnetTest is Test {
         assertEq(e.lockup.lockupPeriod(), 5 minutes, "in force");
     }
 
+    /// @dev On a public network the broadcast spans many blocks, and anyone watching could use the desk as soon
+    ///      as it holds its roles. Granting them only after the register is seeded leaves nothing to race but the
+    ///      first coupon, which pays the same holders whoever triggers it.
+    function test_run_grantsTheDeskItsRolesOnlyAfterSeeding() public {
+        vm.recordLogs();
+        DeployTestnet fresh = new DeployTestnet();
+        fresh.run();
+        (, TestnetDesk freshDesk,,) = fresh.demo();
+        DeployTestnet.Seeds memory s = fresh.seeds();
+
+        Vm.Log[] memory logs = vm.getRecordedLogs();
+        bytes32 roleGranted = keccak256("RoleGranted(bytes32,address,address)");
+        bytes32 transfer = keccak256("Transfer(address,address,uint256)");
+        uint256 firstGrant = type(uint256).max;
+        uint256 lastSeedMint;
+        for (uint256 i; i < logs.length; ++i) {
+            bytes32 t0 = logs[i].topics[0];
+            if (t0 == roleGranted && address(uint160(uint256(logs[i].topics[2]))) == address(freshDesk)) {
+                if (i < firstGrant) firstGrant = i;
+            }
+            if (t0 == transfer && logs[i].topics[1] == bytes32(0)) {
+                address to = address(uint160(uint256(logs[i].topics[2])));
+                if (to == s.settled || to == s.partlyFrozen || to == s.frozen || to == s.suspended || to == s.lapsed) {
+                    lastSeedMint = i;
+                }
+            }
+        }
+        assertGt(lastSeedMint, 0, "seed mints recorded");
+        assertGt(firstGrant, lastSeedMint, "the desk gets its first role after the last seed mint");
+    }
+
     /// @dev The desk holds exactly the three roles its three functions need, and none of the
     ///      operator powers (pause, freeze, recovery, rule parameters).
     function test_run_givesTheDeskItsThreeRolesAndNoOther() public view {
@@ -126,6 +157,11 @@ contract DeployTestnetTest is Test {
         assertFalse(d.lockup.hasRole(Roles.AGENT_ROLE, a), "no lockup changes");
         assertFalse(d.countryRestriction.hasRole(Roles.AGENT_ROLE, a), "no country changes");
         assertFalse(distributor.hasRole(admin, a), "no distributor admin");
+        assertFalse(d.maxHolders.hasRole(admin, a), "no holder cap admin");
+        assertFalse(d.lockup.hasRole(admin, a), "no lockup admin");
+        assertFalse(d.countryRestriction.hasRole(admin, a), "no country admin");
+        assertFalse(d.documentRegistry.hasRole(admin, a), "no document admin");
+        assertFalse(d.identityRegistry.hasRole(Roles.CUSTODIAN_ROLE, a), "no custodian role anywhere");
     }
 
     function test_run_seedsAThousandNotesAndPaysTheFirstCoupon() public view {

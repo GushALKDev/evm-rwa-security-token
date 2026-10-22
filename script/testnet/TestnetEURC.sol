@@ -11,8 +11,8 @@ import {ERC20} from "@openzeppelin/contracts/token/ERC20/ERC20.sol";
  *      demo deploys it from TestnetDesk, which mints exactly what each coupon payment deposits.
  *      Nothing else about Circle's token is modelled: no blocklist, no pause, no upgradeability.
  *
- *      Circle's own EURC exists on Base Sepolia, but its only source is Circle's rate-limited
- *      faucet, which cannot fund coupons sized like a real note's.
+ *      Circle's own EURC exists on Base Sepolia, but Circle's faucet hands it out in small,
+ *      rate-limited amounts, too little for coupons sized like a real note's.
  */
 contract TestnetEURC is ERC20 {
     /*//////////////////////////////////////////////////////////////
