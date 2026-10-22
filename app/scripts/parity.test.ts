@@ -241,6 +241,7 @@ describe.skipIf(!rpc)('parity with the contracts on a local chain', () => {
         }
       }
     }
+    console.info(`gate matrix at ${block.timestamp}: ${cases} cases, each against canTransfer, ${gate.modules.length} moduleChecks and the token's revert`)
     return { cases, outcomes }
   }
 
