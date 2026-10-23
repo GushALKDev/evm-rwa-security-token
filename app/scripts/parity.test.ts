@@ -37,6 +37,7 @@ import {
   depositEffect,
   readAccumulatorSnapshot,
 } from '../src/lib/dividends'
+import type { SeedKey } from '../src/config/deployment'
 import { withGasMargin } from '../src/lib/gas'
 import {
   evaluateGate,
@@ -48,6 +49,7 @@ import {
   type ModuleKind,
   type PartyState,
 } from '../src/lib/gate'
+import { scenarioAmount, scenarios } from '../src/lib/scenarios'
 
 const rpc = process.env.LOCAL_RPC
 const TOKEN = 10n ** 18n
@@ -271,6 +273,32 @@ describe.skipIf(!rpc)('parity with the contracts on a local chain', () => {
     const { cases } = await checkMatrix()
     expect(cases).toBeGreaterThan(400)
   }, 120_000)
+
+  it("stops each of the gate's cases at the check it is there to show", async () => {
+    // The seeds are as deployed, with their lockups over and the lapsed attestation expired.
+    const block = await latest()
+    const keys = Object.keys(scenarios) as SeedKey[]
+    const parties = new Map(await Promise.all(keys.map(async (k) => [k, await readParty(d.seeds[k], block.number)] as const)))
+    const gate = await readGate([...parties.values()], block.number)
+    const expected: Record<SeedKey, string> = {
+      settled: 'clears',
+      unverified: 'recipientVerified',
+      lapsed: 'senderVerified',
+      frozen: 'senderFrozen',
+      suspended: 'senderVerified',
+      partlyFrozen: 'unfrozen',
+      restricted: 'module:country',
+    }
+    for (const key of keys) {
+      const s = scenarios[key]
+      const [from, to] = [parties.get(s.from)!, parties.get(s.to)!]
+      const amount = scenarioAmount(s, from.balance)
+      const mirror = evaluateGate(gate, from, to, amount, block.timestamp)
+      const stop = mirror.stoppedAt === null ? null : mirror.checks[mirror.stoppedAt]
+      expect(stop ? `${stop.key}${stop.module ? `:${stop.module.kind}` : ''}` : 'clears', key).toBe(expected[key])
+      expect(await revertOf(from.address, 'transfer', [to.address, amount], block.number), key).toEqual(mirror.revert)
+    }
+  })
 
   it('matches them while the token is paused', async () => {
     await sendOk(deployer, d.token, securityTokenAbi, 'pause')

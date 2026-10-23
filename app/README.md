@@ -18,7 +18,7 @@ Live: https://rwa-poc.gushalk.workers.dev
   own `canTransfer` is read for the same inputs and shown alongside.
 - **Seeded wallets, one per outcome.** A settled holder, a partly frozen one, a frozen one, a suspended one, an
   investor in a restricted country, a wallet never registered and one whose attestation lapses an hour after
-  deployment.
+  deployment. One chip per wallet sets the pair and the amount that show its outcome (`src/lib/scenarios.ts`).
 - **Previews before every call.** A transfer shows both balances, the holder count, the lockup clocks it starts
   or clears and the seller's unclaimed income before and after; a coupon shows the deposit and your exact share.
   Each call is simulated before the wallet asks for a signature, so a revert arrives as a sentence
@@ -101,14 +101,15 @@ LOCAL_RPC=http://127.0.0.1:8545 npx vitest run scripts     # parity against a lo
 
 The parity suite runs the gate for every combination of sender, recipient and amount it builds from the seeded
 wallets and three visitors, and compares it with `canTransfer`, every module's `moduleCheck` and the revert the
-token raises, before and after the lockups run out and while the token is paused. It checks the lockup one
-second either side of the unlock, the holder count and clocks each kind of transfer leaves, a coupon's amount,
-accumulator, remainder and every holder's share, the corrections a transfer and a mint write, and a claim. It
-also replays the case the gas margin exists for. A second suite, `scripts/tx.test.ts`, runs the app's write path
-(`src/lib/tx.ts`): it refuses to send while the wallet is on another network (a second anvil stands for it), and
-reports a transaction that lands and reverts, one the wallet cancels, and one whose receipt never comes as what they
-are. Both suites revert the chain to a snapshot when they finish, so they can run again, and run one after the
-other since they share the chain. CI runs them on every push, against a fresh local deployment.
+token raises, before and after the lockups run out and while the token is paused, and checks that each of the
+gate's cases stops at the check it is there to show. It checks the lockup one second either side of the unlock, the
+holder count and clocks each kind of transfer leaves, a coupon's amount, accumulator, remainder and every holder's
+share, the corrections a transfer and a mint write, and a claim. It also replays the case the gas margin exists for.
+A second suite, `scripts/tx.test.ts`, runs the app's write path (`src/lib/tx.ts`): it refuses to send while the
+wallet is on another network (a second anvil stands for it), and reports a transaction that lands and reverts, one
+the wallet cancels, and one whose receipt never comes as what they are. Both suites revert the chain to a snapshot
+when they finish, so they can run again, and run one after the other since they share the chain. CI runs them on
+every push, against a fresh local deployment.
 
 ## Deploy the contracts to Base Sepolia
 

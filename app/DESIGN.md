@@ -44,7 +44,9 @@ The seeded wallets exist for this drawing. Between them, and with the visitor's 
 except the pause and the holder cap, which depend on the agent and on the register rather than on a wallet: the
 unverified and lapsed wallets stop at verification, the frozen holder at the freeze, the partly frozen one at the free
 balance, the investor in Iran at the jurisdiction rule, and a wallet in its first five minutes at the lockup.
-Everything else on the page stays quiet.
+Above the inputs, one chip per seeded wallet sets the pair and the amount that show its outcome, and says what the
+wallet was seeded with; a chip lights up whenever the inputs match it, however they were set. Everything else on the
+page stays quiet.
 
 ## Layout
 

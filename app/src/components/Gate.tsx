@@ -8,7 +8,7 @@ import { useTx } from '../hooks/useTx'
 import { securityTokenAbi, tokenAbi } from '../lib/abi'
 import { parseTypedAddress } from '../lib/address'
 import { countryLabel } from '../lib/countries'
-import { formatDate, formatEurc, formatTokenCount, formatTokens, parseAmount, toInput } from '../lib/format'
+import { formatDate, formatDuration, formatEurc, formatTokenCount, formatTokens, parseAmount, toInput } from '../lib/format'
 import {
   evaluateGate,
   freeBalance,
@@ -19,6 +19,7 @@ import {
   type PartyState,
 } from '../lib/gate'
 import { labelOf, type TokenModel } from '../lib/model'
+import { scenarioAmount, scenarios } from '../lib/scenarios'
 import { checkText, revertText } from './gateText'
 import { OutcomeIcon } from './icons'
 
@@ -94,6 +95,28 @@ function PartyField({
   )
 }
 
+/** One chip per seeded wallet: each sets the pair and the amount that show that wallet's outcome. */
+function Cases({ model, active, onPick }: { model: TokenModel; active: SeedKey | null; onPick: (key: SeedKey) => void }) {
+  const seed = model.deployment.seeds.find((s) => s.key === active)
+  return (
+    <div className="cases">
+      <div className="choice" role="group" aria-label="Cases, one per seeded wallet">
+        <span className="cases-label">Try a case</span>
+        {model.deployment.seeds.map((s) => (
+          <button key={s.key} className="chip" aria-pressed={s.key === active} onClick={() => onPick(s.key)}>
+            {s.label}
+          </button>
+        ))}
+      </div>
+      <p className="hint">
+        {seed
+          ? `${seed.label}: ${seed.seeded.charAt(0).toLowerCase()}${seed.seeded.slice(1)}`
+          : `Each case pairs a seeded wallet with another to show one outcome. No seeded wallet reaches the pause or the holder cap, which depend on the agent and on the register; the lockup stops your own wallet in its first ${formatDuration(Number(model.live.lockupPeriod))}.`}
+      </p>
+    </div>
+  )
+}
+
 /** One line on a wallet: what it holds and where its identity stands, at the chain's time. */
 function partySummary(p: PartyData | undefined, model: TokenModel): string {
   if (!p) return 'Reading the wallet…'
@@ -146,6 +169,20 @@ export function Gate({ model, onConnect, onDesk }: { model: TokenModel; onConnec
   const to = resolve(toChoice, customTo) as PartyData | undefined
   const amount = parseAmount(input, TOKEN_DECIMALS)
 
+  // A case is active whenever the inputs match it, however they were set.
+  const activeCase =
+    d.seeds.find(({ key }) => {
+      const s = scenarios[key]
+      return fromChoice === s.from && toChoice === s.to && !!from && amount === scenarioAmount(s, from.balance)
+    })?.key ?? null
+  const pickCase = (key: SeedKey) => {
+    const s = scenarios[key]
+    const sender = model.parties.get(d.seeds.find((x) => x.key === s.from)!.address.toLowerCase())
+    setFromPick(s.from)
+    setToPick(s.to)
+    setInput(toInput(scenarioAmount(s, sender?.balance ?? 0n), TOKEN_DECIMALS))
+  }
+
   const gateState = useMemo(() => {
     if (!extraRestricted.data) return model.gate
     return { ...model.gate, restricted: new Map([...model.gate.restricted, ...extraRestricted.data]) }
@@ -179,6 +216,8 @@ export function Gate({ model, onConnect, onDesk }: { model: TokenModel; onConnec
           Read live from {chain.name}
         </a>
       </div>
+
+      <Cases model={model} active={activeCase} onPick={pickCase} />
 
       <div className="gate-inputs">
         <PartyField
