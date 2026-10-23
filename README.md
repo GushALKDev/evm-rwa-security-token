@@ -11,6 +11,12 @@ A proof-of-concept for compliant tokenization of a real-world financial asset (a
 
 **Status.** All nine phases of the [roadmap](#roadmap) are complete: the identity registry, the compliance engine and its four modules, document anchoring, the token, deployment, the test suites, the documentation and the dividend distributor. The code was then reviewed in three rounds (see [Review](#review)).
 
+**Demo app:** a web interface in [`app/`](./app/README.md) runs the token on Base Sepolia with testnet tokens: walk every check of the transfer gate on seeded wallets, verify a wallet, receive and send tokens, pay a coupon and claim its share, with each check cross-checked against the contract.
+
+**Live demo:** https://rwa-poc.gushalk.workers.dev
+
+[![The demo app's transfer gate, with every check read live from Base Sepolia](docs/images/demo-app.png)](https://rwa-poc.gushalk.workers.dev)
+
 ---
 
 ## Highlights
@@ -28,8 +34,6 @@ A proof-of-concept for compliant tokenization of a real-world financial asset (a
 ## Demo app
 
 A web app in [`app/`](app/) runs the token on Base Sepolia with testnet tokens. Without a wallet, anyone can walk every check of the transfer gate on a set of seeded wallets, each of which stops at a different check. With one, a visitor can verify their wallet at a testnet desk that stands in for the KYC provider, the issuer and the paying agent, receive tokens, send them through the gate, pay a coupon and claim their share. The deployment in [`script/testnet/`](script/testnet/) runs `script/Deploy.s.sol`'s deployment unchanged, then, through the contracts' own functions, attaches the dividend distributor, restricts two jurisdictions and shortens the lockup from 365 days to 5 minutes so a visitor can see it lift. What each stand-in does and does not check, how to run the app against a local chain, and the deployment steps: [app/README.md](app/README.md).
-
-Live demo: https://rwa-poc.gushalk.workers.dev
 
 ---
 
