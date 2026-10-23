@@ -58,6 +58,8 @@ jobs:
           persist-credentials: false
           # The parity step deploys the contracts to a local chain
           submodules: recursive
+          # The source-link tests read the contracts at the commit the testnet deployment was built from
+          fetch-depth: 0
 
       - uses: actions/setup-node@v4
         with:

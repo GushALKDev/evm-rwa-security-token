@@ -37,8 +37,9 @@ The transfer gate, drawn as the sequence the contract runs: the pause, the recip
 sender's identity, freeze and unfrozen balance, then each compliance module in the order the engine registered it.
 Pick a sender, a recipient and an amount, and every check lights up from live state, up to the one that stops the
 transfer, with the revert the token would raise. Checks after it read "Not reached", because the contract never
-evaluates them. Under the checks, the token's own `canTransfer` answers for the same inputs, so the drawing is
-cross-checked against the contract while it is read.
+evaluates them. Each check names the contract that runs it and links to that line of its source, at the commit the
+deployment was built from. Under the checks, the token's own `canTransfer` answers for the same inputs, so the drawing
+is cross-checked against the contract while it is read.
 
 The seeded wallets exist for this drawing. Between them, and with the visitor's own wallet, they reach every check
 except the pause and the holder cap, which depend on the agent and on the register rather than on a wallet: the

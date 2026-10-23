@@ -1036,6 +1036,16 @@ td .sub {
 .check-contract {
   margin-left: 8px;
   font-size: 12.5px;
+  font-weight: 400;
+}
+
+a.check-contract {
+  text-decoration-color: var(--rule);
+}
+
+a.check-contract:hover {
+  color: var(--ink-2);
+  text-decoration-color: currentColor;
 }
 
 .check-detail {

@@ -3,6 +3,7 @@ import { zeroAddress } from 'viem'
 import { useConnection, useReadContract } from 'wagmi'
 import { chain, explorerAddress, links } from '../config/chain'
 import type { SeedKey } from '../config/deployment'
+import { checkSource, engineSource, moduleSource, sourceUrl, type SourceAnchor } from '../config/source'
 import { useParties, useRestricted, type PartyData } from '../hooks/useTokenData'
 import { useTx } from '../hooks/useTx'
 import { securityTokenAbi, tokenAbi } from '../lib/abi'
@@ -302,6 +303,14 @@ export function Gate({ model, onConnect, onDesk }: { model: TokenModel; onConnec
   )
 }
 
+function SourceLink({ anchor, children }: { anchor: SourceAnchor; children: string }) {
+  return (
+    <a className="mono faint check-contract" href={sourceUrl(anchor)} target="_blank" rel="noreferrer" title={`${anchor.path}, line ${anchor.from}`}>
+      {children}
+    </a>
+  )
+}
+
 function Checks({
   result,
   model,
@@ -322,10 +331,18 @@ function Checks({
         const t = checkText(c, model, from, to, amount)
         const label =
           c.outcome === 'pass' ? 'Passes' : c.outcome === 'fail' ? 'Stops here' : c.outcome === 'skipped' ? 'Skipped' : 'Not reached'
+        const anchor = c.module ? moduleSource[c.module.kind] : c.key !== 'module' ? checkSource[c.key] : undefined
         return (
           <Fragment key={i}>
-            {i === 0 ? <li className="checks-group">The token's own checks</li> : null}
-            {i === firstModule ? <li className="checks-group">Compliance engine, each module in registration order</li> : null}
+            {i === 0 ? (
+              <li className="checks-group">The token's own checks. Each contract name links to the line that runs the check.</li>
+            ) : null}
+            {i === firstModule ? (
+              <li className="checks-group">
+                Compliance engine, each module in registration order
+                <SourceLink anchor={engineSource}>ModularCompliance</SourceLink>
+              </li>
+            ) : null}
             <li className="check" data-outcome={c.outcome}>
               <span className="check-marker" aria-hidden="true">
                 {c.outcome === 'pass' || c.outcome === 'fail' ? <OutcomeIcon outcome={c.outcome} /> : i + 1}
@@ -333,7 +350,11 @@ function Checks({
               <div className="check-body">
                 <div className="check-title">
                   <span className="check-number">{i + 1}.</span> {t.title}
-                  {t.contract ? <span className="mono faint check-contract">{t.contract}</span> : null}
+                  {anchor ? (
+                    <SourceLink anchor={anchor}>{t.contract ?? 'SecurityToken'}</SourceLink>
+                  ) : t.contract ? (
+                    <span className="mono faint check-contract">{t.contract}</span>
+                  ) : null}
                 </div>
                 <div className="check-detail">{t.detail}</div>
               </div>
