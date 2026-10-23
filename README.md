@@ -5,9 +5,9 @@
 [![Solidity 0.8.24](https://img.shields.io/badge/Solidity-0.8.24-363636.svg)](https://docs.soliditylang.org/en/v0.8.24/)
 [![Built with Foundry](https://img.shields.io/badge/Built%20with-Foundry-FFDB1C.svg)](https://book.getfoundry.sh/)
 
-A proof-of-concept for compliant tokenization of a real-world financial asset (a real-estate-backed note) as a permissioned security token, modeling the identity, compliance, and custody architecture used by regulated digital-asset platforms.
+A proof of concept for educational purposes: compliant tokenization of a real-world financial asset (a real-estate-backed note) as a permissioned security token, modeling the identity, compliance, and custody architecture used by regulated digital-asset platforms.
 
-> **Proof of concept. Not audited and not deployed on any mainnet.** This code is educational and is not fit for production or for representing real financial instruments.
+> **Proof of concept for educational purposes. Not audited and not deployed on any mainnet.** This code is not fit for production or for representing real financial instruments.
 
 **Status.** All nine phases of the [roadmap](#roadmap) are complete: the identity registry, the compliance engine and its four modules, document anchoring, the token, deployment, the test suites, the documentation and the dividend distributor. The code was then reviewed in three rounds (see [Review](#review)).
 
@@ -243,7 +243,7 @@ All 35 items of the nine phases are done, followed by the three review rounds. E
 - [x] Phase 7: Documentation & Threat Model (4/4)
 - [x] Phase 8: Stretch: Dividend Distribution (4/4)
 
-Beyond the proof of concept, [Guide 6: Improvements](docs/06-improvements.md) lists what a production build would add back, in priority order.
+Beyond the proof of concept for educational purposes, [Guide 6: Improvements](docs/06-improvements.md) lists what a production build would add back, in priority order.
 
 ---
 
