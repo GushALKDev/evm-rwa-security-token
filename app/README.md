@@ -16,7 +16,7 @@ Live: https://rwa-poc.gushalk.workers.dev
   unfrozen balance, then each compliance module in the engine's registration order. It stops where the contract
   stops and names the revert the token would raise. The rules are mirrored in `src/lib/gate.ts`, and the token's
   own `canTransfer` is read for the same inputs and shown alongside. Each check links to the line of the contract
-  that runs it, at the commit the deployment was built from (`src/config/source.ts`).
+  that runs it, at a commit whose code is the deployed code (`src/config/source.ts`).
 - **Seeded wallets, one per outcome.** A settled holder, a partly frozen one, a frozen one, a suspended one, an
   investor in a restricted country, a wallet never registered and one whose attestation lapses an hour after
   deployment. One chip per wallet sets the pair and the amount that show its outcome (`src/lib/scenarios.ts`).

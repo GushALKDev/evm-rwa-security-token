@@ -1,6 +1,7 @@
-// Where each check of the gate is written, at the commit the Base Sepolia contracts were deployed from. Deployed code
-// cannot change, so the links are pinned to that commit rather than to a branch that moves on. scripts/source.test.ts
-// checks every line against that commit.
+// Where each check of the gate is written, at a commit whose src/ is the code deployed on Base Sepolia. forge recorded
+// the broadcast at a6f244b; src/ is unchanged from there to 5ddf541, the commit that records the deployment. Deployed
+// code cannot change, so the links are pinned to a commit rather than to a branch that moves on.
+// scripts/source.test.ts checks every line against that commit.
 import type { CheckKey, ModuleKind } from '../lib/gate'
 import { links } from './chain'
 
