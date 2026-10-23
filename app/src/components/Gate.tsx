@@ -9,7 +9,7 @@ import { useTx } from '../hooks/useTx'
 import { securityTokenAbi, tokenAbi } from '../lib/abi'
 import { parseTypedAddress } from '../lib/address'
 import { countryLabel } from '../lib/countries'
-import { formatDate, formatDuration, formatEurc, formatTokenCount, formatTokens, parseAmount, toInput } from '../lib/format'
+import { formatDate, formatDuration, formatEurc, formatTokenCount, formatTokens, parseAmount, shortAddress, solidityAmount, toInput } from '../lib/format'
 import {
   evaluateGate,
   freeBalance,
@@ -21,6 +21,7 @@ import {
 } from '../lib/gate'
 import { labelOf, type TokenModel } from '../lib/model'
 import { scenarioAmount, scenarios } from '../lib/scenarios'
+import { Calls } from './Calls'
 import { checkText, revertText } from './gateText'
 import { OutcomeIcon } from './icons'
 
@@ -545,6 +546,7 @@ function Send({
       >
         {busy ?? (result.ok === true ? `Send ${formatTokenCount(amount)}` : 'The gate stops this transfer')}
       </button>
+      <Calls call={`SecurityToken.transfer(${shortAddress(to.address)}, ${solidityAmount(amount, TOKEN_DECIMALS)})`} />
     </div>
   )
 }

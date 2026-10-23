@@ -4,9 +4,10 @@ import { chain, links } from '../config/chain'
 import { useTx } from '../hooks/useTx'
 import { deskCallAbi } from '../lib/abi'
 import { countries, countryLabel } from '../lib/countries'
-import { formatDate, formatDuration, formatTokens, formatTimestamp } from '../lib/format'
+import { formatDate, formatDuration, formatTokens, formatTimestamp, solidityAmount } from '../lib/format'
 import { evaluateGate, identityWhy } from '../lib/gate'
 import { labelOf, type TokenModel } from '../lib/model'
+import { Calls } from './Calls'
 import { checkText } from './gateText'
 import { Dialog } from './Wallet'
 
@@ -107,6 +108,10 @@ export function DeskDialog({ model, onClose, onConnect }: { model: TokenModel; o
                   {why === 'verified' ? 'Verify again' : 'Verify'}
                 </button>
               </div>
+              <Calls
+                call={`TestnetDesk.onboard(${country})`}
+                then={[`IdentityRegistry.registerIdentity(msg.sender, ${country}, false, block.timestamp + ${formatDuration(Number(st.kycValidity))})`]}
+              />
               {restrictedPick ? (
                 <p className="hint" data-tone="warn">
                   {countryLabel(country)} is restricted here. The desk will verify you, and the jurisdiction rule will
@@ -155,6 +160,7 @@ export function DeskDialog({ model, onClose, onConnect }: { model: TokenModel; o
                   Add {st.tokenSymbol} to wallet
                 </button>
               </div>
+              <Calls call="TestnetDesk.claimTokens()" then={[`SecurityToken.mint(msg.sender, ${solidityAmount(st.tokensPerClaim, 18)})`]} />
             </div>
           </div>
 

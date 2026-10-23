@@ -75,7 +75,8 @@ only.
 ## Rules
 
 - Copy names what the user does: Verify, Get tokens, Send, Pay the coupon, Claim. The button that says Send
-  produces a toast that says Tokens sent.
+  produces a toast that says Tokens sent. Under each of them, one line names the call it sends and the calls the
+  desk makes in turn, with the amounts in base units.
 - Every preview shows before and after, computed with the contract's own rules and rounding: tokens, holders,
   lockup clocks and unclaimed income for a transfer; the deposit, the per-token total and your share for a coupon.
 - Rules that depend on time (the lockup, KYC expiry, the desk's cooldowns) are evaluated at the latest block's

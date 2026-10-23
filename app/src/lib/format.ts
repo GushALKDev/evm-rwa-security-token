@@ -39,6 +39,12 @@ export function formatEurc(value: bigint): string {
   return formatFixed(value, 6, 6).replace(/0+$/, '')
 }
 
+/** An amount in base units as a Solidity literal would write it: 10e18 when it is whole, every digit otherwise. */
+export function solidityAmount(value: bigint, decimals: number): string {
+  const scale = 10n ** BigInt(decimals)
+  return value !== 0n && value % scale === 0n ? `${value / scale}e${decimals}` : value.toString()
+}
+
 export function shortAddress(address: string): string {
   return `${address.slice(0, 6)}…${address.slice(-4)}`
 }

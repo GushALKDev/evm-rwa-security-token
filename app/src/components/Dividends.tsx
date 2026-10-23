@@ -6,9 +6,10 @@ import { useAccumulator } from '../hooks/useTokenData'
 import { useTx } from '../hooks/useTx'
 import { deskCallAbi, distributorCallAbi } from '../lib/abi'
 import { accumulated, couponAmount, couponPreview, depositEffect, MAGNITUDE, ONE_TOKEN, perToken } from '../lib/dividends'
-import { formatDuration, formatEurc, formatTokenCount, formatTimestamp } from '../lib/format'
+import { formatDuration, formatEurc, formatTokenCount, formatTimestamp, shortAddress, solidityAmount } from '../lib/format'
 import { identityWhy } from '../lib/gate'
 import { labelOf, type TokenModel } from '../lib/model'
+import { Calls } from './Calls'
 
 function CouponCard({ model, onConnect }: { model: TokenModel; onConnect: () => void }) {
   const { status, chainId } = useConnection()
@@ -109,6 +110,14 @@ function CouponCard({ model, onConnect }: { model: TokenModel; onConnect: () => 
             {busy ?? (open ? `Pay ${formatEurc(amount)} EURC to holders` : 'The next coupon is not open yet')}
           </button>
         )}
+        <Calls
+          call="TestnetDesk.payCoupon()"
+          then={[
+            `TestnetEURC.mint(desk, ${solidityAmount(amount, 6)})`,
+            `TestnetEURC.approve(distributor, ${solidityAmount(amount, 6)})`,
+            `DividendDistributor.deposit(${solidityAmount(amount, 6)})`,
+          ]}
+        />
         {wrongChain ? (
           <p className="hint" data-tone="warn">
             Your wallet is on another network. Switch to {chain.name} from the button at the top first.
@@ -238,6 +247,9 @@ function IncomeCard({ model, onConnect }: { model: TokenModel; onConnect: () => 
           >
             {busy ?? (p.claimable > 0n ? `Claim ${formatEurc(p.claimable)} EURC` : 'Nothing to claim yet')}
           </button>
+          <div style={{ marginTop: 8 }}>
+            <Calls call={`DividendDistributor.claim(${shortAddress(address)})`} />
+          </div>
         </>
       ) : !connected && status !== 'connected' ? (
         <p className="hint" style={{ marginTop: 14 }}>

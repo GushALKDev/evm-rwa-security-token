@@ -1048,6 +1048,10 @@ a.check-contract:hover {
   text-decoration-color: currentColor;
 }
 
+.calls {
+  overflow-wrap: anywhere;
+}
+
 .check-detail {
   font-size: 13.5px;
   color: var(--ink-2);

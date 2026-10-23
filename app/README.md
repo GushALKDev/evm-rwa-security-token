@@ -23,7 +23,7 @@ Live: https://rwa-poc.gushalk.workers.dev
 - **Previews before every call.** A transfer shows both balances, the holder count, the lockup clocks it starts
   or clears and the seller's unclaimed income before and after; a coupon shows the deposit and your exact share.
   Each call is simulated before the wallet asks for a signature, so a revert arrives as a sentence
-  (`src/lib/errors.ts`) instead of a failed transaction.
+  (`src/lib/errors.ts`) instead of a failed transaction. Each button names the call it sends.
 - **Income by accumulator.** The dividends page shows what a token has been paid since issuance, what the
   distributor holds unclaimed, and the formula behind a wallet's figure with its own values, including the
   correction the contract keeps in storage. It works for your wallet or any seeded one, so the formula and a
