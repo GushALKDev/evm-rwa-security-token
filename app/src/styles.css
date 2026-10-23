@@ -1152,6 +1152,14 @@ td .sub {
 }
 
 /* Dividends ---------------------------------------------------------- */
+.figures-note {
+  margin-top: 12px;
+}
+
+.income-pick {
+  margin-bottom: 16px;
+}
+
 .coupon-action {
   display: grid;
   gap: 12px;

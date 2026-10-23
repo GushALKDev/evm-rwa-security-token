@@ -24,8 +24,9 @@ Live: https://rwa-poc.gushalk.workers.dev
   Each call is simulated before the wallet asks for a signature, so a revert arrives as a sentence
   (`src/lib/errors.ts`) instead of a failed transaction.
 - **Income by accumulator.** The dividends page shows what a token has been paid since issuance, what the
-  distributor holds unclaimed, and the formula behind your figure with your wallet's own values, including the
-  correction the contract keeps in storage.
+  distributor holds unclaimed, and the formula behind a wallet's figure with its own values, including the
+  correction the contract keeps in storage. It works for your wallet or any seeded one, so the formula and a
+  withheld income can be seen without connecting.
 - **The anchored terms.** The page fetches the published terms document and hashes it in the browser, to compare
   with the hash the document registry anchored.
 

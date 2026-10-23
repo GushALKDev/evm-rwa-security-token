@@ -57,7 +57,8 @@ notice        one line: testnet, for educational purposes, not audited, what the
 
 /             hero: headline, the gate (with the send action when the sender is you), four figures
               grid: your position (left, wider) | the rule set and the anchored terms (right)
-/dividends    coupons (figures, pay the next one) | your income (claim, and the formula with your numbers)
+/dividends    coupons (figures, pay the next one) | income of your wallet or a seeded one (claim your own, and the
+              formula with that wallet's numbers)
 /how-it-works six mechanics, then the desk note and the attestation note
 
 footer

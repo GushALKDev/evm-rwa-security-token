@@ -1,9 +1,11 @@
+import { useState } from 'react'
 import { useConnection } from 'wagmi'
 import { chain, explorerAddress, links } from '../config/chain'
+import type { SeedKey } from '../config/deployment'
 import { useAccumulator } from '../hooks/useTokenData'
 import { useTx } from '../hooks/useTx'
 import { deskCallAbi, distributorCallAbi } from '../lib/abi'
-import { accumulated, couponAmount, couponPreview, depositEffect, perToken } from '../lib/dividends'
+import { accumulated, couponAmount, couponPreview, depositEffect, MAGNITUDE, ONE_TOKEN, perToken } from '../lib/dividends'
 import { formatDuration, formatEurc, formatTokenCount, formatTimestamp } from '../lib/format'
 import { identityWhy } from '../lib/gate'
 import { labelOf, type TokenModel } from '../lib/model'
@@ -53,6 +55,14 @@ function CouponCard({ model, onConnect }: { model: TokenModel; onConnect: () => 
           <div className="figure-label">{open ? 'Anyone can pay the next coupon' : 'Until the next coupon opens'}</div>
         </div>
       </div>
+      {(live.dividendsPerShare * ONE_TOKEN) % MAGNITUDE !== 0n ? (
+        <p className="hint figures-note">
+          Figures round down, as the contract does. It rounds the running total down at every coupon and carries the
+          remainder into the next, so {formatEurc(st.couponPerToken)} EURC a token can read{' '}
+          {formatEurc(st.couponPerToken - 1n)}. Each wallet's income is rounded down too, never up, which keeps the
+          distributor able to pay every claim.
+        </p>
+      ) : null}
 
       <div className="coupon-action">
         <dl className="rows">
@@ -118,53 +128,86 @@ function CouponCard({ model, onConnect }: { model: TokenModel; onConnect: () => 
   )
 }
 
-function IncomeCard({ model }: { model: TokenModel }) {
-  const { chainId } = useConnection()
-  const wrongChain = chainId !== chain.id
-  const acc = model.account!
-  const p = acc.party
+type Subject = 'you' | SeedKey
+
+/** Income of the visitor's wallet or of any seeded one: the same figures and formula, and a claim for your own. */
+function IncomeCard({ model, onConnect }: { model: TokenModel; onConnect: () => void }) {
+  const { status, chainId } = useConnection()
   const d = model.deployment
-  const { run, busy } = useTx({ labelOf: (a) => labelOf(d, acc.address, a) })
-  const snapshot = useAccumulator(acc.address)
+  const acc = model.account
+  const connected = status === 'connected' && !!acc
+  const wrongChain = chainId !== chain.id
+  // Null means "the default": your wallet when one is connected, the settled holder otherwise.
+  const [pick, setPick] = useState<Subject | null>(null)
+  const subject: Subject = pick && (pick !== 'you' || connected) ? pick : connected ? 'you' : 'settled'
+  const you = subject === 'you'
+  const address = you ? acc!.address : d.seeds.find((s) => s.key === subject)!.address
+  const p = you ? acc!.party : model.parties.get(address.toLowerCase())
+  const { run, busy } = useTx({ labelOf: (a) => labelOf(d, acc?.address, a) })
+  const snapshot = useAccumulator(address)
   const s = snapshot.data
   const earned = s && s.balance * s.dividendsPerShare >= s.correction ? accumulated(s.balance, s.dividendsPerShare, s.correction) : null
+
+  if (!p) return null
   const why = identityWhy(p, model.chainTime)
   const withheld = p.frozen ? 'frozen' : why !== 'verified' ? 'unverified' : null
-  const noGas = acc.extras?.eth === 0n
+  const noGas = acc?.extras?.eth === 0n
   const total = p.claimable + p.withdrawn
+  const whose = you ? 'Your wallet' : 'This wallet'
 
   return (
     <div className="card">
       <div className="card-title">
-        <h3>Your income</h3>
+        <h3>Income</h3>
+      </div>
+      <div className="field income-pick">
+        <label className="field-label" htmlFor="income-wallet">
+          <span>Wallet</span>
+        </label>
+        <select id="income-wallet" className="select" value={subject} onChange={(e) => setPick(e.target.value as Subject)}>
+          {connected ? <option value="you">Your wallet</option> : null}
+          <optgroup label="Seeded wallets">
+            {d.seeds.map((seed) => (
+              <option key={seed.key} value={seed.key}>
+                {seed.label}
+              </option>
+            ))}
+          </optgroup>
+        </select>
       </div>
       <div className="position-main">
-        <span className="position-state">Ready to claim</span>
+        <span className="position-state">{you ? 'Ready to claim' : 'Unclaimed'}</span>
         <span className="position-amount">
           {formatEurc(p.claimable)}
           <small>EURC</small>
         </span>
         <span className="hint">
-          {p.balance > 0n
-            ? `Accrues to your ${formatTokenCount(p.balance)} with every coupon paid while you hold them.`
-            : 'Hold tokens when a coupon is paid to earn a share of it.'}
+          {p.balance === 0n
+            ? you
+              ? 'Hold tokens when a coupon is paid to earn a share of it.'
+              : 'It holds no tokens, so coupons pay it nothing.'
+            : you
+              ? `Accrues to your ${formatTokenCount(p.balance)} with every coupon paid while you hold them.`
+              : `Accrues to its ${formatTokenCount(p.balance)} with every coupon. Nobody can sign for a seeded wallet, so it never claims and its income keeps growing.`}
         </span>
       </div>
       <dl className="rows">
         <div className="row">
-          <dt>Earned since you first held tokens</dt>
+          <dt>Earned since first holding tokens</dt>
           <dd>{formatEurc(total)} EURC</dd>
         </div>
         <div className="row">
           <dt>Claimed so far</dt>
           <dd>{formatEurc(p.withdrawn)} EURC</dd>
         </div>
-        <div className="row">
-          <dt>In your wallet</dt>
-          <dd>{formatEurc(acc.extras?.eurc ?? 0n)} EURC</dd>
-        </div>
+        {you ? (
+          <div className="row">
+            <dt>In your wallet</dt>
+            <dd>{formatEurc(acc!.extras?.eurc ?? 0n)} EURC</dd>
+          </div>
+        ) : null}
       </dl>
-      {wrongChain ? (
+      {you && wrongChain ? (
         <div className="callout" data-tone="warn" style={{ marginTop: 14 }}>
           Your wallet is on another network. Switch to {chain.name} from the button at the top first.
         </div>
@@ -172,32 +215,47 @@ function IncomeCard({ model }: { model: TokenModel }) {
       {withheld ? (
         <div className="callout" data-tone="warn" style={{ marginTop: 14 }}>
           {withheld === 'frozen'
-            ? 'Your wallet is frozen, so the distributor withholds its income. It keeps accruing and is released when the freeze is lifted.'
-            : 'Your wallet is not verified, so the distributor withholds its income. It keeps accruing; verify again at the desk to release it.'}
+            ? `${whose} is frozen, so the distributor withholds its income. It keeps accruing and is released when the freeze is lifted.`
+            : you
+              ? 'Your wallet is not verified, so the distributor withholds its income. It keeps accruing; verify again at the desk to release it.'
+              : 'This wallet is not verified, so the distributor withholds its income. It keeps accruing and is released if the agent verifies it again.'}
         </div>
       ) : null}
-      <button
-        className="btn btn-primary btn-block"
-        style={{ marginTop: 16 }}
-        disabled={p.claimable === 0n || !!withheld || !!busy || noGas || wrongChain}
-        onClick={() =>
-          run(`Claim ${formatEurc(p.claimable)} EURC`, 'Income claimed', {
-            address: d.distributor,
-            abi: distributorCallAbi,
-            functionName: 'claim',
-            args: [acc.address],
-          })
-        }
-      >
-        {busy ?? (p.claimable > 0n ? `Claim ${formatEurc(p.claimable)} EURC` : 'Nothing to claim yet')}
-      </button>
+      {you ? (
+        <>
+          <button
+            className="btn btn-primary btn-block"
+            style={{ marginTop: 16 }}
+            disabled={p.claimable === 0n || !!withheld || !!busy || noGas || wrongChain}
+            onClick={() =>
+              run(`Claim ${formatEurc(p.claimable)} EURC`, 'Income claimed', {
+                address: d.distributor,
+                abi: distributorCallAbi,
+                functionName: 'claim',
+                args: [address],
+              })
+            }
+          >
+            {busy ?? (p.claimable > 0n ? `Claim ${formatEurc(p.claimable)} EURC` : 'Nothing to claim yet')}
+          </button>
+        </>
+      ) : !connected && status !== 'connected' ? (
+        <p className="hint" style={{ marginTop: 14 }}>
+          To earn and claim income of your own,{' '}
+          <button className="link-button" onClick={onConnect}>
+            connect a wallet
+          </button>{' '}
+          and get test tokens from the desk.
+        </p>
+      ) : null}
       {s && earned !== null ? (
-        <details className="formula">
+        <details className="formula" open>
           <summary>How this figure is computed</summary>
           <p>
             Earned = ⌊(tokens × dividends per share − correction) / 2<sup>128</sup>⌋, with the contract's own values for
-            your wallet, all read at block {s.blockNumber.toString()}. The floor rounds each wallet's figure down, never
-            up, which keeps the distributor able to pay every claim.
+            this wallet, all read at block {s.blockNumber.toString()}. Every transfer and mint shifts the correction, so tokens
+            received after a coupon earn nothing from it. The floor rounds each wallet's figure down, never up, which keeps
+            the distributor able to pay every claim.
           </p>
           <dl className="rows mono-rows">
             <div className="row">
@@ -224,7 +282,6 @@ function IncomeCard({ model }: { model: TokenModel }) {
 }
 
 export function DividendsPage({ model, onConnect }: { model: TokenModel; onConnect: () => void }) {
-  const { status } = useConnection()
   return (
     <section className="section">
       <div className="wrap">
@@ -241,16 +298,7 @@ export function DividendsPage({ model, onConnect }: { model: TokenModel; onConne
             <CouponCard model={model} onConnect={onConnect} />
           </div>
           <div className="stack">
-            {status === 'connected' && model.account ? (
-              <IncomeCard model={model} />
-            ) : (
-              <div className="card">
-                <div className="card-title">
-                  <h3>Your income</h3>
-                </div>
-                <p className="muted">Connect a wallet to see what your tokens have earned and claim it.</p>
-              </div>
-            )}
+            <IncomeCard model={model} onConnect={onConnect} />
           </div>
         </div>
       </div>
