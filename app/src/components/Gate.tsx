@@ -378,7 +378,15 @@ function Verdict({
             <strong>
               Stops at {result.stoppedAt! + 1}, {stoppedText.title.toLowerCase()}.
             </strong>{' '}
-            The token reverts with <span className="mono">{revertText(result.revert!)}</span>.
+            The token reverts with <span className="mono">{revertText(result.revert!)}</span>
+            {stopped.key === 'module' || stopped.key === 'unfrozen' ? ', amounts in base units of 18 decimals.' : '.'}
+            {stopped.key === 'module' ? (
+              <>
+                {' '}
+                The error does not say which module refused: this page found out by asking each module its own{' '}
+                <span className="mono">moduleCheck</span>, in the engine's order.
+              </>
+            ) : null}
           </>
         ) : (
           <>
