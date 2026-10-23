@@ -33,7 +33,16 @@ A proof of concept for educational purposes: compliant tokenization of a real-wo
 
 ## Demo app
 
-A web app in [`app/`](app/) runs the token on Base Sepolia with testnet tokens. Without a wallet, anyone can walk every check of the transfer gate on a set of seeded wallets, each of which stops at a different check. With one, a visitor can verify their wallet at a testnet desk that stands in for the KYC provider, the issuer and the paying agent, receive tokens, send them through the gate, pay a coupon and claim their share. The deployment in [`script/testnet/`](script/testnet/) runs `script/Deploy.s.sol`'s deployment unchanged, then, through the contracts' own functions, attaches the dividend distributor, restricts two jurisdictions and shortens the lockup from 365 days to 5 minutes so a visitor can see it lift. What each stand-in does and does not check, how to run the app against a local chain, and the deployment steps: [app/README.md](app/README.md).
+A web app in [`app/`](app/) runs the token on Base Sepolia with testnet tokens.
+
+- **Without a wallet:** walk every check of the transfer gate on seeded wallets, each set up to show one outcome of the gate.
+- **With a wallet:** verify it at a testnet desk, receive tokens, send them through the gate, pay a coupon and claim your share. The desk stands in for the KYC provider, the issuer and the paying agent.
+- **Deployment:** [`script/testnet/`](script/testnet/) runs `script/Deploy.s.sol`'s deployment unchanged, then, through the contracts' own functions:
+  - attaches the dividend distributor;
+  - restricts two jurisdictions;
+  - shortens the lockup from 365 days to 5 minutes, so a visitor can see it lift.
+
+What each stand-in checks and what it does not, how to run the app against a local chain, and how to deploy it: [app/README.md](app/README.md).
 
 ---
 
