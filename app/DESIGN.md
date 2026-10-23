@@ -60,13 +60,15 @@ notice        one line: testnet, for educational purposes, not audited, what the
               grid: your position (left, wider) | the rule set and the anchored terms (right)
 /dividends    coupons (figures, pay the next one) | income of your wallet or a seeded one (claim your own, and the
               formula with that wallet's numbers)
-/how-it-works six mechanics, then the desk note and the attestation note
+/how-it-works the contracts and the calls a transfer makes between them, six mechanics, then the desk note and the
+              attestation note
 
 footer
 ```
 
 Each page has its own path, so a link can point straight at the dividends or at the desk note
-(`/how-it-works#desk`).
+(`/how-it-works#desk`). How it works is mostly prose about the contracts, so it draws without waiting for the chain
+and fills in the live figures as they arrive.
 
 Left-aligned throughout. Two columns from 1024 px, one below. The gate's inputs go from three columns to two
 below 1024 px and to one below 720 px, where a passing check keeps its glyph and its word moves to screen readers

@@ -28,6 +28,8 @@ Live: https://rwa-poc.gushalk.workers.dev
   distributor holds unclaimed, and the formula behind a wallet's figure with its own values, including the
   correction the contract keeps in storage. It works for your wallet or any seeded one, so the formula and a
   withheld income can be seen without connecting.
+- **The contracts and their calls.** How it works draws the deployed contracts and the calls a transfer makes
+  between them, before the mechanics they implement.
 - **The anchored terms.** The page fetches the published terms document and hashes it in the browser, to compare
   with the hash the document registry anchored.
 

@@ -1,9 +1,10 @@
 import type { ComponentProps } from 'react'
 import { zeroAddress } from 'viem'
-import { chain, explorerAddress, links } from '../config/chain'
+import { chain, deployment, explorerAddress, links } from '../config/chain'
 import { navigate, pages, type Page } from '../hooks/useRoute'
 import { formatDuration, formatEurc, formatTokens, shortAddress } from '../lib/format'
 import type { TokenModel } from '../lib/model'
+import { Architecture } from './Architecture'
 import { Mark } from './icons'
 import { WalletButton } from './Wallet'
 
@@ -63,10 +64,12 @@ export function Notice() {
   )
 }
 
-export function HowItWorks({ model }: { model: TokenModel }) {
-  const st = model.static
-  const d = model.deployment
-  const lockup = formatDuration(Number(model.live.lockupPeriod))
+/** Drawn before the chain answers: the live figures fill in as they arrive. */
+export function HowItWorks({ model }: { model: TokenModel | null }) {
+  const st = model?.static
+  const d = deployment!
+  const reading = '…'
+  const lockup = model ? formatDuration(Number(model.live.lockupPeriod)) : reading
   return (
     <section className="section" id="how">
       <div className="wrap">
@@ -77,6 +80,7 @@ export function HowItWorks({ model }: { model: TokenModel }) {
             between these two wallets, is allowed right now. Each part is written up in the repository's guides.
           </p>
         </div>
+        <Architecture d={d} />
         <div className="mechanics">
           <div className="mechanic" id="gate-order">
             <h3>One gate, in a fixed order</h3>
@@ -166,14 +170,14 @@ export function HowItWorks({ model }: { model: TokenModel }) {
               <b>1</b>
               <span>
                 <strong>Verify.</strong> Writes your wallet to the identity registry with the country you declare, for{' '}
-                {formatDuration(Number(st.kycValidity))}, through the agent role. It checks nothing else: not who you are,
+                {st ? formatDuration(Number(st.kycValidity)) : reading}, through the agent role. It checks nothing else: not who you are,
                 where you live or whether you are accredited. It records you as not accredited; no module reads that flag.
               </span>
             </div>
             <div className="flow-step">
               <b>2</b>
               <span>
-                <strong>Get tokens.</strong> Mints {formatTokens(st.tokensPerClaim)} tokens to your wallet once a day, through
+                <strong>Get tokens.</strong> Mints {st ? formatTokens(st.tokensPerClaim) : reading} tokens to your wallet once a day, through
                 the issuer role. The mint goes through the full gate, so an unverified or restricted-country wallet is
                 refused. Nothing is paid for them.
               </span>
@@ -181,9 +185,9 @@ export function HowItWorks({ model }: { model: TokenModel }) {
             <div className="flow-step">
               <b>3</b>
               <span>
-                <strong>Pay a coupon.</strong> Mints {formatEurc(st.couponPerToken)} testnet EURC for each token outstanding
-                and deposits it in the distributor, through the agent role there, at most once every{' '}
-                {formatDuration(Number(st.couponInterval))}, whoever asks.
+                <strong>Pay a coupon.</strong> Mints {st ? formatEurc(st.couponPerToken) : reading} testnet EURC for each token
+                outstanding and deposits it in the distributor, through the agent role there, at most once every{' '}
+                {st ? formatDuration(Number(st.couponInterval)) : reading}, whoever asks.
               </span>
             </div>
           </div>
@@ -199,7 +203,9 @@ export function HowItWorks({ model }: { model: TokenModel }) {
               cannot be used on another chain, after it expires, or after the agent has changed the record.
             </p>
             <p>
-              {st.claimSigner === zeroAddress
+              {!st
+                ? 'Reading the claim signer from the registry…'
+                : st.claimSigner === zeroAddress
                 ? 'No claim signer is set on this deployment, so the path is closed here: it would need a signing key, and this site is static, with no server to keep one.'
                 : `The claim signer on this deployment is ${shortAddress(st.claimSigner)}.`}
             </p>
@@ -207,19 +213,19 @@ export function HowItWorks({ model }: { model: TokenModel }) {
           <dl className="rows mono-rows">
             <div className="row">
               <dt>Domain separator</dt>
-              <dd className="mono" title={st.domainSeparator}>
-                {shortAddress(st.domainSeparator)}
+              <dd className="mono" title={st?.domainSeparator}>
+                {st ? shortAddress(st.domainSeparator) : reading}
               </dd>
             </div>
             <div className="row">
               <dt>Attestation type hash</dt>
-              <dd className="mono" title={st.attestationTypehash}>
-                {shortAddress(st.attestationTypehash)}
+              <dd className="mono" title={st?.attestationTypehash}>
+                {st ? shortAddress(st.attestationTypehash) : reading}
               </dd>
             </div>
             <div className="row">
               <dt>Claim signer</dt>
-              <dd className="mono">{st.claimSigner === zeroAddress ? 'not set' : shortAddress(st.claimSigner)}</dd>
+              <dd className="mono">{!st ? reading : st.claimSigner === zeroAddress ? 'not set' : shortAddress(st.claimSigner)}</dd>
             </div>
           </dl>
         </div>

@@ -891,6 +891,105 @@ td .sub {
   padding-top: 2px;
 }
 
+/* Architecture ------------------------------------------------------- */
+.section-problem {
+  padding-top: 24px;
+}
+
+.arch {
+  margin: 0 0 28px;
+  padding: 24px;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
+  align-items: center;
+  border: 1px solid var(--rule);
+  border-radius: var(--r-card);
+  background: var(--surface);
+}
+
+.arch-col {
+  grid-column: 1;
+}
+
+.arch-wide {
+  grid-column: 1 / -1;
+}
+
+.arch-node {
+  align-self: stretch;
+  min-width: 0;
+  padding: 12px 14px;
+  border: 1px solid var(--rule-strong);
+  border-radius: var(--r-control);
+  background: var(--sunken);
+}
+
+.arch-node[data-dashed] {
+  border-style: dashed;
+  background: transparent;
+}
+
+.arch-name {
+  font-size: 13.5px;
+  font-weight: 500;
+  overflow-wrap: anywhere;
+}
+
+.arch-node p {
+  margin-top: 4px;
+  font-size: 13px;
+  color: var(--ink-2);
+}
+
+.arch-edge {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 0 4px 18px;
+  color: var(--ink-3);
+}
+
+.arch-edge svg {
+  flex: none;
+}
+
+.arch-edge span {
+  font-size: 12px;
+  color: var(--ink-2);
+  overflow-wrap: anywhere;
+}
+
+/* Beside the token, the arrow to the registry points right, with its label underneath. */
+.arch-edge[data-across] {
+  flex-direction: column;
+  gap: 2px;
+  padding: 0 14px;
+  max-width: 190px;
+  text-align: center;
+}
+
+.arch-edge[data-across] svg {
+  transform: rotate(-90deg);
+}
+
+.arch-modules,
+.arch-side {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.arch-side {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  margin-top: 20px;
+  padding-top: 20px;
+  border-top: 1px solid var(--rule);
+}
+
+.arch figcaption {
+  margin-top: 14px;
+}
+
 /* Gate --------------------------------------------------------------- */
 .cases {
   display: grid;
@@ -1406,6 +1505,9 @@ a.check-contract:hover {
   .oracle-note {
     grid-template-columns: minmax(0, 1fr);
   }
+  .arch-modules {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
 }
 
 @media (max-width: 720px) {
@@ -1454,6 +1556,24 @@ a.check-contract:hover {
   }
   .site-header .network {
     display: none;
+  }
+  .arch {
+    grid-template-columns: minmax(0, 1fr);
+    padding: 18px;
+  }
+  .arch-edge[data-across] {
+    flex-direction: row;
+    gap: 8px;
+    padding: 4px 0 4px 18px;
+    max-width: none;
+    text-align: left;
+  }
+  .arch-edge[data-across] svg {
+    transform: none;
+  }
+  .arch-modules,
+  .arch-side {
+    grid-template-columns: minmax(0, 1fr);
   }
 }
 

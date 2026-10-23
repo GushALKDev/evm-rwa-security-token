@@ -34,8 +34,9 @@ function Token() {
   const code = useBytecode({ address: deployment!.token, query: { staleTime: Infinity } })
   const noCode = code.isSuccess && (!code.data || code.data === '0x')
   const { page, url } = useRoute()
-  const ready = model !== null
-  // A fragment's target only exists once the page has rendered, so a direct link waits for the first read.
+  // A fragment's target only exists once the page has rendered, so a direct link waits for the first read. How it
+  // works renders without it.
+  const ready = model !== null || page === 'how'
   useEffect(scrollToTarget, [url, ready])
   const [connectOpen, setConnectOpen] = useState(false)
   const [deskOpen, setDeskOpen] = useState(false)
@@ -45,11 +46,30 @@ function Token() {
   }
   const openDesk = () => setDeskOpen(true)
 
+  const problem = noCode ? (
+    <div className="callout" data-tone="warn" role="alert">
+      The deployment file names a token with no code on {chain.name}, so the deployment it describes never landed. Run
+      the testnet deployment again; it rewrites the file.
+    </div>
+  ) : error ? (
+    <div className="callout" data-tone="warn" role="alert">
+      The token could not be read from {chain.name}. The RPC may be rate limiting requests; the page retries on its own.
+    </div>
+  ) : null
+
   return (
     <>
       <Header page={page} onConnect={openConnect} onDesk={openDesk} />
       <Notice />
-      {model ? (
+      {page === 'how' ? (
+        // Mostly prose about the contracts: it does not wait for the chain, and fills in live figures as they arrive.
+        <ErrorBoundary resetKey={page}>
+          <main>
+            {!model && problem ? <div className="wrap section-problem">{problem}</div> : null}
+            <HowItWorks model={model} />
+          </main>
+        </ErrorBoundary>
+      ) : model ? (
         <ErrorBoundary resetKey={page}>
           <main>
             {page === 'token' ? (
@@ -67,25 +87,10 @@ function Token() {
               </>
             ) : null}
             {page === 'dividends' ? <DividendsPage model={model} onConnect={openConnect} /> : null}
-            {page === 'how' ? <HowItWorks model={model} /> : null}
           </main>
         </ErrorBoundary>
       ) : (
-        <main className="wrap hero">
-          {noCode ? (
-            <div className="callout" data-tone="warn" role="alert">
-              The deployment file names a token with no code on {chain.name}, so the deployment it describes never
-              landed. Run the testnet deployment again; it rewrites the file.
-            </div>
-          ) : error ? (
-            <div className="callout" data-tone="warn" role="alert">
-              The token could not be read from {chain.name}. The RPC may be rate limiting requests; the page retries on
-              its own.
-            </div>
-          ) : (
-            <p className="muted">Reading the token from {chain.name}…</p>
-          )}
-        </main>
+        <main className="wrap hero">{problem ?? <p className="muted">Reading the token from {chain.name}…</p>}</main>
       )}
       <Footer model={model} />
       {connectOpen ? <ConnectDialog onClose={() => setConnectOpen(false)} /> : null}
