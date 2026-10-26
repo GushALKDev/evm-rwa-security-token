@@ -62,6 +62,7 @@ notice        one line: testnet, for educational purposes, not audited, what the
               formula with that wallet's numbers)
 /how-it-works the contracts and the calls a transfer makes between them, six mechanics, then the desk note and the
               attestation note
+/legal        legal notice: owner (LSSI-CE), purpose, liability, data and cookies; linked from the footer only
 
 footer
 ```

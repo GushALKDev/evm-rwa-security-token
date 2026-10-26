@@ -1,7 +1,7 @@
 import type { ComponentProps } from 'react'
 import { zeroAddress } from 'viem'
 import { chain, deployment, explorerAddress, links } from '../config/chain'
-import { navigate, pages, type Page } from '../hooks/useRoute'
+import { LEGAL_PATH, navigate, pages, type Page } from '../hooks/useRoute'
 import { formatDuration, formatEurc, formatTokens, shortAddress } from '../lib/format'
 import type { TokenModel } from '../lib/model'
 import { Architecture } from './Architecture'
@@ -254,6 +254,7 @@ export function Footer({ model }: { model: TokenModel | null }) {
           <a href={links.author} target="_blank" rel="noreferrer">
             Built by Gustavo Martín
           </a>
+          <Link href={LEGAL_PATH}>Legal notice</Link>
         </nav>
       </div>
     </footer>

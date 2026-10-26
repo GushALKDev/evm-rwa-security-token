@@ -4,6 +4,7 @@ import { DeskDialog } from './components/DeskDialog'
 import { DividendsPage } from './components/Dividends'
 import { ErrorBoundary } from './components/ErrorBoundary'
 import { Hero } from './components/Hero'
+import { LegalNotice } from './components/Legal'
 import { PositionCard } from './components/Position'
 import { RuleSetCard, TermsCard } from './components/RuleSet'
 import { Footer, Header, HowItWorks, Notice } from './components/Sections'
@@ -61,7 +62,9 @@ function Token() {
     <>
       <Header page={page} onConnect={openConnect} onDesk={openDesk} />
       <Notice />
-      {page === 'how' ? (
+      {page === 'legal' ? (
+        <LegalNotice />
+      ) : page === 'how' ? (
         // Mostly prose about the contracts: it does not wait for the chain, and fills in live figures as they arrive.
         <ErrorBoundary resetKey={page}>
           <main>
