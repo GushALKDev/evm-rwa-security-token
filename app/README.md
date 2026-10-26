@@ -7,7 +7,7 @@ their share of it.
 
 Proof of concept, not audited, for educational purposes. The tokens are testnet stand-ins with no value.
 
-Live: https://rwa-poc.gushalk.workers.dev
+Live: https://rwa-poc.tesselium.com
 
 ## What it shows
 
@@ -161,8 +161,8 @@ The app runs as `rwa-poc`, an assets-only Worker: there is no Worker script. `wr
 `dist/` and holds the SPA fallback, which serves `index.html` for every page path (`/dividends`,
 `/how-it-works`). `public/_headers` holds the cache and security headers; Vite copies it into `dist/`.
 
-The `og:image` and `og:url` tags in `index.html` carry the absolute workers.dev URL, since link preview crawlers
-do not resolve relative paths: change them if the app moves to its own domain or another account subdomain.
+The `og:image` and `og:url` tags in `index.html` carry the absolute URL of the app's domain, rwa-poc.tesselium.com,
+since link preview crawlers do not resolve relative paths: change them if the app moves to another domain.
 
 First deploy, from a terminal in `app/`:
 

@@ -13,9 +13,9 @@ A proof of concept for educational purposes: compliant tokenization of a real-wo
 
 **Demo app:** a web interface in [`app/`](./app/README.md) runs the token on Base Sepolia with testnet tokens: walk every check of the transfer gate on seeded wallets, verify a wallet, receive and send tokens, pay a coupon and claim its share, with each check cross-checked against the contract.
 
-**Live demo:** https://rwa-poc.gushalk.workers.dev
+**Live demo:** https://rwa-poc.tesselium.com
 
-[![The demo app's transfer gate, with every check read live from Base Sepolia](docs/images/demo-app.png)](https://rwa-poc.gushalk.workers.dev)
+[![The demo app's transfer gate, with every check read live from Base Sepolia](docs/images/demo-app.png)](https://rwa-poc.tesselium.com)
 
 ---
 
