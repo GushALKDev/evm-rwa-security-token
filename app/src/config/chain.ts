@@ -33,6 +33,7 @@ export const links = {
   docs: 'https://github.com/GushALKDev/evm-rwa-security-token/blob/main/docs/README.md',
   terms: 'https://github.com/GushALKDev/evm-rwa-security-token/blob/main/docs/RealEstateNote-Terms.md',
   author: 'https://www.linkedin.com/in/gustavomaral/',
+  tesselium: 'https://tesselium.com',
   ethFaucet: 'https://docs.base.org/get-started/get-funds',
 }
 

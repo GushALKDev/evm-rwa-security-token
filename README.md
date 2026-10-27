@@ -280,4 +280,4 @@ MIT, see [LICENSE](LICENSE). Unaudited, educational, not for production use.
 
 ## Author
 
-[@GushALKDev](https://github.com/GushALKDev), Gustavo Martín ([LinkedIn](https://www.linkedin.com/in/gustavomaral/)).
+[@GushALKDev](https://github.com/GushALKDev), Gustavo Martín ([LinkedIn](https://www.linkedin.com/in/gustavomaral/)) at [Tesselium Labs](https://tesselium.com).
