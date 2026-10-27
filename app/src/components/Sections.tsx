@@ -248,7 +248,7 @@ export function Footer({ model }: { model: TokenModel | null }) {
           </a>
           {model ? (
             <a href={explorerAddress(model.deployment.token)} target="_blank" rel="noreferrer">
-              Token contract
+              Contract
             </a>
           ) : null}
           <span>
@@ -261,7 +261,7 @@ export function Footer({ model }: { model: TokenModel | null }) {
               Tesselium Labs
             </a>
           </span>
-          <Link href={LEGAL_PATH}>Legal notice</Link>
+          <Link href={LEGAL_PATH}>Legal</Link>
         </nav>
       </div>
     </footer>
